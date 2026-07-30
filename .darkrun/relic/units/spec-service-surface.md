@@ -102,6 +102,46 @@ iterations:
     **One scoping fix from the fact-check:** section 6's "**Neither** documents what it does with a fragment" is a claim about the vendors, and the adversary verified only that the two cited pages are silent (zero occurrences of "fragment" or "anchor" in both). Scope it to the cited documentation and it becomes true at a cost of four words.
 
     Findings handed to the tightener with the F1 and F2 verifications attached as confirmed rather than alleged.
+- worker: tightener
+  started_at: 2026-07-30T07:13:04.183300+00:00
+  completed_at: 2026-07-30T07:13:04.183300+00:00
+  result: advance
+  note: |-
+    Resolve complete at `ed51b43`, worktree clean. All eleven findings plus three verdict items answered, and five new issues the beat found itself.
+
+    **Gates re-run independently by the manager:** artifact-exists PASS; substance-floor PASS at 6551 against 2800; sources 20 against 5; every URL resolves; zero dashes. Spot-checked the specific fixes: `"any location"` now appears **zero** times and the real origin-server text appears once; all four new codes present; route item 1 retitled; the `csam` carve-out lands in three places.
+
+    ## F1, the fabricated quotation, fixed and independently re-verified twice
+
+    The beat re-ran the grep itself before trusting my report. Deleted the invented string, quoted the origin-server text verbatim, and **rebuilt the argument on the permanence test**, which is what should have carried it all along: Relic knows the condition is permanent because it reads permanence off its own counter, so `410` is correct and `404` is not. The section no longer contradicts its own preceding concession that the object still exists.
+
+    **The full quotation audit ran and is the most valuable artifact of this beat.** Roughly 30 quoted strings fetched, normalized, and substring-matched against source. **All verbatim except the one fabrication.** Two mechanical notes recorded: several quotes are lowercased from sentence-start into mid-sentence position, a pre-existing convention kept deliberately; and the RFC 9110 §17.11 quote had silently dropped "(Section 10.2.2)" from its middle, now marked with a visible elision.
+
+    ## F2, the 413 versus 422 decision
+
+    **`413` wins, on legibility rather than on the letter, and the document says so rather than pretending 413 fits.** The old ecosystem fallback is deleted outright, because 1.5 fixes publishing clients on `code` so the status is never what a client branches on. Two reasons stated: the status is what everything *without* the problem document reads, and 1.2 already establishes that load balancer access logs are often status-only, so `413` says "too big" to a proxy, an uptime check, and a dashboard where `422` says "something was wrong"; and `422` would equally be the natural status for case 12's malformed metadata, so taking it here would reintroduce the exact conflation 1.2 pays a real price to accept only once.
+
+    ## F5, the criterion 14 hole, resolved by adding codes
+
+    New **section 1.6**, deliberately separate so criterion 6's twelve-case bar is untouched, and 1.1's scope claim now points at it. Three cases added: `400 invalid_relic_id` for `format.md` 1.3's alphabet, length, and reserved-table checks, with a new `id_validation_failure` extension member naming which check failed; `409 relic_id_collision`; and `409 relic_not_yet_published` for a mint on a live grant whose object has not landed, carrying `retry_after_seconds`.
+
+    **The code a client keys redraw-and-retry on is `relic_id_collision`, status `409`**, chosen because RFC 9110 defines `409` for "situations where the user might be able to resolve the conflict and resubmit the request," a literal description of drawing a fresh ID, and not `400` because the ID was well formed and the client did nothing wrong.
+
+    ## Remaining findings
+
+    F3 fixed and **swept**: 29 internal references plus 13 `format.md` references checked against the live heading list. F4 fixed in both places, operator surface under the already-reserved `api` prefix so no table append is needed. F6 now cites FusionAuth #629 as primary with Authelia as the relay, hedge intact, and states the rule rests on Slack alone. F7 names the NAT undercount beside the mechanism, quoting preconditions verbatim and tying it to the 40-person tenant. F8 gives the mint log the same treatment the tombstone got, nine fields. F9, F10, F11 fixed; a deduped mint returns the already-issued URL, with a stated exception below minimum viable validity. Route item 1 retitled "Edge fidelity for the statuses section 1 fixes" with the manufactured-conflict narrative deleted. The category mapping is now explicit, and `csam` blocklists regardless of arrival channel with the exception carried in **both** sections so they cannot drift.
+
+    ## Five new issues the beat found, two of them the same defect class it was fixing
+
+    1. `format.md` 2.2 versus this document's own 2.2, an ambiguous cross-reference on a load-bearing exclusion.
+    2. The `problems/` URI prefix had the same reserved-table exposure as F4 and nobody had checked it. The beat ran the check rather than assuming, found no append needed since every problem URI carries a second path segment, and wrote the reasoning down instead of leaving it unexamined.
+    3. **An unsupported vendor claim:** the document said Proofpoint "rewrites to `urldefense.com`" and the cited page contains zero occurrences of that string. Same failure mode as the ones it was sent to fix.
+    4. **The beat caught itself introducing the defect class mid-draft.** Its first F6 fix said the HEAD behavior is something "Microsoft documents nowhere," which is a claim about a vendor that one page cannot establish. It rewrote it scoped to the cited documentation before shipping.
+    5. The `csam` carve-out would have lived only in 4.1 while section 4 states the blocklist condition independently, so the two would have drifted.
+
+    ## Word count
+
+    4808 to 6551, floor 2800. Fourteen findings answered plus a new subsection, against roughly 100 words of tightening returned. Nothing padded, nothing decided was cut. Consistent with the precedent that the band is guidance and correctness wins over the count.
 reviews:
   completeness:
     at: 2026-07-30T05:31:07.501358+00:00

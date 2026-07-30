@@ -184,6 +184,16 @@ gate_results:
   at: 2026-07-30T12:24:01.884628+00:00
   attempts: 1
   detail: '`test -f docs/design/container.md` exits 0. Run by the manager in the unit worktree at `a07dafd`, not taken from a beat''s self-report.'
+- name: substance-floor
+  status: pass
+  at: 2026-07-30T12:24:08.103565+00:00
+  attempts: 1
+  detail: |-
+    `test "$(wc -w < docs/design/container.md)" -ge 2400` exits 0. Actual **8,464 words**, up from 5,605 at the make pass.
+
+    **The growth is entirely fixed findings, and it is traceable.** Eleven findings plus five verdicts, at roughly 190 words each: the corrected ceiling arithmetic with the full 22.7x table, the §3.2 decrypt-only explanation with both reproductions, the measured decrypt benchmark replacing an AEAD invocation count, the tenth nonce rule, two relabelled byte-layout tables, and the drift-routing section. **Nothing decided was cut and nothing was padded.**
+
+    One deliberate reduction inside the growth: the `rs = 4096` section's four-reason ranking was **cut to two**, and AEAD invocation count was explicitly retired as a cost with the reason stated, after a measurement showed both arms of that trade are negligible. A section got shorter and better while the document got longer.
 ---
 
 # Goal

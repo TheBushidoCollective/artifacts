@@ -3,7 +3,7 @@ name: Write frame.md — problem, user, value, success metric, non-goals
 unit_type: doc
 status: in_progress
 depends_on: []
-worker: challenger
+worker: distiller
 model: opus
 station: frame
 outputs:
@@ -50,6 +50,50 @@ iterations:
     # Non-negotiable while you work
 
     Re-run all four gates after any edit and re-record them with the nonce; the word count in particular will move if you cut. Verify criteria 5 through 9 by reading, since no gate covers them. No em-dashes or en-dashes anywhere. Commit in the unit worktree, never to the station branch.
+- worker: challenger
+  started_at: 2026-07-30T03:13:05.340698+00:00
+  completed_at: 2026-07-30T03:13:05.340698+00:00
+  result: advance
+  note: |-
+    Challenger beat complete. Committed at `8221c77`. Worktree clean. 2411 words (from 2542), 11 sources (from 13). All four gates re-run for real and re-recorded with the nonce, all exit 0, including each of the 11 URLs fetched individually. It also ran a check the gates do not cover: every manifest URL is still cited in the body, zero orphans. The framer's manifest had two.
+
+    # Three HIGH findings the framer did not name
+
+    **1. Zero contractions in the entire document.** Verified by grep, not eyeball: every apostrophe in the 2542-word original was a possessive. The spec names contractions as a required voice trait, and their total absence is one of the strongest AI tells there is. Fixed, 38 contractions now.
+
+    **2. The document described a mechanism it never adopted.** The confound subsection explained publishing-IP exclusion's failure modes in detail, then named a different discriminator (the 120-second window) as "the discriminator," and never said whether IP exclusion is actually in the design. A downstream station could not tell whether one filter exists or two, and the same-NAT undercount direction only exists if IP exclusion is applied. Fixed with a "Two filters, both partial" paragraph stating both plainly, with the asymmetry attached to the filter it actually describes. It confirmed the mint happens at the app server, so the requesting IP is available.
+
+    **3. Another unobservable quantity, same error class as the publishing-account slip.** Supporting condition 2 claimed the headless/CI/non-Claude client distribution is computable from telemetry item 3 (publishing client name). A Claude Code run inside a GitHub Action and an interactive Claude Code run report the same client name, so the non-Claude half is computable and the headless/CI half is not, unless the client distinguishes itself. Fixed by stating the limit in the same breath as the claim. It swept every remaining quantity in the metric section (renderer class, open counts at mint, client name, publishing IP, distinct publishing IPs, relic volume, egress spend) and found no other instance.
+
+    # Verdict on the framer's five
+
+    All five stuck. Numbers 2 and 5 fixed as described. Number 1 (length) fixed partially, but its guesses at *where* the slack was were wrong: "What Relic is" was already 96 words and "The problem" 171. Real slack was in the preamble and locked constraints. Number 3 (third segment) cut, on format grounds as much as evidence: the spec requires each segment to carry a trigger moment and what they do today instead, and it had neither. Number 4 (scope bleed) cut, and the framer's defense was self-defeating on inspection: condition 1 is operational precisely because the spec mandates it by name, which is exactly why no other operational condition gets in on that reasoning.
+
+    Also trimmed: locked constraint 2 was relitigation rather than recording (~90 words with three external citations against a ~25-word target form), and one uncited 0bin claim already covered by PrivateBin's cited threat model. Two manifest sources came out only because the claims they supported came out.
+
+    # Clean results it verified (evidence, not silence)
+
+    Every number traced to the knowledge base and none overstated: 16 MiB, `.html`/`.htm`/`.md`, the 96-hour file.kiwi expiry, CVSS 9.6, the Immich flag-and-reflag, and both taxonomy sides. Criterion 9's four parts genuinely present with the permanence statement and no clean-separation qualifier on telemetry item 2; it tried and could not break this. Criterion 7's renderer set matches the taxonomy exactly on both sides, with the non-goals closing the loop. Criterion 8's trigger is specific. The honesty constraint is bolded in its own paragraph inside "The value," not buried. No contradictions with the architecture or non-goals: it swept for anything requiring accounts, identity, a viewing-origin script, or republish and found nothing. Zero em-dashes and en-dashes by grep. The TTL assumption is safe and states no value, so it cannot contradict what `frame-preconditions` picks.
+
+    ---
+
+    # DISTILLER: three open calls, plus my read on each
+
+    The challenger deliberately did not decide these unilaterally. Reconcile make and challenge into a unit that satisfies its completion criteria with the challenges answered.
+
+    **1. Whether 2411 words is acceptable. This is the real call.**
+
+    Its per-section measurement: What Relic is 96, Locked constraints 101, The problem 171, The user 182, The value 172, **The success metric 1096**, Standing assumption 106, Wedge boundary 231, Non-goals 183. The metric section is 45 percent of the document and carries 13 spec-mandated beats, which at 60 to 80 words each is 800 to 1000 words before any prose. Everything else totals about 1240 across seven sections plus preamble.
+
+    Its position, which I think is correct: the spec's "lands near 1,400 words written tightly" is not achievable alongside criterion 9 as written, and cutting further starts removing criterion-mandated content. **That estimate came from a calibration made before criterion 9 grew to four parts, so the guidance is stale, not the document.** The gate floor is 1300 and it passes. "Near 1,400" was orientation, never a ceiling. Accept 2411 unless you find prose slack the challenger missed, and if you do cut, cut prose, never a mandated beat.
+
+    **2. Whether the consultant-to-client segment comes back.** It was cut for failing the section's own trigger-plus-today format, not only the evidence bar, and the document itself had demoted it to "a bonus rather than a bet" with nothing load-bearing on it. My read: the cut is right. A segment that fails the format and carries no weight is dead weight, and the spec's "only if the recorded evidence supports it" is a permission, not an obligation. Restore it only if you can give it a real trigger moment and a real what-they-do-today, sourced.
+
+    **3. Whether pruning 13 sources to 11 reads as a regression.** My read: it is correct discipline. The manifest is defined as what the document relies on, the two removed sources supported claims that were themselves removed, and zero orphans is a stronger state than breadth. The floor is 6.
+
+    # Your job beyond those three
+
+    Verify the challenger's fixes rather than assuming them, especially the two-filters paragraph, since it introduces a mechanism statement that did not exist before and is now load-bearing for criterion 9. Confirm the 38 contractions read as natural voice and not as find-and-replace. Re-run all four gates and re-record with the nonce after any edit. Verify criteria 5 through 9 by reading. No em-dashes or en-dashes, verified by grep. Commit in the unit worktree, never the station branch.
 reviews:
   feasibility:
     at: 2026-07-30T02:47:23.386041+00:00

@@ -30,6 +30,11 @@ gate_results:
   at: 2026-07-30T02:57:20.603686+00:00
   attempts: 1
   detail: '`test -f docs/frame.md` exit=0 in the frame-artifact worktree.'
+- name: substance-floor
+  status: pass
+  at: 2026-07-30T02:57:22.635060+00:00
+  attempts: 1
+  detail: '`test "$(wc -w < docs/frame.md)" -ge 1300` exit=0. Actual word count 2510, floor 1300.'
 ---
 
 # Goal

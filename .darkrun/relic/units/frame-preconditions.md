@@ -20,14 +20,14 @@ quality_gates:
 - name: sources-manifest-populated
   command: bash -c 'set -eu; n=$(grep -c . docs/preconditions.sources.txt); test "$n" -ge 5'
 - name: every-cited-url-resolves
-  command: bash -c 'set -eu; while IFS= read -r u; do [ -n "$u" ] || continue; curl -sfL --max-time 25 --retry 2 -A "Mozilla/5.0 (relic-link-check)" -o /dev/null "$u"; done < docs/preconditions.sources.txt'
+  command: bash -c 'set -eu; while IFS= read -r u || [ -n "$u" ]; do [ -n "$u" ] || continue; curl -sfL --max-time 25 --retry 2 -A "Mozilla/5.0 (relic-link-check)" -o /dev/null "$u"; done < docs/preconditions.sources.txt'
 ---
 
 # Goal
 
 Write `docs/preconditions.md`: the conditions that must hold for Relic to be buildable and operable at all, and the explicit go/no-go that follows from them. This is the honest gate on the entire run. `harden` inherits it most directly, but every station is bound by it.
 
-Also write `docs/preconditions.sources.txt`, a citation manifest: one URL per line, no other text, listing every external source this document relies on.
+Also write `docs/preconditions.sources.txt`, a citation manifest: one URL per line, no other text, listing every external source this document relies on. End the file with a trailing newline.
 
 **Read `darkrun_knowledge_list` first, in full**, and read `docs/frame.md`, which this unit depends on. You have no other context. Write the preconditions against the frame that unit settled; do not redefine the problem, the user, or the wedge.
 
@@ -62,7 +62,7 @@ State the cost precondition too: GCS internet egress runs $0.12/GB for the first
 Short, so `shape` and `build` inherit them as constraints rather than discovering them late:
 - Untrusted content renders on a **separate origin**, never the origin holding the fragment secret. Origin isolation is the first layer; sanitization is the second.
 - Never set both `allow-scripts` and `allow-same-origin` on the render iframe.
-- The viewing origin carries zero third-party scripts, analytics, or error reporting, because any same-origin script can read `location.hash`.
+- The viewing origin carries no third-party scripts, no analytics, and no error reporting, because any same-origin script can read `location.hash`. Note that `docs/frame.md` specifies the run's only telemetry, and that all of it is collected server-side at publish and at signed-URL mint, never by a script on the viewing origin. These two requirements are compatible; say so explicitly so nobody later reads the telemetry decision as license to add a script here.
 - Rate limiting returns `429`, never `401` or `403`, or Claude Code will flag the server as needing OAuth sign-in against an authorization server that does not exist.
 
 ## 5. What is honestly unresolved
@@ -78,11 +78,12 @@ Write as Jason Waldrip would: direct, dry, confident, contractions, brevity, aut
 
 1. `docs/preconditions.md` exists → `test -f docs/preconditions.md` exits 0.
 2. It is substantive → `test "$(wc -w < docs/preconditions.md)" -ge 700` exits 0.
-3. `docs/preconditions.sources.txt` lists at least five sources, one URL per line, nothing else → `bash -c 'set -eu; n=$(grep -c . docs/preconditions.sources.txt); test "$n" -ge 5'` exits 0.
-4. Every listed source resolves over the network → `bash -c 'set -eu; while IFS= read -r u; do [ -n "$u" ] || continue; curl -sfL --max-time 25 --retry 2 -A "Mozilla/5.0 (relic-link-check)" -o /dev/null "$u"; done < docs/preconditions.sources.txt'` exits 0. **Do not invent citations.** Every URL comes from the recorded knowledge topics or is one you verified yourself.
+3. `docs/preconditions.sources.txt` lists at least five sources, one URL per line, nothing else, ending with a trailing newline → `bash -c 'set -eu; n=$(grep -c . docs/preconditions.sources.txt); test "$n" -ge 5'` exits 0.
+4. Every listed source resolves over the network → `bash -c 'set -eu; while IFS= read -r u || [ -n "$u" ]; do [ -n "$u" ] || continue; curl -sfL --max-time 25 --retry 2 -A "Mozilla/5.0 (relic-link-check)" -o /dev/null "$u"; done < docs/preconditions.sources.txt'` exits 0. **Do not invent citations.** Every URL comes from the recorded knowledge topics or is one you verified yourself.
 5. The document states the abuse-operations go/no-go as a binary condition with an explicit "do not build" branch.
 6. The document names domain acquisition as an external dependency blocking deployment.
 7. The document contains a section of honestly unresolved questions.
+8. Section 4 states explicitly that the run's telemetry is collected server-side only and does not conflict with the no-script-on-the-viewing-origin rule.
 
 # Files touched
 
@@ -91,7 +92,7 @@ Write as Jason Waldrip would: direct, dry, confident, contractions, brevity, aut
 
 # Out of scope
 
-- Restating or redefining the problem, user, value, or success metric. Those are locked in `docs/frame.md`.
+- Restating or redefining the problem, user, value, success metric, or telemetry decision. Those are locked in `docs/frame.md`.
 - Choosing the server language, framework, hosting topology, or encryption wire format. That is `shape`.
 - Endpoint design, schemas, relic ID format.
 - Actually buying domains, configuring GCP, or writing any code, config, or infrastructure.

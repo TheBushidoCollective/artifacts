@@ -166,6 +166,12 @@ quality_gates:
   command: bash -c 'set -eu; n=$(grep -c . docs/design/storage.sources.txt); test "$n" -ge 6'
 - name: every-cited-url-resolves
   command: bash -c 'set -eu; while IFS= read -r u || [ -n "$u" ]; do [ -n "$u" ] || continue; curl -sfL --max-time 25 --retry 2 -A "Mozilla/5.0 (relic-link-check)" -o /dev/null "$u"; done < docs/design/storage.sources.txt'
+gate_results:
+- name: artifact-exists
+  status: pass
+  at: 2026-07-30T15:08:02.039513+00:00
+  attempts: 1
+  detail: '`test -f docs/design/storage.md` exits 0 at `a9cea77`. Companion manifest `docs/design/storage.sources.txt` present. Manager-run, not taken from the worker''s report.'
 ---
 
 # Goal

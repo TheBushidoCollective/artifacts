@@ -57,6 +57,59 @@ iterations:
     ## One cross-document need, stated in sibling form
 
     Refusing bucket padding discharges `format.md` 3.3's minimal-padding qualifier, which is the stated reason `viewer.md` 5 withholds a pre-decryption byte count. That reason no longer applies at version 1. The document states the fact and the behaviour either way and names `design-product-surface` as owner without telling it what to do. This is a third instance of the class in `cross-document-gaps-no-criterion-catches`.
+- worker: pressure_tester
+  started_at: 2026-07-30T12:03:22.040226+00:00
+  completed_at: 2026-07-30T12:03:22.040226+00:00
+  result: advance
+  note: |-
+    Eleven findings against `651920d`, plus verdicts on all five weaknesses the make pass nominated. Scripts in the scratchpad (`repro31.mjs`, `repro32.mjs`, `arith.mjs`, `bench.mjs`, `quotecheck.py`).
+
+    **The make pass's central evidence survives independent reproduction.** RFC 8188 §3.1 re-derived from IKM and salt: PRK, CEK `_wniytB-ofscZDh4tbSjHw`, NONCE `Bcs8gkIRKLI8GeI8`, and the full 53-octet body all match byte for byte. Errata status confirmed live.
+
+    **Manager-verified the three most consequential findings before recording.**
+
+    ## Must fix
+
+    1. **The mandated §3.2 writer gate is unpassable by a conforming Relic writer.** §3.2 uses **discretionary** padding: the RFC states "there are 7 octets of message in the first record and 8 in the second." A minimal-padding encryptor slices at `rs - 17 = 8`, so it puts 8 in record 0. The beat built both: the 7/8 split reproduces the published body exactly, the 8/7 split does not. **Manager-confirmed against the raw RFC.** So §3.2 is decrypt-only, and section 4's minimal-padding mandate makes the §3.2 encrypt assertion fail by construction. The three implementer notes cover the `keyid`, `Content-Length`, and delimiter wrinkles but not the one that actually breaks the harness. Fix: state §3.1 as the round-trip vector and §3.2 as decrypt-only, or run the §3.2 encrypt assertion against the RFC's stated 7/8 split.
+
+    2. **"roughly 17.5 petabytes" is wrong by a factor of 1000 and inverts the ordering of two ceilings.** 2^32 x 4,079 = 17.5 **terabytes**. **Manager-confirmed:** 17,519,171,600,384 octets, and against the RFC's 398 TB safe-encryption limit the record ceiling is **22.7x tighter, not three orders looser**. Holds at every `rs` considered; crossover at `rs >= 92,684`. Neither binds at any plausible cap so the conclusion is safe, but rules 8 and 9 present the binding constraint as the slack one, in a document that can never change.
+
+    3. **Two byte-layout tables both head a column "Octets 0 to 20" in different coordinate systems.** 1.1 is absolute object offsets; 3.2 is offsets inside record 0's decrypted plaintext. Both exactly 21 wide, offset from each other by exactly 21. Prose disambiguates, tables do not. For a document whose stated job is that an implementer can write a parser from it, and whose premise is that a writer bug is permanent, this is the highest-consequence presentation defect available. Label 3.2's column.
+
+    4. **The quotation audit is not 35 of 35.** Two deviations, both manager-confirmed. `"unknown fields are refused rather than ignored"` against `format.md`'s **"Unknown** fields...", a case-altered initial letter, **which is the identical class the beat caught and corrected on 4.2 and then shipped again three sections later**. And the RFC 8188 4.3 nonce quote elides `[RFC5116]` and moves the period inside. Both benign in meaning; criterion 9's standard is verbatim and the report of "35 verbatim" is overstated. **No mode-3 fabrication exists**, confirmed by a full sweep with page-furniture stripping (31 lines removed from RFC 8188, matching the recorded 16 page boundaries).
+
+    5. **An overstatement favouring the chosen option, which is this run's recurring failure mode.** The document calls rust-ece's "We do not support customizing the record size parameter during encryption" individually disqualifying because it forecloses both the record size and the envelope block. The next README sub-bullet, unquoted, reads "The default record size is 4096 bytes", which is exactly what section 3 decides, and the envelope block needs no `rs` customization since it is ordinary plaintext. **It forecloses neither.** The rejection stands on the other grounds, and the random-padding line genuinely is disqualifying.
+
+    ## Should fix
+
+    6. **The cap conversion silently refines a locked document.** Section 4 writes `encryptedSize(cap + (rs - 17), rs)` where `format.md` 3.11 writes `encryptedSize(published_plaintext_cap)`. **The document is correct and the locked version is incomplete**, but it lands as an aside rather than a flagged refinement, and "cap" is left ambiguous between content octets and plaintext-stream octets, which differ by 4,079 at the shipping `rs`. `design-storage-grant-and-cost` reads this without the reasoning attached.
+    7. **Section 8 prices every version bump identically**, which mis-prices the extension `format.md` deliberately paid bytes to reserve. An envelope-only v2 is nearly free to dual-decode; a framing v2 is two crypto stacks. Stating one uniform cost makes the multi-file extension look as expensive as replacing the container.
+    8. **A tenth nonce rule is available free, with a real detector.** Rules 3 through 7 close re-encryption, retry re-entry, encrypt-side seek, and republish, and rule 5 is confirmed in source (`seekOpts.startSeq` is decrypt-only). The one uncovered path is **CSPRNG failure**, the only way to reuse a CEK across relics. `format.md` 1.3 draws the ID from the same CSPRNG in the same pass, so a replayed state replays the ID and 1.4's collision refusal stops the publish before a byte is written. **1.4 already names the symptom without connecting it to nonce reuse.**
+    9. `"the format floors rs at 1024"` is asserted; the derivation gives **548** (21 + 255 + 255 = 531 maximal envelope). A reader implementing 1024 refuses a legal relic in 548 to 1023.
+    10. The two version fields have different ranges (16-bit envelope against two base-64 digits, 0 to 4095), while the document calls them one integer with two encodings.
+    11. The header is fetched twice on the first range operation, since `decryptStreamRange` returns `{offset: 0, length: 21}` as its own first range.
+
+    ## Verdicts on the five nominated weaknesses
+
+    **`rs = 4096` survives, and the real finding is that the decision is unimportant rather than weak.** Every cell of the cost table re-derived exact. Then the beat **measured** what the document only counted: 64 MiB on Node, one AEAD call per record. 4096 gives 179 ms encrypt and 189 ms decrypt; 65536 gives 33 ms and 24 ms. Extrapolated to 100 MiB that is **0.30 s against 0.04 s to decrypt**. The 16x-WebCrypto-calls counterargument does not survive a measurement, and neither does the other arm at roughly $4 per 100K relics. **Keep 4096, add the measurement, cut the four-reason ranking to two**, and stop pricing in AEAD invocation count, which has no user-visible meaning.
+
+    **The deep import survives exactly as stated**, with one mitigating fact to add: the exact-version pin means it can only break on a deliberate upgrade, never on an install.
+
+    **The `rs - 17` block survives and buys more than the document claims.** It sidesteps the library's degenerate `encryptedSize(0, rs) = 21` case, and it keeps the padding delimiter as the final octet of every record. The beat specifically checked whether content ending in NUL octets could be truncated by `unpad`'s backward scan: **it cannot, precisely because the block makes every non-final record exactly one octet of padding.** A real hazard closed by this decision that the document never notices.
+
+    **125 over 122 does not survive as a weakness, and the self-criticism is wrong.** Both encode to 25 characters, so 125 costs nothing and delivers three more bits plus a uniformly random first character. That is a dominance argument. **Drop the self-deprecation, keep the decision.**
+
+    **The 255 caps mostly survive, with one factual overstatement.** "matches the 255-octet per-component limit every mainstream filesystem enforces" is not accurate: NTFS and APFS limit 255 UTF-16 code units, so the cap is conservative rather than matching.
+
+    ## Verified clean, stated so a thin pass is distinguishable from a clean one
+
+    Scope discipline holds: `format.md` 4.4 and 4.6 are not decided, outright or by implication. All eleven criteria re-run independently. Two-way orphan check on the sources manifest is an exact match. Section 8's TTL bound was chased against the sibling specs for an edge-cache, lifecycle-lag, or soft-delete extension and **no defect was found**, because clamping validity at mint means no URL to a post-TTL object can exist. Every library behavior claim re-read in source.
+
+    **Believed and not verified, flagged rather than dropped:** that browser WebCrypto carries higher per-call overhead than Node's OpenSSL path, which would widen the `rs` gap on mobile; and that a fork-unsafe or snapshot-rolled CSPRNG is a live risk for this binary specifically. Finding 8's value does not depend on the latter, since the detector is free either way.
+
+    ## One item for drift routing, not this unit's to fix
+
+    `format.md` 3.4 quotes RFC 8188 as `keyid` "SHOULD be a UTF-8-encoded string" where the RFC reads "SHOULD be a UTF-8-encoded **[RFC3629]** string." Same elision class as finding 4, in a locked sibling.
 reviews:
   fit:
     at: 2026-07-30T11:40:36.253906+00:00

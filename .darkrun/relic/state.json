@@ -7,11 +7,12 @@
     "frame": {
       "station": "frame",
       "status": "in_progress",
-      "phase": "review",
+      "phase": "manufacture",
       "checkpoint": {
         "kind": "auto"
       },
       "branch": "darkrun/relic/frame",
+      "verifier_nonce": "bf819a71a9fdd6f5237799caf05d16272bca8ceca28c5eb4b906f6846a00002a",
       "started_at": "2026-07-30T00:06:02.578480+00:00"
     }
   },

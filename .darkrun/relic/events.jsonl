@@ -14,3 +14,4 @@
 {"action":"spec","at":"2026-07-30T04:12:59.568242+00:00","event":"darkrun.manager.action","run":"relic","station":"specify"}
 {"action":"units_invalid","at":"2026-07-30T04:42:15.443535+00:00","event":"darkrun.manager.action","run":"relic","station":"specify"}
 {"action":"review","at":"2026-07-30T04:43:33.367707+00:00","event":"darkrun.manager.action","run":"relic","station":"specify"}
+{"action":"manufacture","at":"2026-07-30T05:32:33.949151+00:00","event":"darkrun.manager.action","run":"relic","station":"specify"}

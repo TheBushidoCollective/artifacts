@@ -1,7 +1,7 @@
 ---
 name: Decide the origins, the edge, and when the mint fires
 unit_type: ''
-status: pending
+status: in_progress
 depends_on:
 - design-container-and-crypto
 worker: ''
@@ -15,6 +15,52 @@ outputs:
 - docs/design/topology.md
 - docs/design/topology.sources.txt
 branch: darkrun/relic/units/shape/design-topology-and-origins
+started_at: 2026-07-30T12:54:23.852329+00:00
+iterations:
+- worker: designer
+  started_at: 2026-07-30T12:54:23.852329+00:00
+  completed_at: 2026-07-30T12:54:23.852329+00:00
+  result: advance
+  note: |-
+    `docs/design/topology.md` (7,457 words) and `topology.sources.txt` (23 URLs) committed at `3d54b6c`. Worktree clean.
+
+    **Gates re-run independently by the manager:** artifact-exists PASS; substance-floor 7457 against 2400; sources 23 against 6; all 23 URLs resolve; zero dashes. **Criterion 16 spot-checked:** the four routed items that are not this unit's appear exactly once, in the disclaimer naming their owners, and nowhere else.
+
+    ## A precondition deviation that was correct, and an engine-state item for audit
+
+    The beat reported that `docs/design/container.md` was **not** in its worktree, and took the spec's documented `git show` fallback rather than stopping. **Manager-verified: it was right, and the fallback was necessary.** `git ls-tree darkrun/relic/shape -- docs/design/` returns **empty**, so container's output has not landed on the station branch despite the unit being `completed` with all four gates recorded.
+
+    **Flagging for audit: the land has not happened.** This is the same class as the `specify` station's land question, which resolved itself at unit completion there. It has not here. The two remaining waves both declare sibling inputs, so every downstream beat will hit the same gap and take the same fallback. That works, but it means no unit is reading its sibling from the station branch.
+
+    ## Decisions
+
+    Download path: **`blob:` save on the viewing origin under `a[download]`**, with all three paths enumerated and the other two rejected against locked rules. Edge: decided on render path with both candidates priced. Mint: **first trusted user input**, rejecting every passive signal. Dedup interval: **300 seconds**. Edge fidelity: **`deny(429)`**, with `503` identified as the status the edge cannot emit so that code can only come from the application. Name: **not picked**, stated as a blocker.
+
+    ## Criterion 7 satisfied in all four parts, which is the hard one
+
+    The site-versus-origin distinction is stated with the consequence that every per-relic label shares one registrable domain and buys no process isolation while every cost stays. **What survives is worked out per reason rather than asserted:** the site-keyed rationale is gone, the origin-keyed one survives because same-origin policy compares scheme, host, and port, and `document.domain` is checked three independent ways and comes out not making the second reason PSL-dependent. Both branches designed with costs owned, and the document states explicitly that it does not pick. Drift routed to `specify` with the two sentences quoted and the unavailable-at-this-scale scope carried.
+
+    ## The quotation sweep found six real defects that its own claim list missed
+
+    **The beat shipped six and caught all six on the sweep.** Every one was a case alteration or a markup boundary inside a run it had bolded as if quoting a locked document: five initial-capital alterations, and one where the source's asterisks sit inside the quoted span. Fixed as three verified block quotes and three rewrites into unambiguous paraphrase.
+
+    **Its hand-built claim list contained none of the six.** That is the second independent confirmation on this run that the sweep beats the claim list, and the mechanism is now clear: a writer cannot list a quotation they did not notice themselves making.
+
+    It also adopted the container resolve pass's discipline unprompted, so **zero double-quoted runs of 12 or more characters exist outside block quotes** and criterion 15 is mechanically checkable. Three MISSes during verification were confirmed false negatives from markup boundaries rather than defects.
+
+    ## What the challenge pass should attack, in the beat's own ranking
+
+    1. **The mint trigger is the weakest load-bearing claim.** It rejected visible-and-focused on the grounds that a headless browser reports both by default, and **says plainly it did not verify that against a source; it is reasoning, not evidence.** If wrong, a cheaper gate exists and the wedge was taxed for nothing. **Verify this first.**
+    2. **300 seconds is a judgment number with no measurement behind it.** The beat argued itself down from 3600 mid-draft on the grounds that the interval's only job is a recipient reload and that stretching it to catch scanners repeats the anchor mistake `service.md` 2.2 already records. It does not defend 300 against 180 or 600.
+    3. **The `blob:` download attribution is unverified and the beat says so.** Its defence is that the sandbox path is closed by locked rules regardless, so the decision is forced independently of the answer. **Attack whether that is actually true**, because if it is not, the section's Safe Browsing framing is decorative.
+    4. **Certificate Manager removing the DNS-credential problem is its best finding and it flips the spec's stated cost.** It rests on the `_acme-challenge` CNAME delegating the challenge, read off the docs and quoted, but no certificate was stood up to prove renewal needs no further DNS writes.
+    5. **The signed URL crossing a third-party edge at TLS termination** is derived rather than sourced, and it is doing real work in the edge decision.
+
+    Two it is more confident of than their length suggests: the `document.domain` analysis, checked three ways; and the edge-status completeness argument, which is exhaustive over the whole valid set rather than a preference.
+
+    ## One finding no criterion covers, and it is operator-relevant
+
+    **The availability check caught its own failure mode.** An RDAP aggregator reported `relic.io` as unregistered; each registry's own RDAP service, resolved through the IANA bootstrap, returns 200 and shows it registered and parked. `relic.com`, `relic.dev`, `relic.app`, `relic.host`, and `getrelic.com` are also all registered. **If any other beat on this run has checked domain availability through an aggregator, that result is suspect.**
 reviews:
   fit:
     at: 2026-07-30T11:40:36.253906+00:00

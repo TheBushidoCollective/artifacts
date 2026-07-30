@@ -204,6 +204,16 @@ gate_results:
   at: 2026-07-30T07:20:15.589125+00:00
   attempts: 1
   detail: 17 non-empty lines against a floor of 6, one URL per line, trailing newline present. Run by the manager at 7121fc2. Two sources added during resolve (Trojan Source for the bidi-control gate, W3C appmanifest for the corrected PWA claim), none removed. Orphan check clean both directions at 17 and 17.
+- name: every-cited-url-resolves
+  status: pass
+  at: 2026-07-30T07:20:21.187044+00:00
+  attempts: 1
+  detail: |-
+    All 17 URLs fetched, exit 0, no DEAD lines. Run by the manager at 7121fc2. Orphan check clean both directions after two additions.
+
+    This unit carried two of the run's citation defects. The adversary found an MDN page cited for a header-versus-attribute comparison it does not make, which the manager confirmed independently (zero occurrences of "whole response", "strip", or "stronger"); the citation was dropped and the claim restated as derived reasoning. Then the tightener's full quotation audit found a second one nobody had flagged: a GHSA quote reading "3.0.1 through 3.3.3 (current latest)" where the advisory says "(latest)". **One word inside quotation marks**, same class as the service unit's fabrication, smaller blast radius. It is the argument for running the audit across every quoted string rather than only at the flagged citation.
+
+    Note for later stations: this gate detects only mode 1 of three, per `citation-defects-and-the-three-checks-that-catch-them`.
 ---
 
 # Goal

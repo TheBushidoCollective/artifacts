@@ -217,6 +217,24 @@ gate_results:
     25 non-empty lines against a floor of 6, one URL per line, trailing newline. Run by the manager at `18494dc`. Up from 23 at the make pass.
 
     The two additions are the Cloud Armor and Certificate Manager pages the edge correction needed. **Both were added rather than cited loosely**, which is the right handling: the challenge pass explicitly warned that using those numbers without adding their sources would break an orphan check that had been clean. It is still clean in both directions at 25 and 25.
+- name: every-cited-url-resolves
+  status: pass
+  at: 2026-07-30T13:39:01.259340+00:00
+  attempts: 1
+  detail: |-
+    All 25 URLs fetched, exit 0, no DEAD lines. Run by the manager at `18494dc`. Orphan check clean both directions.
+
+    **Final quotation state: 66 block quotes, 66 verbatim, zero defects.** The make pass shipped six real defects and caught all six on its own sweep; the challenge pass confirmed no fabrication existed; the resolve pass re-verified the lot.
+
+    **Two things this unit adds to the run's understanding of this check.**
+
+    First, **the sweep beat the claim list again, and the mechanism is now settled.** All six make-pass defects were case alterations or markup boundaries inside runs the writer had bolded as if quoting, and **its hand-built claim list contained none of them**. A writer cannot list a quotation they did not notice themselves making. That is the second independent confirmation on this run.
+
+    Second, **the relay-of-a-relay check ran unprompted.** The resolve pass verified the PSL guidelines quotes against the guidelines page itself rather than against `viewer.md`, which quotes the same text. That is defect mode 3 from `citation-defects-and-the-three-checks-that-catch-them`, checked without being asked.
+
+    **The mechanical property is preserved and was verified rather than assumed:** zero double-quoted runs of 12 or more characters outside block quotes. The resolve pass extended the discipline to its own new figures, stating all six in prose with citations rather than quoting them from table cells, because those cells concatenate label and value across a markup boundary and would produce a false negative on the next check.
+
+    Three MISSes during the final sweep resolved as markup-boundary false negatives, confirmed against raw HTML. One is worth recording: a quote deliberately truncated to stop immediately before a literal em-dash entity, so that criterion 17's zero-dash requirement and criterion 15's verbatim requirement do not collide.
 ---
 
 # Goal

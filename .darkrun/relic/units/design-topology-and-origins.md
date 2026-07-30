@@ -199,6 +199,16 @@ gate_results:
   at: 2026-07-30T13:38:31.859302+00:00
   attempts: 1
   detail: '`test -f docs/design/topology.md` exits 0. Run by the manager in the unit worktree at `18494dc`, not taken from a beat''s self-report.'
+- name: substance-floor
+  status: pass
+  at: 2026-07-30T13:38:37.604773+00:00
+  attempts: 1
+  detail: |-
+    `test "$(wc -w < docs/design/topology.md)" -ge 2400` exits 0. Actual **10,213 words**, up from 7,457 at the make pass.
+
+    **The growth is fourteen fixed findings, and none of it is padding.** The two that changed what the document asserts (the mint gate's basis and the dedup interval's justification) are rewrites rather than additions. The bulk is evidence the document previously lacked: a measured headless-browser result with its reproduction condition stated, the corrected edge arithmetic with its per-rule term exposed, a rebuilt availability table with its promotion rule written down, and a second drift routing.
+
+    **One section got shorter and more honest rather than longer:** the branch comparison had its brittle cost counts removed and branch B's two framed upsides relabeled as mirrors of branch A's costs, which was the asymmetry finding. Length grew while the thing that made the section misleading was cut.
 ---
 
 # Goal

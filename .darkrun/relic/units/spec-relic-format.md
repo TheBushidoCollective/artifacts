@@ -1,7 +1,7 @@
 ---
 name: Specify the URL, the relic ID, and the ciphertext container
 unit_type: doc
-status: pending
+status: in_progress
 depends_on: []
 worker: ''
 model: opus
@@ -12,6 +12,47 @@ outputs:
 - docs/spec/format.md
 - docs/spec/format.sources.txt
 branch: darkrun/relic/units/specify/spec-relic-format
+started_at: 2026-07-30T05:50:06.587472+00:00
+iterations:
+- worker: spec_writer
+  started_at: 2026-07-30T05:50:06.587472+00:00
+  completed_at: 2026-07-30T05:50:06.587472+00:00
+  result: advance
+  note: |-
+    `docs/spec/format.md` (4644 words) and `docs/spec/format.sources.txt` (12 sources) written and committed at `4d7df13` on the unit branch. Worktree clean.
+
+    **Gates verified independently by the manager, not taken from the beat's report.** artifact-exists PASS; substance-floor PASS at 1600 and also at the stale 2000 value still sitting on the station branch; sources 12 against a floor of 5; every URL resolves, exit 0; manifest ends in a newline. Zero em-dashes or en-dashes in either file. One `should be` hit on a hedging grep is a verbatim quote from the MCP spec, not hedging.
+
+    **Structure:** sections 0 through 4 map to the unit's mandated sections plus the Route list. Section 5, "What the sibling units inherit," was not requested. Keep it. It pins each downstream consumer to a section-numbered decision and is a stronger form of criterion 10 than the criterion asked for.
+
+    ## The three forks the siblings consume
+
+    - **ID entropy: position 1, full bearer-token entropy.** The ID is unguessable, not merely unique. `shape` picks the bit count, floored at the UUIDv4 reference the MCP spec itself names. **Consequence for `spec-service-surface`: an expired relic MAY be distinguished from one that never existed**, because only somebody already holding a valid ID can ask the question.
+    - **Fragment: structured, `#<fixed-width version marker><key>`, no separator, marker in the fragment rather than RFC 8188's `keyid`.** The viewer refuses an unknown version before minting, before consuming a download cap, and before any egress.
+    - **Fragment stripping: yes**, read once into a local at load then `history.replaceState`. **Both costs are mandatory on `spec-viewer`:** a copy-link affordance backed by the in-memory key, and a reloaded page that is dead and says so rather than showing a decrypt error.
+
+    ## Where the adversary should push
+
+    The beat surfaced five judgment calls rather than burying them. Attack these first:
+
+    1. **The container carries no renderer class at all.** The unit permitted "carry but never route"; the beat excluded it outright, on the grounds that a second copy has one possible consumer and one possible use, and creates a disagreement case with no correct resolution. This is the single line to change if that reasoning is wrong.
+    2. **`idlen` MUST be 0 and a container with `idlen != 0` MUST be refused.** The unit allowed "say what it is used for, or say it is unused." The beat made refusal a hard invariant, which forecloses using `keyid` later without a version bump.
+    3. **Crockford base32 ID against a base64url key.** Looks inconsistent. The beat's answer is that IDs get transcribed in fragment-stripped workflows (abuse reports, tickets, logs) and whole-URL hand transcription is not optimized for. Test whether that holds.
+    4. **The reserved path set is the beat's own**, not quoted from a locked artifact. Only `abuse`, the policy URL, and `robots.txt` come from upstream. Note the real control is the explicit table, not the alphabet: every reserved word except `assets` is unspellable in Crockford, and `assets` is spellable. Check the append-after-launch rule against issued IDs.
+    5. **No canonicalizing redirect for ID case.** Case-insensitive lookup, no redirect, because a canonicalization redirect is exactly the RFC 9110 fragment-inheritance class. This constrains `spec-service-surface`'s routing.
+
+    Two consequences the beat found that the unit did not ask for and that should survive into the final:
+
+    - **Bucket padding and exact plaintext-size derivation are in tension.** Under discretionary padding the derived size is an upper bound, which is still the safe direction for refuse-before-allocating but cannot back an exact byte count shown before decryption. Routed item 5 carries this.
+    - **The GFM terminal-character arithmetic independently rules out a 24-byte key**, since 24 is a multiple of three so the final character carries a full 6 bits and `_` becomes reachable. Second, unrelated reason to exclude AES-192. The named check `fragment-terminal-charset` has a static half and a dynamic round-trip half.
+
+    ## Calibration note for later stations
+
+    The document came in at 4644 words against a predicted band of 1620 to 2295, roughly 172 words per mandated item versus the 60 to 85 the frozen rule assumes. The rate model in `substance-floor-calibration-rule` is about 2x low for this station's density. Nothing broke, because a floor is a floor, but the remaining three floors (2800, 2600, 2200) are looser than they read.
+
+    ## Open, not blocking this beat
+
+    The station branch and the run branch both carry a unit generation several rounds stale: format 2000, viewer 2200, publish 1800, service 1800, viewer's route list still holding the mint-response clause, and publish still holding the pre-split `isError` bullet. The engine dispatched this beat from current state, so the contract the beat worked against was correct, and 4644 clears every floor variant. Verify at the land boundary that the `main -> darkrun/relic/main -> darkrun/relic/specify` sync carries the current definitions forward rather than the stale ones overwriting them.
 reviews:
   completeness:
     at: 2026-07-30T05:31:07.501358+00:00

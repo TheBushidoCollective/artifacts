@@ -162,6 +162,11 @@ gate_results:
   at: 2026-07-30T07:13:21.083628+00:00
   attempts: 1
   detail: '`test -f docs/spec/service.md` exits 0. Run by the manager in the unit worktree at commit ed51b43, not taken from a beat''s self-report.'
+- name: substance-floor
+  status: pass
+  at: 2026-07-30T07:13:24.828395+00:00
+  attempts: 1
+  detail: '`test "$(wc -w < docs/spec/service.md)" -ge 2800` exits 0. Actual: 6551 words, up from 4808 at the writer''s commit. Run by the manager at ed51b43. The growth is fourteen adversary findings answered plus a new section 1.6 carrying three grant-time refusal codes that `format.md` mandates, against roughly 100 words of tightening returned. Consistent with the precedent set on `format.md`: the band is guidance, the floor is a stub guard, and correctness wins over the count.'
 ---
 
 # Goal

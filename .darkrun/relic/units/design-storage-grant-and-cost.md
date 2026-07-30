@@ -177,6 +177,11 @@ gate_results:
   at: 2026-07-30T15:08:11.013615+00:00
   attempts: 1
   detail: '`wc -w` returns 11,459 against a floor of 2,600. Grew from 8,527 at the designer beat; the resolve pass added a third, all of it the D21 pricing-scope guard, the §1.2 copy-set enumeration, drift item 5, and the leaf-4 preservation sentences. No ceiling on this gate.'
+- name: sources-manifest-populated
+  status: pass
+  at: 2026-07-30T15:08:21.144184+00:00
+  attempts: 1
+  detail: 18 non-empty lines against a floor of 6, one URL per line, trailing newline present. Up from 17 at the designer beat; the added source is the GCS request-preconditions page, cited by D15's leaf-4 preservation sentence for `x-goog-if-generation-match`.
 ---
 
 # Goal

@@ -33,9 +33,7 @@ This is the build floor. You run the **Pass loop** — _Plan → Make → Challe
 
 Dispatch the **spec_writer** beat in parallel across these wave-ready Units:
 
-- `spec-service-surface`
-
-- `spec-viewer`
+- `spec-publish-contract`
 
 
 
@@ -44,297 +42,174 @@ Dispatch the **spec_writer** beat in parallel across these wave-ready Units:
 
 The subagent you dispatch for a Unit gets **no context beyond what you hand it**. Pass the Unit's spec below into its dispatch verbatim — the completion criteria with their verify commands, the declared paths, and the scope boundary are the contract the beat is judged against.
 
-### `spec-service-surface` — Specify the status taxonomy, expiry semantics, mint rules, and the abuse surface
+### `spec-publish-contract` — Specify the MCP tool surface and the publish contract
 
-- **inputs:** `docs/spec/format.md`
-
-
-- **outputs:** `docs/spec/service.md`, `docs/spec/service.sources.txt`
+- **inputs:** `docs/spec/format.md`, `docs/spec/service.md`
 
 
-- **quality gates:** artifact-exists — `test -f docs/spec/service.md` · substance-floor — `test "$(wc -w < docs/spec/service.md)" -ge 2800` · sources-manifest-populated — `bash -c 'set -eu; n=$(grep -c . docs/spec/service.sources.txt); test "$n" -ge 5'` · every-cited-url-resolves — `bash -c 'set -eu; while IFS= read -r u || [ -n "$u" ]; do [ -n "$u" ] || continue; curl -sfL --max-time 25 --retry 2 -A "Mozilla/5.0 (relic-link-check)" -o /dev/null "$u"; done < docs/spec/service.sources.txt'`
+- **outputs:** `docs/spec/publish.md`, `docs/spec/publish.sources.txt`
+
+
+- **quality gates:** artifact-exists — `test -f docs/spec/publish.md` · substance-floor — `test "$(wc -w < docs/spec/publish.md)" -ge 2200` · sources-manifest-populated — `bash -c 'set -eu; n=$(grep -c . docs/spec/publish.sources.txt); test "$n" -ge 5'` · every-cited-url-resolves — `bash -c 'set -eu; while IFS= read -r u || [ -n "$u" ]; do [ -n "$u" ] || continue; curl -sfL --max-time 25 --retry 2 -A "Mozilla/5.0 (relic-link-check)" -o /dev/null "$u"; done < docs/spec/publish.sources.txt'`
 
 
 # Goal
 
-Write `docs/spec/service.md`: the status taxonomy, expiry and lifecycle semantics, when a mint happens and what counts as an open, the delete-by-ID and abuse surface, and the published disclosure statement. Plus `docs/spec/service.sources.txt`, one URL per line, trailing newline.
+Write `docs/spec/publish.md`: the MCP tool surface and the two-hop publish contract, from the agent's tool call through to a relic that exists and a URL the publisher holds. Plus `docs/spec/publish.sources.txt`, one URL per line, trailing newline.
 
-**Read first:** `darkrun_knowledge_list` in full, especially `gcs-soft-delete-and-what-deletion-actually-means`, `abuse-liability-of-hosting-uninspectable-content`, `redirects-inherit-the-fragment-and-leak-the-key`, `agent-mediated-key-delivery-leaks-to-the-transcript`, `mcp-protocol-2026-07-28-constraints`, and `shape-inherited-constraints-from-frame`.
+**Read first:** `darkrun_knowledge_list` in full, especially `mcp-protocol-2026-07-28-constraints`, `agent-mediated-key-delivery-leaks-to-the-transcript`, `citation-defects-and-the-three-checks-that-catch-them`, and `gcs-false-impossibility-claims`.
 
 Then read, from the repo root (**do not `cd` into a subdirectory**, `git ls-tree` scopes to the prefix):
 
 - `docs/frame.md` and `docs/preconditions.md`, the **locked** upstream artifacts. Both are on this station's branch, so they are in your worktree. **Do not run `git show darkrun/relic/frame:...`**; that ref no longer exists locally and exits 128.
-- `docs/spec/format.md`, your declared sibling input. **Its ID entropy decision determines several answers here**, so read it before writing section 1.
+- `docs/spec/format.md`, which settles the relic ID and container. **Do not redefine either.**
+- `docs/spec/service.md`, which fixes the status taxonomy and machine-readable error format for **app-server-originated** failures.
 
-**If `docs/spec/format.md` is not in your worktree, stop and fetch it before writing section 1.** Worktree fork timing relative to a sibling's land is not guaranteed, and in the previous station a dependent unit's declared input was genuinely absent. Fall back in order:
+**If either sibling input is missing from your worktree, stop and fetch it before writing anything that depends on it.** You declare two sibling inputs and are therefore the most exposed unit. Fall back in order:
 
 ```
-git show darkrun/relic/specify:docs/spec/format.md
-git show darkrun/relic/units/specify/spec-relic-format:docs/spec/format.md
+git show darkrun/relic/specify:docs/spec/service.md
+git show darkrun/relic/units/specify/spec-service-surface:docs/spec/service.md
 ```
 
 **Never proceed by redefining what a sibling settles.** Report which path you used.
 
+# Source discipline. This station's dominant failure mode.
+
+**Five citation defects shipped across the three sibling units, and every one was found by grepping the source for the quoted string.** None would have failed the `every-cited-url-resolves` gate, because in all five the URL resolved. The modes, worst first:
+
+1. **A fabricated quotation.** `service.md` attributed to RFC 9110 §15.5.11 a string that appears **zero times in all 10,785 lines**, sitting in a sentence whose other quote was verbatim.
+2. **Unsupported citations.** Two pages cited for claims they never make.
+3. **A relay of a relay**, presented as a first-hand observation when the cited page was quoting someone else's explicitly hedged belief.
+4. **One wrong word inside quotation marks**, where an advisory says "(latest)" and the quote read "(current latest)".
+
+The mechanism is not carelessness about sources. In every case the writer had read the right document and reached the right conclusion; a confident paraphrase hardened into quotation marks. The argument survives and the evidence is counterfeit, which is why it passes any review that checks whether the reasoning is sound.
+
+**Rules for you:**
+
+- **Pull raw source text and grep it.** RFCs as `.txt` from rfc-editor.org. For MDN, the `mdn/browser-compat-data` JSON is authoritative where prose is not.
+- **Do not use WebFetch on a specification.** Its summarizer was caught on this run returning text that **flatly inverted** RFC 9110's fragment-inheritance meaning. Every beat that worked from raw text and grep produced findings that survived independent re-verification.
+- **Before you finish, audit every quoted string you wrote** against its source. Criterion 14 makes this checkable.
+
 # Already decided. Do not relitigate.
 
+- **The MCP server is a local stdio binary that encrypts in-process.** It does not return a script.
+- **Ciphertext never transits the app server.** The client uploads straight to storage under a signed grant. Deviation routes back to `frame` as drift.
+- **The size cap is enforced by a signed constraint on the grant**, not client-side.
 - **Rate limiting returns `429`, never `401` or `403`.**
-- **Open counts are taken at signed-URL mint time**, never from a viewer-side script.
-- **Delete-by-ID works without the secret.** Deletion, not revocation, is the takedown primitive, because signed URLs cannot be revoked individually.
-- **Abuse intake exists on day one**, from every relic page, at a stable `/abuse` URL, plus a published email alias, with a named human behind it. The preconditions make this the go/no-go.
-- **The blocklist is detect-and-delete after the object lands**, never a check at the door.
-- **Upload IP plus timestamp are retained with a published window**, per sink.
-- **`robots.txt` disallow plus `X-Robots-Tag: noindex`**, asserted on a real relic path rather than the apex.
+- **No republish-to-same-URL and no versioning.** A new relic is a new URL.
 - **No accounts**, so every control keys on IP, proof of work, or nothing.
 
+**Pin the MCP protocol revision you are writing against, explicitly.** The current revision is `2026-07-28`, which removed the GET stream endpoint and protocol-level sessions, replaced the `initialize` handshake with per-request `_meta`, and added a mandatory `server/discover`. **Tool-result semantics are revision-dependent, so a document that does not name its revision is ambiguous by construction.**
+
+# What `service.md` already settled that you consume
+
+Read it directly; this is what to look for. **Its section 1.6 was added specifically for you** and carries three grant-time refusals `format.md` mandates:
+
+- **`409 relic_id_collision`** is the code a client keys **redraw-and-retry** on, because `format.md` 1.4 obliges the client to draw a new ID and retry.
+- **`400 invalid_relic_id`**, with an `id_validation_failure` extension member naming which of alphabet, length, or reserved-table failed.
+- **`409 relic_not_yet_published`**, carrying `retry_after_seconds`, for a mint against a live grant whose object has not landed.
+
+The error shape is **RFC 9457 `application/problem+json`**. The fields a client extracts are `code`, `retry_after_seconds`, `size_limit_bytes`, `declared_size_bytes`, `size_basis`, `relic_id`, `download_cap`, `report_url`. `code` is the bare token; `type` is the problems URL plus `code`, generated from one table. **`size_basis` is `plaintext` or `ciphertext`** and exists because `format.md` 3.11 requires the published number be a plaintext number while `shape` picks the enforced side.
+
 # What this document must decide
 
-## 1. The status taxonomy
+## 1. The MCP tool surface
 
-**One taxonomy for all callers.** A taxonomy that varies by caller is a bug generator, and the same endpoint may be reachable from both the publishing client and a browser.
+- **Tool name.** The spec allows 1 to 128 chars, case-sensitive, ASCII letters/digits/underscore/hyphen/dot, and warns that clients aggregating tools across servers may hit collisions. A bare `publish` collides with incumbent publishing MCP servers a user may already have loaded, and **the model then picks whichever the client disambiguates to, so the file can land on a service with different or no encryption.** A security outcome produced by a naming decision.
+- **Input schema: path versus inline content.** The local server has filesystem access, so a **path** keeps plaintext out of the model's context entirely. Accepting inline `content` puts plaintext in the transcript, compounding the key leak from "the key leaks upward" to "the key and the file leak upward." Accepting both without stating a preference means agents inline by default, because that is what a model already holds.
+- **Whether the caller may set the renderer class.** The frame locks it as declared by the local client, which holds the plaintext. Exposing it makes the taxonomy model-attested and the metric's sharp second clause reported by an unreliable narrator.
+- **Directory input.** A directory forces class `archive`, download-only in the first release, so "publish my report folder" silently produces an unrenderable relic. Decide, and if permitted, require the tool to say so at publish time.
+- **Whether a display title exists separately from the filename.**
+- **Whether the client pre-checks the cap before requesting a grant.** Free, and it turns a wasted grant plus a failed upload into an instant self-correctable error.
+- **The result shape.** Must carry the full URL including the fragment; the agent cannot hand over a link otherwise. Decide each of: relic ID separately, expiry timestamp, declared renderer class, filename echo, abuse URL.
+- **`resource_link` is a trap.** It is a link a client may fetch, so a client that helpfully fetches it mints a signed URL and **produces a phantom open against the frame's primary counter.** If used at all, it must not point at the viewer URL.
+- **`outputSchema` versus error results.** A schema with `url` required, plus an error result carrying no `structuredContent`, is a shape the spec neither blesses nor forbids. A permissive schema loses validation; omitting `outputSchema` loses typing; a conforming object with a null URL lies in a typed field. Pick one, or three implementers pick three.
+- **Which failures set `isError: true` on the tool result, and which are protocol-level errors.** State the rule explicitly. The answer is close to forced, since every failure in section 2 is a tool execution error the model can read and act on rather than a malformed request, but **leaving it unstated is how an implementer returns a protocol error the model cannot self-correct from**, which throws away the entire point of the field-level error mapping below.
+- **Progress notifications are a requirement, not a nicety.** Claude Code's time-to-first-byte default is 60 seconds and its HTTP idle timeout is 5 minutes. A large upload exceeds that routinely, and an agent's response to a hung tool is to retry, producing the duplicate-publish case. **Without progress the client times out, the model reports failure, the upload completes anyway, and the result is an orphaned relic that consumed quota and storage and that nobody has the URL for.**
+- **Tool count.** One tool or several. A delete tool cannot be specified until publisher self-delete is decided below.
 
-**Scope note:** you own statuses for failures the **app server originates**. Failures on legs the app server is structurally not in (a purely local file error, the client-to-GCS upload leg, a storage-side refusal) have no app-server status and are owned by `spec-publish-contract`. Do not invent statuses for them, and do not let their absence read as an omission.
+## 2. Error mapping, and the two legs the app server is not in
 
-Enumerate and fix a status for each app-server-originated case: bad ID that never existed; expired past TTL; deleted for abuse; deleted under legal process; blocklist hash match; grant expired with no object; declared size over cap at grant time; publish rate limited; mint rate limited; **per-object download cap exhausted**; egress kill switch engaged; malformed renderer class or client name. **That is twelve cases, and the enumeration is the criterion 6 completeness bar.**
+The spec splits protocol errors from tool execution errors, which carry actionable feedback the model self-corrects from. **Publish failures fall into two disjoint groups and you must handle both.**
 
-Three must be reasoned, not assigned:
+**Group A, app-server-originated.** These reach the client as an HTTP response, so **map them onto the statuses and named machine-readable fields `docs/spec/service.md` defines and invent nothing**: grant refused because declared size exceeds the cap; publish rate limited; malformed renderer class or client name; grant expired at mint; egress kill switch engaged; **plus all three of section 1.6's grant-time refusals, including the collision the client must redraw on.** State the extraction rule: the client reads the machine-readable code and named fields, **never** the human-readable prose, because prose changes on a copy edit. Two fields are load-bearing: a size rejection must surface **both the cap and the actual size**, or the model retries the identical file; a rate limit must surface **retry-after**, or the model retries immediately and deepens the limit.
 
-- **Cap exhaustion is where two locked constraints collide.** Not a rate limit (waiting never helps) and not a resource that is gone (the object exists). The natural status is `403`, which is forbidden. `410` treats it as terminal, which it is, but conflates it with deletion in every log and dashboard. `429` with a long retry-after is a lie the client acts on. A `200` with an error body breaks caching, monitoring, and uptime checks. **Pick one and state the cost you accept.**
-- **Whether expired is distinguishable from never-existed depends on the ID entropy decision in `format.md`. Read it first; do not re-decide it.** Against a short ID an informative `410` confirms an ID was real, letting an enumerator harvest a map of used IDs and the operator-conceded metadata in bulk. Against a full-entropy ID the distinction leaks nothing to anyone who does not already hold the URL. Counter-pressure is real: collapsing expired, wrong, and removed into "not found" produces exactly the "the link is dead" support stream the frame cited when it ruled out burn-after-reading. And the server never sees the fragment, so it can never tell a real recipient from a scanner.
-- **Whether a takedown is disclosed as distinct from an expiry.** A publisher whose relic was removed in error needs to know it was removed, or they never appeal. Telling an abuser their campaign was caught is arguably a deterrent. **This is a judgment call, not a value, so decide it here. It is not in this unit's Route-to-`shape` list and routing it fails criterion 5.**
+**Group B, failures with no app-server status, because the app server is structurally not in that path.** `docs/spec/service.md` cannot assign these a status and must not be forced to. **You own their tool-error codes.** At minimum:
 
-**Decide the machine-readable problem-detail format.** Without a stable machine-readable code, the local publishing client string-matches on human prose and breaks on the first copy edit. **`spec-publish-contract` depends on this unit, so the taxonomy must name every field a client extracts**, including the cap and actual size on a size rejection and the retry-after on a rate limit. State the shape well enough that `spec-publish-contract` can define matching codes for the legs you do not own.
+- **File not found or unreadable.** Purely local; no HTTP request is made at all.
+- **Network failure mid-upload**, on the client-to-GCS leg the preconditions keep the app server out of by design.
+- **Upload-time size refusal by the signed constraint**, which GCS answers. Distinct from the grant-time refusal in Group A, and the preconditions are explicit that the app server cannot see it. **Name both refusals separately so a reader never conflates them.**
+- **Storage-leg errors generally**, including a grant that expired before the upload finished.
 
-State that the status must be correct **at the deployed edge**, not only in the application, because anything in front that sheds load has its own default status and that is what the client sees.
+Define a stable machine-readable code for each Group B failure in the same shape `service.md` uses, so the client's error handling is uniform across both groups even though the origins differ.
 
-## 2. Mint placement, the mint response, and counting
+**Note the scope of the 401/403 rule.** It is a Claude Code MCP *client* behavior and stdio carries no HTTP status, so it binds directly only on a future remote MCP surface. Obey it everywhere anyway and say why.
 
-- **The mint is never a side effect of serving `/{id}`.** Serve a static shell with no mint; the mint is a distinct request. **This single rule keeps every non-JavaScript crawler off both the open counter and the download cap**, costs nothing, and follows from the frame's own metric definition. Safe Links scans before message delivery and is observed as a `HEAD` with User-Agent `Go-http-client/1.1` that burns single-use tokens on live products.
-- **You own the mint response's field set.** `spec-viewer` needs fields on it (an expiry so it can tell whether a still-valid URL can be reused, and possibly object length and CRC32C so transport corruption is separable from a wrong key). It states the need; you define the response.
-- **Decide whether a refused mint counts as an open, and whether a repeated mint by the same IP within some interval counts.** Both inflate the metric's first clause, which already carries a permanent confound. The second is worse for interactive publishers, who typically load the page more than once.
-- **The status choice and the counter interact.** If cap-exhaustion and expiry share a status, the mint log cannot separate them afterward and no later query undoes it.
-- **`robots.txt` stops indexing, not fetching.** Slack documents that it does not honor `robots.txt`. State that no control rests on it.
-- **The 120-second post-publish window is anchored to publish time and is explicitly not a scanner filter.** Scanner fetches are anchored to delivery, and the gap is unbounded. **Tuning the value cannot fix this because the defect is in the anchor, and changing the anchor changes the frame's metric definition, so it is drift routing back to `frame`.** Name it; do not propose it.
-- **State the per-object cap trade with arithmetic.** One relic mailed to a 40-person list inside a Defender tenant can draw 40 pre-delivery scans plus 40 time-of-click fetches. **A cap low enough to be a meaningful abuse control is high enough to break ordinary email distribution.**
+## 3. The grant hop
 
-## 3. Expiry, lifecycle, and time
+- **What the client sends:** declared size (**state plaintext or ciphertext, consistent with `format.md` and with `service.md`'s `size_basis`**), declared renderer class, client name **and version**.
+- **A content hash, and for which purpose.** Do **not** send one for blocklist purposes: the hash is computed over the object after it lands, and there is no refusal count because the server never sees the upload stream. A hash may still be wanted for idempotency, and conflating the two purposes quietly reintroduces the door-check the preconditions ruled out.
+- **Proof of work: decide now or foreclose it.** A challenge-then-grant flow is a different contract, not an added header, so leaving it open means `shape` picks the one-round-trip grant and PoW becomes an unaddable breaking change.
+- **Grant expiry is a separate clock from the relic TTL.** Collapsing them kills slow uploads at the TTL boundary.
+- **The response never contains the fragment.** The server assembles everything except the key; the client appends it locally. Guard against a later convenience endpoint that takes the key to build a share URL.
+- **The grant carries a signed size constraint.** Options: a signed policy document expressing a content-length range, or a resumable session with `X-Upload-Content-Length`. **A plain signed PUT ignores `Content-Length`**, so choosing it turns the cap into a client-side suggestion.
+- **`ifGenerationMatch: 0` on the grant.** Without it, anyone holding the grant can replace the ciphertext under an already-shared URL. **The locked republish non-goal supplies this enforcement rule for free.**
+- **Whether the per-IP publish quota is charged at grant-mint or at upload-completion.** Charging at completion lets an attacker mint unlimited grants for free.
 
-- **A download that begins before expiry completes after it.** The app server is not in the data path and structurally cannot stop an in-flight transfer.
-- **A signed URL minted just inside the ceiling is valid for its full lifetime past it.** Decide between clamping to `min(url_validity, relic_expiry)` at mint and accepting the overhang and publishing it. The overhang is a term in the worst-case egress arithmetic.
-- **The publishing client's clock is never trusted.** Every timestamp feeding TTL, the telemetry window, and the retention window is the app server's own, NTP-disciplined, because a skewed server silently mis-enforces the TTL with no signal.
-- **The lifecycle gap.** Granularity is days rounded to next UTC midnight, and a config change takes up to 24 hours during which Google may act on the old config. **Nothing is served in that gap.** State it so nobody later "fixes" it by serving from the object's continued existence. Three consequences: the bytes are billable storage throughout; **the ciphertext-hash scan must still cover objects inside the gap**, since skipping expired objects leaves blocklisted content undetected exactly where a record is most wanted; and any published byte-lifetime number counts TTL plus lifecycle lag plus the soft-delete window.
-- **Deleted does not mean erased.** Soft delete is on by default at seven days, soft-deleted objects cannot be read or modified, and lifecycle-deleted objects land in the same state. Deletion stops serving immediately, which is the half that answers an abuse notice. **Do not promise erasure.** It remains a bucket-creation-time decision because a policy change only reaches objects deleted after it takes effect, so setting it late leaves a tail nobody can clear.
-- **The delete-mint race.** A fetch failing not-found after a successful mint renders as "this relic is no longer available," never as a decrypt failure, or the viewer attributes a takedown to a bad key and the recipient blames the sender.
+## 4. Completion, retry, and failure
 
-## 4. Delete-by-ID and the abuse surface
+- **What confirms completion.** Lazy discovery at first mint is cheapest and records telemetry for relics that never landed. An explicit completion call strands a relic whose call failed. A storage-side finalize notification adds a dependency and an eventually-consistent window with no name.
+- **Grants never used.** State that "relic ID with no object" is a **normal expected state with a stated refusal, never a 500**, and note that `service.md` 1.6 already gives it a code.
+- **Idempotency.** Without an idempotency key a retried grant request mints a second grant, ID, and telemetry row. The `Idempotency-Key` header field is the prior art: a duplicate key returns the original result, and a still-running original returns 409.
+- **Retry safety on the upload leg.** A resumable session makes retry safe: a status query returns `308` with a `Range` header of persisted bytes, and Cloud Storage ignores bytes sent at an already-persisted offset. **A plain signed PUT has no equivalent, so every retry restarts at zero and doubles egress against a cost precondition already called unbounded.**
+- **Whether a retry re-encrypts.** Re-encrypting generates a fresh key, so the URL changes and any previously emitted URL is dead. Resuming under the same key must resume the record sequence at the correct index: **restarting the sequence mid-object under the same key is the catastrophic nonce-reuse case, not a degraded mode.**
+- **Retry count is capped**, because an unbounded loop against a per-IP quota converts a flaky network into a self-inflicted rate-limit ban.
+- **Lost confirmation.** The worst failure: the relic exists, is fetchable, and the publisher has no URL. **`format.md` put ID generation on the client, so say plainly that this is a non-event and why.** The tool never reports success on a response it did not receive, and never reports failure implying nothing was uploaded when it cannot know that.
+- **Crash safety.** Encryption never writes a plaintext temp file; a ciphertext temp file is removed on crash; **the source file is never modified or moved.** Publishing is non-destructive to its input, because "publish" means "move" in other tools.
+- **Double publish.** Two relics, two URLs, two independent TTLs. **Deduplication is not a storage optimization here**, and convergent encryption is drift routing back to `frame`.
+- **Whether a publisher can delete their own relic.** The non-goals forbid a dashboard and a relic list, not a per-relic delete capability. Decide, and note it gates whether a delete tool can exist.
 
-- **The delete endpoint carries an operator credential, and this needs saying.** It is the only authenticated surface in a product whose first locked non-goal is "no identity anywhere in the product." The non-goal bounds the product surface, not the operator's tooling. **The safe-looking misreading produces a token-in-an-env-var script with no audit trail, under exactly the time pressure the preconditions describe.**
-- **Delete means delete the object and tombstone the row.** The preconditions require the object to stop serving *and* upload IP plus timestamp to survive for law enforcement. **Deleting both destroys the record the abuse process depends on, and it is the obvious implementation.** The tombstone is also what makes any `410` possible.
-- **Hash before delete.** A delete that does not first capture the hash permanently loses the ability to blocklist that payload, and it is by then the one you most want blocklisted. **Decide whether delete automatically blocklists or whether it is a second call; a second call gets forgotten at 3am.**
-- **Delete idempotency.** A `404` on a second delete makes "already handled" indistinguishable from "wrong ID" under a project-level suspension clock.
-- **Bulk delete by publishing IP and time window.** Real notices are about campaigns. Without it the operator hand-loops an endpoint never designed for it, and the per-IP limiter may throttle their own tooling.
-- **The abuse form strips the fragment, client-side and server-side.** A reporter will paste the entire URL. Storing it puts the key in the operator's hands and converts "we structurally cannot read it" into "we chose not to," undermining the plausible-deniability posture the preconditions list as lawyer-bound. Pasting into the *address bar* is harmless; the exposure is the textarea. The published policy asks for the relic ID only. **The email alias cannot be defended this way and is a stated residual.**
-- **The form's required fields**, including the legal-versus-abuse distinction that decides a status in section 1, and whether it works without JavaScript.
-- **The published SLA in hours is an external commitment**, a value `shape` sets. Say what it must account for.
-- **State the coverage limit plainly:** the SLA measures responsiveness on reports **received**, never coverage, because the operator cannot inspect content and there is no denominator. A month of zero reports is either a clean service or a dead intake, and from the inside they are identical.
+## 5. The disclosure obligation
 
-## 5. The published disclosure statement
-
-**The frame conditions its telemetry trade on this document existing and being readable before publishing:** "Publishers must be able to see all of it in a published privacy statement before they publish." No other unit specifies it. **You own it.** Specify its required contents and that it is reachable before a first publish and from every relic page:
-
-1. **The telemetry trade**: coarse renderer class, publishing client name, IP-correlated open activity, and what that moves the operator from and to.
-2. **The transcript disclosure.** The publish tool must return the full URL including the fragment, so **the key enters the model's context and the session transcript on every publish.** Zero-knowledge holds against the Relic operator and does not hold against the model provider or transcript store. Structurally unfixable, because relaying the link is the product.
-3. **The served-JavaScript caveat** the frame already locks: the decrypting code is served by the party the claim is made against, so it is a statement about operator intent rather than a recipient-verifiable property.
-4. **The correct form of the fragment claim.** "The key never reaches a server" is wrong unqualified. The honest form is **"your browser never sends the key to Relic's servers."**
-5. **Retention**: what is kept, per sink, for how long, and that deleted does not mean erased.
-
-## 6. The key reaching a third party without Relic doing anything wrong
-
-`spec-viewer` owns redirects **Relic itself issues**. **You own the cases where the key leaves via someone else**, which the fragment guarantee does not cover, because it is a statement about what a browser puts in a request, not about what a human pastes.
-
-- **Link shorteners.** Pasting the full URL into a shortener's form transmits the key in a request body and stores it on that service. Nothing technical prevents it. Note the shortened link often still works, because the click-time redirect inherits the fragment, the same mechanism working in the user's favor.
-- **Enterprise link rewriters.** Safe Links wraps URLs with the original as a query parameter; Proofpoint URL Defense encodes the original into the wrapper's path. **Neither documents what it does with a fragment.** Three outcomes are structurally possible: the `#` is percent-encoded into the wrapper and the key is transmitted to and logged by that vendor; it is left unencoded and stays on the wrapper, surviving to the relic via redirect inheritance; or it is dropped and the relic is un-openable in a way that looks exactly like a wrong key.
-- **Mandate a pre-launch empirical test.** Publish a real relic, mail it through a Defender for Office 365 tenant, record what arrives. One message, and it settles an outcome no documentation states. **The disclosure statement's wording must be correct under all three outcomes until that test runs.**
-- State that the Proofpoint fragment question belongs on the same unresolved list as the Proofpoint host-to-parent blocklist question already open in `docs/preconditions.md` section 5.
+State plainly that **the tool result necessarily carries the fragment into the model's context and the session transcript.** Zero-knowledge holds against the Relic operator and does not hold against the model provider or transcript store. Unfixable inside this architecture, because relaying the link is the product. Reference that `docs/spec/service.md` section 5 owns the published statement carrying it, and that this bounds the honest claim.
 
 # Route to `shape`
 
-Name each with what `shape` must choose: the exact status **values** (the taxonomy's shape and which cases are distinguishable are yours); the per-object cap value with the scanner arithmetic stated; the TTL ceiling and which lifecycle regime it lands in; the signed-URL validity window; **the retention window relative to the TTL, set together with it, because a retention window shorter than the TTL silently stops the metric's publishing-IP filter firing on older relics**; the published SLA in hours; whether a refused or repeated mint counts as an open.
+Name each with what `shape` must choose: the grant shape; whether PoW is in the flow and at what difficulty; the size cap value and its referent; the retry cap; whether object metadata is set at upload time at all. **Note that `service.md` corrected an earlier false claim here: the app server can set and patch GCS custom metadata through the API, and can pin client-supplied metadata by signing headers into the grant. Do not restate the impossibility version.**
 
 # Style
 
-Direct, dry, confident, **contractions used naturally**, brevity, authority through specificity. No corporate-speak, no hedging, no stock AI phrasing. **Never an em-dash or en-dash.** Keep the flat form where a human would say "is not" for emphasis on a load-bearing rule. No emoji.
+Direct, dry, confident, **contractions used naturally**, brevity, authority through specificity. No corporate-speak, no hedging, no stock AI phrasing. **Never an em-dash or en-dash.** Keep the flat form where a human would say "is not" for emphasis on a load-bearing rule. No emoji. The "X, not Y" appositive was flagged at one per 195 words as a tic on a sibling; use it where it carries a decision, not as a default rhythm.
 
 # Completion criteria
 
-1. `test -f docs/spec/service.md` exits 0.
-2. `test "$(wc -w < docs/spec/service.md)" -ge 2800` exits 0. **Calibration:** this unit carries roughly 41 mandated items, including the twelve-case status enumeration in section 1, at an observed 60 to 85 words per item, so a compliant document lands between about 2460 and 3485 words. 2800 sits inside that band. **The floor is a stub guard, never a target**, and completeness here is carried by criteria 5 through 15, not by word count. If you are near the floor, check for skipped items before assuming you are short, and never pad to clear it.
+1. `test -f docs/spec/publish.md` exits 0.
+2. `test "$(wc -w < docs/spec/publish.md)" -ge 2200` exits 0. **Calibration:** roughly 38 mandated items at an observed 60 to 85 words per item, so a compliant document lands between about 2280 and 3230 words. 2200 sits just below that band deliberately. **The floor is a stub guard with no ceiling.** The three siblings landed at 5365, 6551, and 7883 because answering findings adds rules. Never pad, and never cut a decided rule to hit a number.
 3. Manifest has at least five sources, one per line, trailing newline.
 4. Every source resolves. **Do not invent citations.** Orphan check both directions.
-5. Every item in "What this document must decide" is resolved into a stated rule or routed to `shape` **with what `shape` must choose named. Routing is legitimate only for items named in this unit's own "Route to `shape`" section; routing anything else fails this criterion.**
-6. The status taxonomy is complete for all twelve app-server-originated cases, single, and states the cost accepted on cap exhaustion.
-7. The expired-versus-never-existed decision explicitly references the ID entropy decision in `docs/spec/format.md` and is consistent with it.
-8. The document states that the mint is never a side effect of serving `/{id}`, and defines the mint response's field set.
-9. The document states that delete tombstones the row rather than removing it, and that the hash is captured before deletion.
-10. The document states that the abuse form strips the fragment client-side and server-side, and that the email alias is a residual.
-11. The document states that the 120-second window is anchored to publish, is not a scanner filter, and that changing the anchor is drift routing to `frame`.
-12. Section 5 specifies the published disclosure statement's required contents, all five items, and states it is reachable before a first publish.
-13. Section 6 covers link shorteners and enterprise link rewriters, mandates the pre-launch Defender test, and states the three possible fragment outcomes.
-14. **The error taxonomy names every field a publishing client must extract**, so `spec-publish-contract` can map onto it without matching prose, and states the code shape well enough for that sibling to define matching codes for the legs the app server is not in.
-15. **The takedown-disclosure question is decided in this document, not routed.**
-
-# Files touched
-
-- `docs/spec/service.md`, `docs/spec/service.sources.txt` (create)
-
-# Out of scope
-
-- The URL, ID, and container format. Locked by `docs/spec/format.md`. **Its ID entropy decision is an input to section 1; do not re-decide it.**
-- The MCP tool and publish contract. Sibling `spec-publish-contract`, which depends on this unit. **Failures on legs the app server is not in are its codes, not your statuses.**
-- What the viewer *shows* for each state, rendering, routing, the sandbox. Sibling `spec-viewer`. You fix the states, their statuses, and the mint response; it fixes the screens. **Redirects Relic itself issues are its item, not yours.**
-- Any numeric value, the stack, and all implementation.
-- Abuse-report and disclosure-page UI design. State required content, not the interface.
-
-### `spec-viewer` — Specify viewer routing, rendering, the sandbox boundary, and every recipient screen
-
-- **inputs:** `docs/spec/format.md`
-
-
-- **outputs:** `docs/spec/viewer.md`, `docs/spec/viewer.sources.txt`
-
-
-- **quality gates:** artifact-exists — `test -f docs/spec/viewer.md` · substance-floor — `test "$(wc -w < docs/spec/viewer.md)" -ge 2600` · sources-manifest-populated — `bash -c 'set -eu; n=$(grep -c . docs/spec/viewer.sources.txt); test "$n" -ge 6'` · every-cited-url-resolves — `bash -c 'set -eu; while IFS= read -r u || [ -n "$u" ]; do [ -n "$u" ] || continue; curl -sfL --max-time 25 --retry 2 -A "Mozilla/5.0 (relic-link-check)" -o /dev/null "$u"; done < docs/spec/viewer.sources.txt'`
-
-
-# Goal
-
-Write `docs/spec/viewer.md`: how the viewer routes, renders, isolates, and what every recipient sees in every state. Plus `docs/spec/viewer.sources.txt`, one URL per line, trailing newline.
-
-**This unit owns all four key-disclosure paths found in discovery.** Each is a case where every component behaves correctly and an unspecified boundary lets the decryption key walk out. Write rules, not descriptions.
-
-**Read first:** `darkrun_knowledge_list` in full, especially `renderer-class-is-a-security-boundary-not-a-label`, `rendering-untrusted-content-origin-isolation`, `redirects-inherit-the-fragment-and-leak-the-key`, `sandbox-csp-decision-and-what-the-wedge-actually-is`, and `browser-crypto-and-large-file-constraints`.
-
-Then read, from the repo root (**do not `cd` into a subdirectory**, `git ls-tree` scopes to the prefix):
-
-- `docs/frame.md` and `docs/preconditions.md`, the **locked** upstream artifacts. Both are on this station's branch, so they are in your worktree. **Do not run `git show darkrun/relic/frame:...`**; that ref no longer exists locally and exits 128.
-- `docs/spec/format.md`, your declared sibling input, which settles the container and fragment. **Do not redefine either.**
-
-**If `docs/spec/format.md` is not in your worktree, stop and fetch it before writing anything that depends on it.** Worktree fork timing relative to a sibling's land is not guaranteed, and in the previous station a dependent unit's declared input was genuinely absent. Fall back in order:
-
-```
-git show darkrun/relic/specify:docs/spec/format.md
-git show darkrun/relic/units/specify/spec-relic-format:docs/spec/format.md
-```
-
-**Never proceed by redefining what a sibling settles.** Report which path you used.
-
-# Already decided. Do not relitigate.
-
-- **Untrusted content renders on a separate registrable origin**, never the one holding the fragment.
-- **Never both `allow-scripts` and `allow-same-origin`.**
-- **The viewing origin carries no third-party scripts, no analytics, no error reporting.** Two traps: **a bundled first-party-served SDK satisfies `script-src 'self'` and presents no external host to scan for**, so neither a CSP fetch nor a third-party-host scan catches it (Sentry's browser SDK is exactly that shape); and **the run's telemetry decision is not license to add a viewer-side script**, since all three telemetry items are collected server-side at publish and at mint.
-- **The sandbox CSP blocks outbound requests**, matching Artifacts. Decided at this station.
-- **First release renders exactly `{markdown, code, html, image}`.** Everything else is download-only.
-
-# What this document must decide
-
-## 1. Routing, and the four disclosure paths
-
-- **The class never routes.** The renderer class is a *publisher assertion*. If the viewer routes on it, a publisher declares `image` on an HTML payload and wins inline rendering on the origin holding the fragment. That is the fragment-stealing attack in one step. **Publisher-attestation inside the ciphertext does not fix it**: attestation defeats operator forgery and does nothing about a publisher lying. State the reasoning, because an earlier version of the recorded knowledge got this wrong and someone will re-derive it.
-- **Routing comes from magic-byte sniffing after decryption, as a hint that can only reach a less privileged path.** Privilege order, least to most: download-only, sandbox origin, viewing origin.
-- **The disagreement rule.** When declared and sniffed types disagree, route to the **least privileged path either type would allow**, and tell the recipient the contents do not match the name. One sentence, and it closes the polyglot class for the first release.
-- **Sniffing cannot decide for half the wedge, and this is the hardest question in the unit.** Markdown, plain text, source code, CSV, and JSON have no magic numbers, so the sniff returns nothing for `{markdown, code}`. **State the rule that routes them given the class cannot be trusted and the sniff is silent.** Criterion 13 forbids deferring this to `shape`.
-- **SVG is download-only in the first release.** No magic number, sniffs as XML or text, inert under `Content-Disposition: attachment` and inside `<img src>` while executing fully inline, as `<object>`, or on direct navigation. A spec saying "still images render inline" without carving out SVG ships the CVE.
-- **Blob URLs inherit the creating origin.** Never navigate to or open a blob URL built from untrusted plaintext on the viewing origin. Download blobs are typed `application/octet-stream` regardless of the container's declaration, triggered via `a[download]`. Images render only via `<img src=blob:>`.
-- **Every redirect Relic issues carries an explicit, possibly empty, fragment in `Location`.** RFC 9110 §10.2.2 makes fragment inheritance mandatory browser behavior and §17.11 names it as cross-site disclosure. **One fragment-less redirect to the sandbox origin hands it the key.** Enumerate where it bites: HTTP to HTTPS, apex to www, service origin to sandbox origin, legacy paths, trailing-slash normalization, and any CDN or load-balancer redirect the application does not author. That last is the one nobody audits. **Redirects and rewrites performed by third parties are `spec-service-surface`'s item, not yours.**
-- **`Referrer-Policy: no-referrer` on the viewing origin**, and no code path writes the fragment to the console, to storage, or into an error object.
-
-## 2. The sandbox origin's shape
-
-**Nobody has decided whether the sandbox is one fixed origin or a per-relic subdomain, and several rules rest on the answer.** `rendering-untrusted-content-origin-isolation` prescribes a unique cross-site domain per piece of content under a Public-Suffix-List-registered parent, isolating relics from each other rather than only from the app. The preconditions fix two registrable domains, compatible with either answer.
-
-Decide, and state the consequences:
-
-- **A single fixed sandbox origin.** Simplest. Relic A's rendered content shares an origin with relic B's, so one malicious relic can reach another's rendered document if both are open. The parent's `targetOrigin` is a constant.
-- **A per-relic subdomain.** Isolates relics from each other. The parent computes `targetOrigin` per render; the shim's expected parent origin remains a hardcodable constant. **Requires Public Suffix List registration of the sandbox parent.**
-- Repeat the preconditions' honest limit: treat PSL as origin isolation with a possible listing-scope benefit, never as a guaranteed firewall.
-
-## 3. Rendering each class
-
-- **Markdown is a partial HTML class**, because Markdown permits raw inline HTML, so rendering it on the viewing origin puts sanitizer output next to the fragment. DOMPurify has been bypassed at **default configuration** as recently as CVE-2026-41238 (3.0.1 through 3.3.3). **Decide here, do not route:** strip raw HTML entirely in the first release, or render Markdown on the sandbox origin like HTML. **The second choice changes the sandbox origin's role from "HTML only" to "all rich text," which changes the `postMessage` surface and how much of the viewer lives on which domain.** Pin DOMPurify at or above 3.4.0 regardless, and state that sanitization is the second layer, never the only one.
-- **Markdown link and image targets are attacker-controlled**: `javascript:`, `data:`, remote images. A remote image is both an exfiltration channel and a beacon revealing a specific relic was opened. Under the locked strict CSP they fail to load, so **the viewer explains why rather than showing silent broken-image icons that read as a corrupt file.**
-- **Code and plain text, two traps.** Syntax highlighters take a language hint usually derived from the attacker-controlled extension, and some build HTML by string concatenation: build output as DOM text nodes or sanitize it like Markdown, and fall back to plain text on an unrecognized hint. Separately, a code file can be many megabytes on one line, which hangs the highlighter and freezes the tab: cap the highlighted region and render the remainder as plain text behind a stated cutoff.
-- **Where security headers actually matter.** The object fetch goes client-to-GCS on a signed URL, so the app server cannot set headers on it, and what GCS serves is ciphertext, unsniffable into anything executable. **The controls that matter are the viewing origin's own responses and the blob URLs the viewer creates.**
-
-## 4. The sandbox boundary
-
-- **Direction is forced, not chosen.** The main origin fetches, decrypts, and posts plaintext to a static shim that never touches ciphertext or the network. The alternative would require the key to cross, which must never happen. State it as forced, because the other shape is what someone reaches for to avoid posting large payloads across a boundary.
-- **What crosses.** Parent to shim: decrypted bytes, the routing type, a render nonce. Never the key, never the fragment, arguably never the relic ID. Shim to parent: a `ready` handshake, a rendered-or-failed ack, optionally a requested height. **A requested-height channel is a message type an attacker also gets to send**, so say what the parent does with untrusted numbers.
-- **The handshake.** The shim posts a data-free `ready` to `parent` with `targetOrigin: '*'`; the parent replies with the payload and an **exact** `targetOrigin`; the shim pins `event.origin` from that reply. **The `'*'` is safe only because the ready message carries nothing. The payload message must never use `'*'`**, since that hands the whole plaintext to whatever occupies the frame.
-- **Transfer, do not copy.** Post plaintext as a transferable `ArrayBuffer`; structured-cloning doubles memory on exactly the large payloads the wedge exists to carry.
-- **Mandate the `Content-Security-Policy: sandbox` header on the shim's own response**, not merely the iframe attribute, because the header cannot be stripped by the framed document.
-- **The main origin materializes the download Blob**, never the sandbox.
-- **The taskbar and content are on different origins by construction**, so the content iframe is never full-viewport and a relic authored to fill the screen renders letterboxed. Product-visible; state it before someone finds it in review.
-- **The recipient-visible consequence.** An HTML relic cannot navigate the top-level window, open popups, or load external resources. **Present the sandbox as deliberate**, or the recipient concludes the relic is corrupt and the publisher concludes the product is broken.
-
-## 5. Platform ceilings and degradation
-
-- **Secure context first.** `crypto.subtle` is `undefined` outside a secure context, so check `window.isSecureContext` and `crypto.subtle` before anything else and show a specific named error. Not only a dev concern: a recipient behind a TLS-terminating proxy serving plain HTTP hits it in production.
-- **Refuse before allocating.** A single `subtle.decrypt` on a large buffer freezes the tab, with practical failure reported at 500 to 800 MB. **Plaintext size is computable from encrypted size without decrypting**, so compare against a platform ceiling before touching memory. The tab must never die.
-- **Three tiers, and say which platform gets which**: streaming decrypt to disk via ServiceWorker; in-memory decrypt then Blob download, capped at a memory ceiling; refuse with a named reason and a concrete alternative. **iOS Safari and mobile lack the service-worker fetch support the streaming path needs**, which capped hat.sh at 1 GB, and Safari lacks `for await` on `ReadableStream`, so the Safari path is a distinct code path using `getReader()` loops.
-- **Degraded render.** The four renderable classes may render a truncated prefix behind an explicit banner stating it is truncated and why; download-only classes refuse instead.
-- **The hard size cap value determines whether this tiering is required at all.** It is named in this unit's Route-to-`shape` list, so routing it is legitimate.
-
-## 6. Every screen the recipient sees
-
-- **Five states the viewer must handle, of which three are distinguishable and two are not.** Missing or malformed fragment; server refused to mint with a stated reason; decrypt failed. **A wrong key and a corrupted download both throw `OperationError` and are genuinely indistinguishable at the API level**, which is why they collapse into the third screen. Name both plausible causes in the copy, offer a retry because the retry is itself the discriminator, and never blame the recipient.
-- **Separating corruption from a wrong key is possible with a facility that already exists.** GCS records a CRC32C on every object. Rightly rejected as a blocklist hash, it is exactly right as a transport-integrity check. If the mint response carries object length and checksum, transport corruption becomes detectable and a wrong key becomes the clean residual. **State the need and the viewer behavior that follows from it; `spec-service-surface` owns whether those fields exist.** State it as an integrity check, not an authenticity one.
-- **The unfurl card.** The fragment never reaches a server, so no unfurler can describe the content. **A blank card on an unfamiliar domain is the visual shape of a phishing link.** Serve deliberate Open Graph and Twitter Card metadata on `/{id}`, identical for every relic, saying what Relic is without pretending to describe the content. Serving it must not mint. Open Graph tags are not indexing and Slack documents that it ignores `robots.txt`, so there is no conflict with the noindex precondition; say so, or someone later removes the tags in the name of that rule.
-- **Before decryption completes, everything except the content renders**: the branded taskbar, the service name, one line of plain-language explanation, the abuse-report link, and the privacy-statement link (`spec-service-surface` owns that statement's contents).
-- **The honesty constraint applies hardest here.** "Nobody can read this but you" is an overclaim on the exact surface where a recipient is deciding whether to trust the domain.
-- **Three named progress phases, never one indeterminate spinner**: fetching (network-bound, retryable, total known, so show bytes and total), decrypting (CPU-bound, not retryable, framing gives record boundaries so show real progress), rendering.
-- **No key-entry field** on the viewing origin unless `shape` deliberately wants one, because it is a purpose-built phishing surface aimed at the system's only secret.
-- **Every error screen is a relic page**, carrying the abuse-report and policy links.
-- **Repeat opens.** Reuse a still-valid signed URL rather than minting per page load, and the mint response carries its own expiry so the viewer can tell whether reuse is valid. A PWA reopened from the home screen, a restored tab, a pull-to-refresh, and a back-forward navigation are each otherwise another mint and another counted open.
-- **If `docs/spec/format.md` decided the viewer strips the fragment via `history.replaceState`, carry the consequence**: the recipient can no longer re-share from the address bar and a reload loses the key, so the viewer owes an explicit copy-link affordance backed by the in-memory key. Honor whichever way `format.md` decided.
-
-# Route to `shape`
-
-Name each with what `shape` must choose: platform memory ceilings and whether they are hardcoded or feature-detected (Apple publishes no per-tab ceiling, hat.sh's 1 GB is an empirical project decision, and the 500 to 800 MB band is a forum report, so say what the numbers rest on); **the hard size cap value**, which determines whether the section 5 tiering is required at all; the truncated-prefix size and the highlighted-region cap, both user-visible cutoffs the viewer states in its own copy; **PSL registration for the sandbox parent, with its lead time named**.
-
-# Style
-
-Direct, dry, confident, **contractions used naturally**, brevity, authority through specificity. No corporate-speak, no hedging, no stock AI phrasing. **Never an em-dash or en-dash.** Keep the flat form where a human would say "is not" for emphasis on a load-bearing rule. No emoji.
-
-# Completion criteria
-
-1. `test -f docs/spec/viewer.md` exits 0.
-2. `test "$(wc -w < docs/spec/viewer.md)" -ge 2600` exits 0. **Calibration:** this unit carries roughly 43 mandated items at an observed 60 to 85 words per item, so a compliant document lands between about 2580 and 3655 words. 2600 sits at that band's bottom. **The floor is a stub guard, never a target**, and completeness here is carried by criteria 5 through 16, not by word count. If you are near the floor, check for skipped items before assuming you are short, and never pad to clear it.
-3. Manifest has at least six sources, one per line, trailing newline.
-4. Every source resolves. **Do not invent citations.** Orphan check both directions.
 5. Every item in "What this document must decide" is resolved into a stated rule or routed to `shape`. **Routing is legitimate only for items named in this unit's own "Route to `shape`" section; routing anything else fails this criterion.**
-6. The document states that the renderer class never routes, and why publisher-attestation does not make it safe.
-7. The document states the least-privileged-path disagreement rule.
-8. The document carves SVG out of inline image rendering explicitly.
-9. The document states the blob-URL origin-inheritance rule and the `application/octet-stream` download rule.
-10. The document states the fragment-in-`Location` rule for every redirect and enumerates where it bites.
-11. The document states that `postMessage` carrying plaintext never uses `'*'`.
-12. The document specifies three named progress phases and forbids a single indeterminate spinner.
-13. **The document states a routing rule for `{markdown, code}`, which have no magic bytes. This may not be routed to `shape`.**
-14. **The document decides whether the sandbox is one fixed origin or a per-relic subdomain, states the isolation consequence, and routes PSL registration to `shape` with its lead time named.**
-15. **The document is consistent with `docs/spec/format.md` on whether the fragment is stripped from the address bar, and carries the copy-link consequence if it is.**
-16. **The document decides the Markdown rendering origin (viewing origin with raw HTML stripped, or sandbox origin). This may not be routed to `shape`.**
+6. The document names the MCP protocol revision it is written against.
+7. The document states the progress-notification requirement and the orphaned-relic failure it prevents.
+8. The document states the `ifGenerationMatch: 0` rule and ties it to the locked republish non-goal.
+9. The document states the nonce-reuse consequence of resuming a record sequence incorrectly.
+10. The document contains the transcript disclosure obligation from section 5.
+11. **Every app-server-originated failure maps onto a status and named fields from `docs/spec/service.md`, inventing no status**, and the document states the client extracts codes and fields rather than matching prose.
+12. **Every failure with no app-server status is enumerated in Group B with its own stable machine-readable code**, and the document names the grant-time and upload-time size refusals separately.
+13. **The document states which failures set `isError: true` and which are protocol-level errors, consistently with its `outputSchema` decision.**
+14. **Every string the document presents inside quotation marks as coming from a source has been verified verbatim against that source's raw text, and the beat reports the audit.** Extract each quoted string, pull the source as raw text, and substring-match. This criterion exists because five citation defects shipped across the three sibling units and **not one of them would have failed criterion 4**, since every URL resolved. Report the audit as a list: each quoted string, its source, and confirmed or corrected.
+15. **The document states the code a publishing client keys redraw-and-retry on**, sourced from `service.md` 1.6 rather than invented, since `format.md` 1.4 obliges the client to draw a new ID and retry on collision.
 
 # Files touched
 
-- `docs/spec/viewer.md`, `docs/spec/viewer.sources.txt` (create)
+- `docs/spec/publish.md`, `docs/spec/publish.sources.txt` (create)
 
 # Out of scope
 
 - The URL, ID, and container format. Locked by `docs/spec/format.md`.
-- The MCP tool and publish contract. Sibling `spec-publish-contract`.
-- Status codes, expiry semantics, delete-by-ID, abuse intake, mint placement, counting rules, the published disclosure statement, **the mint response's own field set**, and **third-party link shorteners and enterprise link rewriters**. Sibling `spec-service-surface`. You specify what the viewer *shows* for each state and the redirects Relic itself issues; where you need a field on the mint response, state the need and let that sibling define it.
+- **The status taxonomy for app-server-originated failures**, locked by `docs/spec/service.md`. You map onto it and never invent an app-server status or field name. **Group B codes are yours**, because no app server participates in those paths.
+- Viewer behavior, rendering, routing, the sandbox boundary. Sibling `spec-viewer`.
 - Any numeric value, the stack, and all implementation.
-- Visual design. Specify what must be on screen and what it must say, never how it looks.
 
 
 
@@ -343,9 +218,7 @@ Direct, dry, confident, **contractions used naturally**, brevity, authority thro
 
 Every wave Unit is isolated on its own branch + worktree, forked off the station branch. Run that Unit's beat **inside its worktree** so its diff never tangles with another Unit's in-flight work; the manager lands each Unit back onto the station branch when it locks. Do **not** commit a Unit's work to the station branch yourself.
 
-- `spec-service-surface` → `/Users/jwaldrip/dev/src/github.com/thebushidocollective/artifacts/.darkrun/worktrees/relic/units/specify/spec-service-surface` (branch `darkrun/relic/units/specify/spec-service-surface`)
-
-- `spec-viewer` → `/Users/jwaldrip/dev/src/github.com/thebushidocollective/artifacts/.darkrun/worktrees/relic/units/specify/spec-viewer` (branch `darkrun/relic/units/specify/spec-viewer`)
+- `spec-publish-contract` → `/Users/jwaldrip/dev/src/github.com/thebushidocollective/artifacts/.darkrun/worktrees/relic/units/specify/spec-publish-contract` (branch `darkrun/relic/units/specify/spec-publish-contract`)
 
 
 

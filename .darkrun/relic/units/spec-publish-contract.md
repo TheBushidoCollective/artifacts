@@ -14,6 +14,7 @@ inputs:
 outputs:
 - docs/spec/publish.md
 - docs/spec/publish.sources.txt
+branch: darkrun/relic/units/specify/spec-publish-contract
 reviews:
   completeness:
     at: 2026-07-30T05:31:07.501358+00:00

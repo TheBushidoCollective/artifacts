@@ -12,6 +12,9 @@ inputs:
 outputs:
 - docs/spec/viewer.md
 - docs/spec/viewer.sources.txt
+reviews:
+  testability:
+    at: 2026-07-30T05:14:48.190501+00:00
 quality_gates:
 - name: artifact-exists
   command: test -f docs/spec/viewer.md

@@ -1,15 +1,55 @@
 ---
 name: Write frame.md — problem, user, value, success metric, non-goals
 unit_type: doc
-status: pending
+status: in_progress
 depends_on: []
-worker: ''
+worker: challenger
 model: opus
 station: frame
 outputs:
 - docs/frame.md
 - docs/frame.sources.txt
 branch: darkrun/relic/units/frame/frame-artifact
+started_at: 2026-07-30T03:00:30.528869+00:00
+iterations:
+- worker: framer
+  started_at: 2026-07-30T03:00:30.528869+00:00
+  completed_at: 2026-07-30T03:00:30.528869+00:00
+  result: advance
+  note: |-
+    Framer beat complete. `docs/frame.md` and `docs/frame.sources.txt` written and committed at `5e19438` on `darkrun/relic/units/frame/frame-artifact`. Worktree clean.
+
+    **All four gates run for real and recorded with the nonce, all exit 0:** `artifact-exists`; `substance-floor` at 2542 words against a floor of 1300; `sources-manifest-populated` at 13 non-empty lines, all `^https://`, trailing newline confirmed (last byte 0x0a); `every-cited-url-resolves` with all 13 fetched. The framer pre-screened 22 candidate URLs with the exact gate command before writing and cited only those returning 0. Both URL-shape templates were deliberately excluded. Gates were re-run green after two post-commit edits, with `substance-floor` re-recorded against the final count.
+
+    **The discriminator it chose:** a 120-second post-publish exclusion window. Opens whose signed-URL mint timestamp falls within 120 seconds of the publish timestamp are excluded from the recipient count. Pure server-side time delta, nothing from the viewing origin, so it satisfies the server-side-computable requirement in criterion 9.
+
+    **The blind spot it stated:** the window misses a publisher who checks twice, and misses the publisher who sends the link then opens it on their phone minutes later, which is exactly the mobile-PWA behavior the product encourages. It also cuts the wrong way at the other end, eating a genuinely fast first recipient open when the publisher never self-checks. Tuning the number trades one direction for the other rather than removing either. The document states outright that the first clause cannot be made fully trustworthy under this architecture.
+
+    ---
+
+    # CHALLENGER: attack these five first, ranked by how likely they are to stick
+
+    The framer named its own weak points rather than defending its work. Treat that as a map, not as absolution. Verify each rather than accepting its self-assessment, and hunt for what it did not name.
+
+    **1. Length. The strongest available criticism.** 2542 words against a floor calibrated to roughly 1,400 written tightly. The framer wrote a first draft at 2642, ran a tightening pass, and recovered only 132 words, which indicates a shallow pass rather than irreducible content. It estimates 300 to 500 words of genuine slack, concentrated in "What Relic is," "The problem," and the second half of the confound subsection. It said it would not fight hard for the current count. Cut hard. The floor is a completeness signal, not a target, and the spec explicitly says do not pad.
+
+    **2. Two invented numbers with nothing behind them.** The 120-second window and a "roughly 100 relics per week" trust threshold. The knowledge base supplies neither figure; it says "a short post-publish exclusion window" and "below what volume." The spec demanded concrete, so the framer picked. Neither is evidence-backed. It rates the 100/week threshold as the softer of the two. Decide whether each should be stated as an explicit provisional value a later station can move, rather than reading as a derived number.
+
+    **3. A third user segment on thin evidence.** It added consultant-to-client delivery, resting on a single knowledge-topic sentence about the Artifacts header naming the publisher and linking their gallery. The spec permits at most one further segment "only if the recorded evidence supports it." The framer hedged it as "a bonus rather than a bet" and kept anything load-bearing off it, and says it would not defend it hard. Judge whether one sentence clears the evidence bar. If it does not, cut it, which also helps point 1.
+
+    **4. Possible scope bleed into `frame-preconditions`.** Supporting condition 3 is an abuse-report response-time condition, and abuse operations belong to the sibling unit. The framer's reasoning: condition 1 (domain unflagged, failing means shut it down) is mandated by the spec and equally operational, so the list tolerates operational conditions. That is defensible but the boundary is fuzzy. Conditions 2 and 4 (client distribution, egress spend) are clean.
+
+    **5. One error class that already got past it once. Look for more of the same.** The first draft stated the trust condition as "100 relics per week from more than one publishing account." Accounts are an explicit non-goal, so that named a thing the product does not have. It was rewritten in server-observable terms (relic volume plus distinct publishing IPs) and the fix is noted in the document. **Sweep the entire metric section for any other quantity the server cannot actually observe.** That class of error demonstrably slipped through once, and the whole point of this station's metric section is that unobservable quantities are the failure mode.
+
+    # Assumptions it made that the spec did not cover, worth a second opinion
+
+    - Document order: "What Relic is" and "Locked constraints" as a preamble before the seven required sections. The spec said record the three decisions as constraints but not where.
+    - Read "at most four supporting conditions" as exactly four, making condition 1 the mandated domain-reputation one and calling out its shut-it-down consequence as different in kind from the other three.
+    - Interpreted "no expiry configuration" as a non-goal about user-facing configurability, then stated TTL is mandatory and fixed as an operator-set abuse control. That leans on `abuse-liability-of-hosting-uninspectable-content`. Confirm it will not conflict with what `frame-preconditions` lands on, since that unit owns the v1 control set.
+
+    # Non-negotiable while you work
+
+    Re-run all four gates after any edit and re-record them with the nonce; the word count in particular will move if you cut. Verify criteria 5 through 9 by reading, since no gate covers them. No em-dashes or en-dashes anywhere. Commit in the unit worktree, never to the station branch.
 reviews:
   feasibility:
     at: 2026-07-30T02:47:23.386041+00:00

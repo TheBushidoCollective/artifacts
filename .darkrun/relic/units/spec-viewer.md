@@ -12,6 +12,7 @@ inputs:
 outputs:
 - docs/spec/viewer.md
 - docs/spec/viewer.sources.txt
+branch: darkrun/relic/units/specify/spec-viewer
 reviews:
   completeness:
     at: 2026-07-30T05:31:07.501358+00:00

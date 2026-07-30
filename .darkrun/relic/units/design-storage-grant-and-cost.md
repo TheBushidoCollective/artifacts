@@ -21,6 +21,8 @@ reviews:
     at: 2026-07-30T11:40:36.253906+00:00
   reversibility:
     at: 2026-07-30T11:39:37.092582+00:00
+  simplicity:
+    at: 2026-07-30T11:41:12.361511+00:00
 quality_gates:
 - name: artifact-exists
   command: test -f docs/design/storage.md

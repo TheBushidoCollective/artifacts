@@ -59,17 +59,33 @@ Include the honesty constraint: the JavaScript performing decryption is served b
 
 ## The success metric, and the telemetry that makes it measurable
 
-**This section must state both the metric and how it is computed. A metric with no path to a number is not a metric.**
+**This section must state the metric, how it is computed, and where the computation is untrustworthy. A metric with no path to a number is not a metric. A number whose known failure direction is undocumented is worse.**
 
 The primary metric: **a majority of published relics are opened by someone other than the publisher, and a majority of those opened relics are of a type Relic renders rather than download-only binaries.** If that second clause fails, Relic is a worse file.kiwi and the value case is false.
 
-Both halves are unmeasurable by default under the locked architecture, and the frame must say how they are made measurable. The server holds only ciphertext, never receives the key, and `archive-browsing-and-mimetype-detection` puts mimetype sniffing after decryption in the browser. The viewing origin carries no analytics, because any same-origin script can read `location.hash`. So state the minimum telemetry, and state its cost:
+Neither half is measurable by default under the locked architecture. The server holds only ciphertext, never receives the key, and `archive-browsing-and-mimetype-detection` puts mimetype sniffing after decryption in the browser. The viewing origin carries no analytics, because any same-origin script can read `location.hash`. State the minimum telemetry that restores measurability:
 
-1. **A coarse renderer class declared at publish time by the local client**, which has the plaintext: one of `markdown`, `code`, `html`, `image`, `media`, `archive`, `binary`. Stored server-side against the relic ID.
-2. **Open counts taken at signed-URL mint time**, excluding opens originating from the publishing IP.
-3. **Publishing client name**, so the question "does this serve the segments Artifacts cannot" is answerable at all.
+1. **A coarse renderer class declared at publish time by the local client**, which holds the plaintext: one of `markdown`, `code`, `html`, `image`, `media`, `archive`, `binary`. Stored server-side against the relic ID.
+2. **Open counts taken at signed-URL mint time.**
+3. **Publishing client name**, so "does this serve the segments Artifacts cannot" is answerable at all.
 
-State the cost honestly and in the document: this leaks a coarse content category, a client name, and IP-correlated open activity to the operator. It is metadata, not content, and the operator still cannot read a single byte of any relic. But it is a real reduction from "the operator knows nothing" to "the operator knows what kind of thing you published and roughly how often it was fetched." Record it as a deliberate trade, made because a wedge nobody can measure is a wedge nobody can defend. Record also that publishers must be able to see this in a published privacy statement.
+The class is stored against the relic ID and every open event names that ID, so joining them gives the class distribution of the *opened* population. The class is immutable for the relic's life, because republish and versioning are non-goals, so one relic has exactly one true class. Note that the taxonomy cuts exactly on the wedge boundary: renderable is `{markdown, code, html, image}`, download-only is `{media, archive, binary}`, so the second clause is computable with no ambiguity.
+
+### The confound the first clause carries, which must be documented rather than hidden
+
+Separating a recipient's open from the publisher's own is **not fully solvable** under the locked non-goals. Accounts would solve it, and accounts are a non-goal, so the residual confound is permanent. The document must say so. State all three of these:
+
+1. **The asymmetry, in both directions.** Excluding opens from the publishing IP fails asymmetrically. Same-NAT is the safe direction: a genuine recipient behind the publisher's NAT is excluded, which undercounts recipient opens and can only make you believe you lost when you won. The dangerous direction is the publisher opening their own relic from cellular, a VPN, a second machine, or elsewhere, which counts as a recipient and inflates the exact clause the metric rests on. This is not a corner case for this product: Relic ships a PWA whose point is mobile viewing, and checking your own link before sending it is the most likely thing a publisher does.
+2. **At least one discriminator for the dominant false positive.** The self-check is overwhelmingly immediate, so a short post-publish exclusion window is the cheap one. Name a mechanism; the choice is yours, but it must be concrete.
+3. **The trust condition.** Below what volume, or during what period, the number is not informative. Early low-volume operation with the collective as publisher is exactly when self-checks dominate the sample, which is exactly when the metric would otherwise read green in the world where Relic has zero recipients.
+
+If the honest conclusion is that the first clause cannot be made fully trustworthy, say that. It is a legitimate outcome and it belongs in the document.
+
+One further limit worth stating: this measures the *type* of what was opened, not whether rendering succeeded. Render success would need a script on the viewing origin, which is forbidden. The metric claims type and the telemetry answers type, so it is self-consistent, but do not let anyone downstream read it as proof the renderer worked.
+
+### The cost of the telemetry
+
+State it honestly in the document: this leaks a coarse content category, a client name, and IP-correlated open activity to the operator. It is metadata, not content, and the operator still cannot read a single byte of any relic. But it is a real reduction from "the operator knows nothing" to "the operator knows what kind of thing you published and roughly how often it was fetched." Record it as a deliberate trade, made because a wedge nobody can measure is a wedge nobody can defend. Publishers must be able to see this in a published privacy statement.
 
 Then list at most four supporting conditions, each checkable. One of them must be that the service domain stays unflagged by Safe Browsing, VirusTotal consensus, and the major mail-gateway blocklists, because that condition failing means shut it down.
 
@@ -103,9 +119,10 @@ Write as Jason Waldrip would: direct, dry, confident, contractions, brevity, aut
 4. Every listed source actually resolves over the network → `bash -c 'set -eu; while IFS= read -r u || [ -n "$u" ]; do [ -n "$u" ] || continue; curl -sfL --max-time 25 --retry 2 -A "Mozilla/5.0 (relic-link-check)" -o /dev/null "$u"; done < docs/frame.sources.txt'` exits 0.
    **Do not invent citations.** Every URL must come from the recorded knowledge topics or be one you verified yourself. A fabricated URL fails this gate, which is the point.
 5. The document contains all seven required sections: problem, user, value, success metric with its telemetry, standing assumption, wedge boundary, non-goals.
-6. The success metric section names exactly one primary metric, states how each half of it is computed, and states the metadata cost of computing it.
+6. The success metric section names exactly one primary metric, states how each half is computed, and states the metadata cost of computing it.
 7. The wedge boundary section names the first-release renderer set and states the range-decryptable framing constraint that `shape` inherits.
 8. The standing assumption section names a falsifying trigger, not a vague risk.
+9. The success metric section documents the publisher-versus-recipient confound with all three parts: the asymmetry named in both directions, at least one concrete discriminator for the immediate self-check, and a stated trust condition below which the number is not informative. It must also state that the confound is permanent under the non-goals rather than implying it was engineered away.
 
 # Files touched
 
@@ -118,6 +135,7 @@ Write as Jason Waldrip would: direct, dry, confident, contractions, brevity, aut
 - Choosing the specific encryption wire format. That is `shape`. This unit states only the reversibility constraint `shape` must respect.
 - Endpoint design, schemas, relic ID format.
 - Visual design direction for the PWA.
-- Designing the telemetry storage or the privacy statement's wording. State what must be collected and what it costs, not how it is stored.
+- Designing the telemetry storage or the privacy statement's wording. State what must be collected, what it costs, and where it is untrustworthy, not how it is stored.
+- Implementing the self-check discriminator. Name the mechanism, do not design it.
 - The operating preconditions and the abuse-operations go/no-go. That is the sibling unit `frame-preconditions`, which depends on this one. Do not write it here.
 - Any code, config, or infrastructure.

@@ -1,19 +1,29 @@
 {
   "factory": "software",
-  "active_station": "frame",
+  "active_station": "specify",
   "mode": "dark",
   "base_branch": "main",
   "stations": {
     "frame": {
       "station": "frame",
-      "status": "in_progress",
+      "status": "completed",
       "phase": "checkpoint",
       "checkpoint": {
-        "kind": "auto"
+        "kind": "auto",
+        "entered_at": "2026-07-30T04:11:15.930415+00:00",
+        "outcome": "advanced"
       },
       "branch": "darkrun/relic/frame",
-      "verifier_nonce": "bf819a71a9fdd6f5237799caf05d16272bca8ceca28c5eb4b906f6846a00002a",
-      "started_at": "2026-07-30T00:06:02.578480+00:00"
+      "started_at": "2026-07-30T00:06:02.578480+00:00",
+      "completed_at": "2026-07-30T04:11:15.930415+00:00"
+    },
+    "specify": {
+      "station": "specify",
+      "status": "pending",
+      "phase": "spec",
+      "checkpoint": {
+        "kind": "auto"
+      }
     }
   },
   "created_with_version": "0.12.1",

@@ -145,6 +145,18 @@ gate_results:
   at: 2026-07-30T08:45:29.223255+00:00
   attempts: 1
   detail: '13 non-empty lines against a floor of 5, one URL per line, trailing newline present. Run by the manager at e6ebc99. Unchanged across the resolve pass: the fb-style re-attribution in F6 moved two quotes onto a page already in the manifest and cited elsewhere, so no source was added or removed. Orphan check clean both directions at 13 and 13.'
+- name: every-cited-url-resolves
+  status: pass
+  at: 2026-07-30T08:45:37.232491+00:00
+  attempts: 1
+  detail: |-
+    All 13 URLs fetched, exit 0, no DEAD lines. Run by the manager at e6ebc99. Orphan check clean both directions.
+
+    **This is the only unit in the station whose contract carried criterion 14, the verbatim quotation audit, and it is the only unit that shipped without a citation defect surviving to lock.** The other three shipped five between them, none of which this gate could detect, because in all five the URL resolved.
+
+    The audit ran three times. The writer checked 47 quoted strings and caught one mid-draft (an RFC 8188 quote closing with a period the source places outside the span). The adversary independently re-verified 44 and found all verbatim, while catching what the audit structurally cannot see: **three claims presented as sourced that carry no quotation marks**, including a false possibility claim about GCS size enforcement and an inverted reading of the MCP spec's protocol-error categories. The tightener re-audited 27 added or moved strings, all verbatim, and **declined to normalize U+2019 apostrophes inside quotation marks**, instead slicing each Stripe quote to an apostrophe-free span and carrying the rest in its own prose.
+
+    Two mis-attributions were also fixed: quotes sourced to `performing-resumable-uploads` that live on `access-control/signed-urls`. The manifest orphan check missed them because the correct page was already in the manifest and cited elsewhere, which is precisely the blind spot recorded in `citation-defects-and-the-three-checks-that-catch-them`.
 ---
 
 # Goal

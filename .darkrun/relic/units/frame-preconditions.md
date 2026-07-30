@@ -124,11 +124,6 @@ quality_gates:
 - name: every-cited-url-resolves
   command: bash -c 'set -eu; while IFS= read -r u || [ -n "$u" ]; do [ -n "$u" ] || continue; curl -sfL --max-time 25 --retry 2 -A "Mozilla/5.0 (relic-link-check)" -o /dev/null "$u"; done < docs/preconditions.sources.txt'
 gate_results:
-- name: every-cited-url-resolves
-  status: pass
-  at: 2026-07-30T03:48:34.626161+00:00
-  attempts: 2
-  detail: 'challenger beat: exit 0; all 22 URLs resolved via curl -sfL. The 3 new ones (soft-delete, data-validation, webmasters/9008080) were pre-screened with the identical command before being cited, and I read each page''s text to confirm it supports the claim. Orphan check clean both directions.'
 - name: artifact-exists
   status: pass
   at: 2026-07-30T03:58:00.710889+00:00
@@ -144,6 +139,11 @@ gate_results:
   at: 2026-07-30T03:58:19.154403+00:00
   attempts: 3
   detail: 'distiller beat (final state): exit 0; 22 non-empty URL lines, floor 5. Trailing newline confirmed via xxd (0a). Verified sorted, unique, no blank lines, and no non-URL text. Source count unchanged this beat: my three edits cite nothing new, they add limit clauses to existing claims.'
+- name: every-cited-url-resolves
+  status: pass
+  at: 2026-07-30T03:58:29.793053+00:00
+  attempts: 3
+  detail: 'distiller beat (final state): exit 0; all 22 URLs resolved via curl -sfL. Orphan check re-run after my edits and clean both directions (22 body / 22 manifest, comm -23 and comm -13 both empty). Beyond resolution, I independently re-read the three sources the challenger added and confirmed each quoted string appears verbatim on the page: soft-delete ("enabled by default on all buckets and has a retention duration of seven days", "Soft-deleted objects cannot be read or modified"), Search Console verification ("lasts as long as Search Console can confirm the presence and validity of your verification token", "expire after a certain grace period", "If all verified owners lose access to a property, all users will lose access"). That same read caught one claim the challenger got wrong, now corrected.'
 ---
 
 # Goal

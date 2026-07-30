@@ -140,6 +140,11 @@ gate_results:
     **Density was measured rather than asserted, because this unit's size was the one open question the adversary was told not to take on trust.** It compared all three siblings with an identical script: publish 65.1 words per rule, service 68.4, format 71.2. The largest document is also the **densest**, sitting at the lean end of the run's own recorded 60-to-85 band. Length was never the defect.
 
     The +2972 is thirteen findings and seven verdict items at roughly 149 words each: three new error codes, four new rules in 4.3, the F1 collision trace written out end to end, the three-candidate grant-shape table, and the F5 branch analysis. Nothing decided was cut to hold a number, consistent with the precedent set three times earlier at this station.
+- name: sources-manifest-populated
+  status: pass
+  at: 2026-07-30T08:45:29.223255+00:00
+  attempts: 1
+  detail: '13 non-empty lines against a floor of 5, one URL per line, trailing newline present. Run by the manager at e6ebc99. Unchanged across the resolve pass: the fb-style re-attribution in F6 moved two quotes onto a page already in the manifest and cited elsewhere, so no source was added or removed. Orphan check clean both directions at 13 and 13.'
 ---
 
 # Goal

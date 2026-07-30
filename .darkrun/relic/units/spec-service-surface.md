@@ -13,6 +13,8 @@ outputs:
 - docs/spec/service.md
 - docs/spec/service.sources.txt
 reviews:
+  completeness:
+    at: 2026-07-30T05:31:07.501358+00:00
   testability:
     at: 2026-07-30T05:14:48.190501+00:00
 quality_gates:

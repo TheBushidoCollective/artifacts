@@ -1,7 +1,7 @@
 ---
 name: Decide the container framing, the key material, and the reference implementation
 unit_type: ''
-status: pending
+status: in_progress
 depends_on: []
 worker: ''
 model: opus
@@ -13,6 +13,50 @@ outputs:
 - docs/design/container.md
 - docs/design/container.sources.txt
 branch: darkrun/relic/units/shape/design-container-and-crypto
+started_at: 2026-07-30T11:15:50.599322+00:00
+iterations:
+- worker: designer
+  started_at: 2026-07-30T11:15:50.599322+00:00
+  completed_at: 2026-07-30T11:15:50.599322+00:00
+  result: advance
+  note: |-
+    `docs/design/container.md` (5,605 words) and `container.sources.txt` (13 URLs) committed at `651920d`. Worktree clean.
+
+    **Gates re-run independently by the manager:** artifact-exists PASS; substance-floor 5605 against 2400; sources 13 against 6; all 13 URLs resolve; zero dashes; `AES-128` present twice. **Also verified: `format.md` 4.4 and 4.6 are genuinely not decided** (every hit is either the explicit disclaimer or a stated need naming storage as owner), and sibling-obligation phrasing returns zero.
+
+    ## Decisions the siblings consume
+
+    IKM **16 octets**, cipher **AES-128 either way**, restating 4.2 out of its category error. ID entropy **125 bits, 25 Crockford characters**. Bucket padding **refused**, minimal only. `rs` **4096**, with the envelope header a fixed block of exactly `rs - 17` octets. Writer is **JavaScript**, one implementation shared by binary and viewer.
+
+    ## It generated evidence rather than asserting it
+
+    **It reproduced RFC 8188 §3.1 end to end from IKM and salt on Node.** Derived CEK, nonce, and the full encrypted body match the RFC's published base64url byte for byte. It also enumerated all 256 final-octet values to confirm the terminal character set is exactly `{A, Q, g, w}`, and round-tripped the size derivation at ten content lengths.
+
+    Two things fell out that a later harness would have tripped on: **the RFC's own stated `Content-Length: 54` is wrong and the body is 53 octets** (errata held for document update since 2018, manager-confirmed at line 385 of the raw RFC), and two 2025 errata claiming both vectors omit the final padding delimiter were rejected in 2026, which its reproduction independently confirms.
+
+    ## It withdrew an argument in its own favour, in writing
+
+    **The 16-byte implementation-cost argument in the brief and in the knowledge topic does not survive, and it says so rather than using it.** Both claimed a 32-byte IKM forces you to drive `lib/ece.js` directly. Reading the source: section 5 drives `lib/ece.js` directly regardless, because the `Keychain` facade passes no `rs` and is pinned to 65536 in all three directions, and `lib/ece.js` imposes no key-length constraint at all. So the 16-octet decision now rests only on the cryptographic argument, that HKDF's output is fixed at 16 octets so the CEK caps at 128 bits and a wider IKM raises the cost of an attack nobody has reason to mount. **The convenient argument was removed so the challenge pass attacks the real one.** Treat the knowledge topic's version of that claim as corrected here.
+
+    ## What the challenge pass should attack, in the beat's own ranking
+
+    1. **`rs = 4096` is the weakest decision.** `format.md` 3.1's "record 0 alone" makes the envelope a full record, so `rs` is a fixed per-relic tax: 4,079 octets at 4096 against 65,519 at the library default. It weighted the small-relic case (a 2 KB relic is 97 percent padding at 65536) over per-record overhead (0.415% against 0.026%) and AEAD call count (25,708 against 1,602 per 100 MB). **The counterargument it could not dismiss:** 64 KB per relic is roughly $4 per 100K relics at five opens each, and 16x the WebCrypto calls is a real cost on exactly the large payloads the wedge exists to carry. **16384 as a middle is a defensible attack.** Its mitigation is that `rs` is per-object and readers are header-driven, so the default moves later at zero cost to existing relics.
+    2. **The deep import.** `wormhole-crypto` 0.3.1 has no `exports` map, so `lib/ece.js` resolves today and breaks if upstream adds one. Version pinned, vendoring named as the remedy. **A reviewer arguing that vendoring 13 KB of MIT code now is correct for a format that can never change has a strong case, and the beat says it would not fight hard.**
+    3. **The fixed `rs - 17` envelope block**, which costs 3,548 octets of zero fill in the worst case at 4096. If someone shows a short record 0 the stock encryptor can emit while satisfying 3.1, the whole `rs` argument gets cheaper.
+    4. **125 bits over 122** was picked on encoding alignment, not security: Crockford zero-extends 122 to 125 anyway, which would make every ID's first character range over only 4 of 32 symbols. The beat calls this aesthetics dressed as arithmetic and would rather it be named than defended.
+    5. Filename and mimetype caps at 255 octets each; the mimetype figure is judgment against a longest real IANA type near 65 characters.
+
+    ## Quotation audit, and a third false-negative mode the checker must handle
+
+    **35 quoted strings, 35 verbatim, 1 corrected.** The correction is instructive: `format.md` 4.2 was quoted as "key length, 128 or 256 bits" where the actual text is **"Key length. 128 or 256 bits."** Caught by a sweep over every double-quoted run rather than by the claim list, which is the argument for the sweep. It also restructured two RFC quotations where it had substituted single for double quotes around `"aes128gcm"` and `"salt"`, before they could read as defects.
+
+    **A false-negative mode not in `citation-defects-and-the-three-checks-that-catch-them`, and the manager confirmed it.** The quotation "random access to specific parts of encrypted data could be confounded by the presence of padding" returns **zero hits under the full documented normalization** and is verbatim. It spans an **RFC page break**, so the raw text interposes a form feed, a `[Page N]` footer, and a running header between two words. Manager reproduction: 0 hits after rejoin-then-collapse, 1 hit after additionally stripping form feeds and running headers.
+
+    **This means the recorded procedure is insufficient as written against the source type this run cites most.** RFC 8188 alone is 899 lines with many page boundaries. A checker must strip form feeds and RFC running headers and footers before matching, or it manufactures a fabrication accusation against any quote crossing a page. Being recorded into the knowledge topic separately.
+
+    ## One cross-document need, stated in sibling form
+
+    Refusing bucket padding discharges `format.md` 3.3's minimal-padding qualifier, which is the stated reason `viewer.md` 5 withholds a pre-decryption byte count. That reason no longer applies at version 1. The document states the fact and the behaviour either way and names `design-product-surface` as owner without telling it what to do. This is a third instance of the class in `cross-document-gaps-no-criterion-catches`.
 quality_gates:
 - name: artifact-exists
   command: test -f docs/design/container.md

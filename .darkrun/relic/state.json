@@ -20,11 +20,12 @@
     "specify": {
       "station": "specify",
       "status": "in_progress",
-      "phase": "review",
+      "phase": "manufacture",
       "checkpoint": {
         "kind": "auto"
       },
       "branch": "darkrun/relic/specify",
+      "verifier_nonce": "518580860040ff121ff6e2dc68aab8099f600f96a271d7cfcf05d405b499a951",
       "started_at": "2026-07-30T04:12:58.155047+00:00"
     }
   },

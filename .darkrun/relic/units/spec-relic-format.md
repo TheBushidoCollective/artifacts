@@ -99,6 +99,46 @@ iterations:
     ## Fact-check ledger
 
     Sixteen of eighteen load-bearing claims verified correct, most verbatim: the RFC 8188 header layout, padding delimiter values, header-outside-AEAD, §4.7 and §4.3 quotes with correct section numbers, the `keyid` SHOULD-be-UTF-8 line, the exact GFM trailing-punctuation set, the Crockford exclusions and alphabet, and the wormhole-crypto API. The base64url arithmetic was independently re-derived over 300k samples: 16 bytes yields final indices exactly {0,16,32,48}, 32 bytes yields multiples of 4 capped at 60, and 24 bytes yields all 64 including 62 and 63, so the multiple-of-three claim is confirmed. Two failed, F1 and F3. One partial: the MCP entropy guidance is quoted loosely and its source section is labeled non-normative, while the document presents it as spec authority.
+- worker: tightener
+  started_at: 2026-07-30T06:23:21.478714+00:00
+  completed_at: 2026-07-30T06:23:21.478714+00:00
+  result: advance
+  note: |-
+    Resolve pass complete. Commit `2838a4d` on the unit branch, worktree clean. All eleven adversary findings addressed.
+
+    **All four gates re-run independently by the manager, not taken from the beat's report:** artifact-exists PASS; substance-floor PASS at 5365 words against 1600; sources-manifest PASS at 12 against 5; every-cited-url-resolves PASS, exit 0. Zero em-dashes or en-dashes. Orphan check clean both directions, re-verified after F1 removed a citation. Spot-checked the specific fixes: the MDN `SubtleCrypto/encrypt` URL is gone from both the manifest and the body; the GCS canonical-requests page is present as the new source 12; the string "mint response" appears zero times, confirming F6 was resolved without it.
+
+    ## F6: the tightener was right and my directive was wrong
+
+    I directed it to put the declared renderer class on the mint response, reasoning that excluding the class from the container left the viewer with no declared type for the disagreement rule to compare against. **I conflated "declared type" with "renderer class."** The container already carries the declared type: 3.1's layer 2 and 3.2's table both place filename and declared mimetype in the encrypted envelope header. The recorded disagreement rule operates on exactly that, and its own worked example is "a file declared `.png` that sniffs as HTML," which is a filename and mimetype assertion rather than a seven-value class. The control was never disarmed.
+
+    The envelope-header copy is also strictly better than what I proposed, on two axes the tightener named: it sits inside the AEAD so it is tamper-evident, where anything arriving alongside the signed URL is operator-mutable; and it is finer-grained, so `.png` against HTML magic bytes is a sharper disagreement than `image` against HTML.
+
+    And my version would have been actively harmful. It puts a publisher-asserted value on the viewing origin, and `renderer-class-is-a-security-boundary-not-a-label` records this run already reaching the wrong conclusion once by reasoning "the class selects, the sniff can only downgrade." A value present in the viewer is a value some later implementer routes on.
+
+    What landed instead: a paragraph in 3.6 stating that excluding the class does not disarm the disagreement rule, naming the envelope header as the declared input, and stating the class must not be sent to the viewer. Section 5 carries it to `spec-viewer`. **`spec-service-surface`'s mint-response field set is untouched**, so no new obligation was imposed on that sibling.
+
+    ## F8, decided for the siblings
+
+    **Hyphens are rejected, never stripped.** Crockford's "hyphens are ignored during decoding" is deliberately not implemented; alias folding is. A hyphen anywhere in the path segment is a 404. Implementing the hyphen rule faithfully would give every ID unbounded valid spellings and break 1.5's length guard, and Relic never emits one so a publisher pays nothing.
+
+    ## Word count went up, and that is the right outcome
+
+    **4644 to 5365, net +721**, which is the wrong direction against F7 and the tightener said so plainly rather than dressing it up. Accepted, because the arithmetic is sound: all four named padding sources were cut and all six duplications handled, roughly -200, but five findings mandated new content worth roughly +900. The corrected 4.6 alone needs the verbatim quote, the credentials argument, and the SignedHeaders mechanism, where the false version was one sentence. The corrected 1.5 needs the fold analysis. F2's real redirect rule is 140 words that did not exist before.
+
+    Trading verified-correct reasoning for a lower count would be the wrong trade, and both reviewers already established the floor is a stub guard with completeness carried by the criteria. The tightener offered a deliberate reduction pass and correctly flagged that it would cost reasoning. Declined.
+
+    ## Beat-initiated verification worth noting
+
+    The tightener did not take my two confirmations on faith. It re-fetched both the MDN and GCS pages itself. On F1 it also checked Chromium's `components/webcrypto/README.md` as the obvious alternative source for the AES-192 browser claim, found no mention there either, and therefore dropped the claim entirely rather than re-sourcing it weakly. On F3 it verified the pinning half rather than asserting it, finding the canonical-requests rule that headers "prefixed with `x-goog-`" must appear in the canonical headers, which is the actual mechanism making signed `x-goog-meta-*` values unalterable. It also re-fetched the MCP spec because it had rewritten 1.2, and confirmed both quotes verbatim.
+
+    ## Flagged for audit, deliberately not fixed
+
+    Completion criterion 7 says the document "names the reserved path set and states it is excluded from the **ID alphabet**." After the F9 correction that mechanism description is literally false: the alphabet does not exclude `assets`, and `policy`, `api`, and `health` fold to valid Crockford strings under lookup normalization. The real control is two guards, length primary (25 characters minimum at the 122-bit floor against a 20-character longest reserved word) and alphabet as backstop.
+
+    The tightener made the criterion land on a true statement by adding "**No reserved word is ever issuable as an ID**" at the head of 1.5's guard list, so the document satisfies both the letter and the intent.
+
+    **I chose not to amend criterion 7's wording.** Editing a completion criterion after the deliverable exists, so that it matches the deliverable, is goalpost-moving even when the intent is honest. The criterion's intent was always "reserved paths can never be issued as IDs" and that is satisfied. Recording the imprecision here instead, so the audit phase reads criterion 7 as being about the ID space rather than the alphabet specifically.
 reviews:
   completeness:
     at: 2026-07-30T05:31:07.501358+00:00

@@ -20,7 +20,7 @@
     "specify": {
       "station": "specify",
       "status": "in_progress",
-      "phase": "reflect",
+      "phase": "manufacture",
       "checkpoint": {
         "kind": "auto"
       },

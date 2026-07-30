@@ -138,7 +138,7 @@ The viewer must be JavaScript, so a JS reader exists regardless. **If any non-JS
 
 `format.md` 4.3 routes the bit count here. Generation is fixed client-side in 1.3, and 1.2 fixes 122 bits as a **floor**, not the answer. `design-operations-and-abuse` will record enumeration as settled at the entropy floor already fixed, which reads the floor as the decision. Pick the number so that record is true rather than circular.
 
-Decide the bit count and state both costs: the ID's length in characters under 2.3's unpadded base64url encoding, which `format.md` 1.5 makes the primary reserved-word guard, against the enumeration arithmetic at the value you choose. Apply the same terminal-character check §1 applies to the fragment.
+Decide the bit count and state both costs: the ID's length in characters under `format.md` 1.1's Crockford base32, at 5 bits per character, against the enumeration arithmetic at the value you choose. State the character count that follows from the bit count you pick, and check it against `format.md` 1.5's floor of 25 characters and the margin 1.5 states over `manifest.webmanifest`, the longest reserved word at 20, which the floor clears by five.
 
 # Do not assign obligations to siblings
 

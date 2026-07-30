@@ -35,6 +35,11 @@ gate_results:
   at: 2026-07-30T02:57:22.635060+00:00
   attempts: 1
   detail: '`test "$(wc -w < docs/frame.md)" -ge 1300` exit=0. Actual word count 2510, floor 1300.'
+- name: sources-manifest-populated
+  status: pass
+  at: 2026-07-30T02:57:31.400331+00:00
+  attempts: 1
+  detail: exit=0. 13 non-empty lines, all matching ^https://, trailing newline confirmed (last byte 0x0a).
 ---
 
 # Goal

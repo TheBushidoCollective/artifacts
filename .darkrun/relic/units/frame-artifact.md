@@ -65,11 +65,6 @@ quality_gates:
 - name: every-cited-url-resolves
   command: bash -c 'set -eu; while IFS= read -r u || [ -n "$u" ]; do [ -n "$u" ] || continue; curl -sfL --max-time 25 --retry 2 -A "Mozilla/5.0 (relic-link-check)" -o /dev/null "$u"; done < docs/frame.sources.txt'
 gate_results:
-- name: every-cited-url-resolves
-  status: pass
-  at: 2026-07-30T02:57:33.811944+00:00
-  attempts: 1
-  detail: exit=0. All 13 URLs fetched with curl -sfL. Pre-screened 22 candidates first; no URL-shape templates (file.kiwi/abcdef12#secretKey, wormhole.app/{roomId}) included.
 - name: artifact-exists
   status: pass
   at: 2026-07-30T03:10:50.056460+00:00
@@ -85,6 +80,11 @@ gate_results:
   at: 2026-07-30T03:11:03.386010+00:00
   attempts: 2
   detail: 'Challenger beat re-run after pruning two orphaned sources. exit=0. 11 non-empty lines (was 13), all ^https://, trailing newline confirmed (last byte 0x0a). Verified every manifest URL is still cited in the body: zero orphans.'
+- name: every-cited-url-resolves
+  status: pass
+  at: 2026-07-30T03:11:06.202549+00:00
+  attempts: 2
+  detail: Challenger beat re-run. exit=0. All 11 URLs fetched individually with curl -sfL --max-time 25 --retry 2; each printed OK. No URL-shape templates present.
 ---
 
 # Goal

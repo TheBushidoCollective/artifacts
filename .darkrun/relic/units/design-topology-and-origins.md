@@ -193,6 +193,12 @@ quality_gates:
   command: bash -c 'set -eu; n=$(grep -c . docs/design/topology.sources.txt); test "$n" -ge 6'
 - name: every-cited-url-resolves
   command: bash -c 'set -eu; while IFS= read -r u || [ -n "$u" ]; do [ -n "$u" ] || continue; curl -sfL --max-time 25 --retry 2 -A "Mozilla/5.0 (relic-link-check)" -o /dev/null "$u"; done < docs/design/topology.sources.txt'
+gate_results:
+- name: artifact-exists
+  status: pass
+  at: 2026-07-30T13:38:31.859302+00:00
+  attempts: 1
+  detail: '`test -f docs/design/topology.md` exits 0. Run by the manager in the unit worktree at `18494dc`, not taken from a beat''s self-report.'
 ---
 
 # Goal

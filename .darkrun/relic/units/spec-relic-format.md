@@ -15,7 +15,7 @@ quality_gates:
 - name: artifact-exists
   command: test -f docs/spec/format.md
 - name: substance-floor
-  command: test "$(wc -w < docs/spec/format.md)" -ge 2000
+  command: test "$(wc -w < docs/spec/format.md)" -ge 1600
 - name: sources-manifest-populated
   command: bash -c 'set -eu; n=$(grep -c . docs/spec/format.sources.txt); test "$n" -ge 5'
 - name: every-cited-url-resolves

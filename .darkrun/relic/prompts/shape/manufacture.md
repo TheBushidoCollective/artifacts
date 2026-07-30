@@ -33,7 +33,7 @@ This is the build floor. You run the **Pass loop** — _Plan → Make → Challe
 
 Dispatch the **designer** beat in parallel across these wave-ready Units:
 
-- `design-container-and-crypto`
+- `design-topology-and-origins`
 
 
 
@@ -42,122 +42,159 @@ Dispatch the **designer** beat in parallel across these wave-ready Units:
 
 The subagent you dispatch for a Unit gets **no context beyond what you hand it**. Pass the Unit's spec below into its dispatch verbatim — the completion criteria with their verify commands, the declared paths, and the scope boundary are the contract the beat is judged against.
 
-### `design-container-and-crypto` — Decide the container framing, the key material, and the reference implementation
+### `design-topology-and-origins` — Decide the origins, the edge, and when the mint fires
 
-- **inputs:** `frame.md`, `spec.md`
-
-
-- **outputs:** `docs/design/container.md`, `docs/design/container.sources.txt`
+- **inputs:** `frame.md`, `spec.md`, `docs/design/container.md`
 
 
-- **quality gates:** artifact-exists — `test -f docs/design/container.md` · substance-floor — `test "$(wc -w < docs/design/container.md)" -ge 2400` · sources-manifest-populated — `bash -c 'set -eu; n=$(grep -c . docs/design/container.sources.txt); test "$n" -ge 6'` · every-cited-url-resolves — `bash -c 'set -eu; while IFS= read -r u || [ -n "$u" ]; do [ -n "$u" ] || continue; curl -sfL --max-time 25 --retry 2 -A "Mozilla/5.0 (relic-link-check)" -o /dev/null "$u"; done < docs/design/container.sources.txt'`
+- **outputs:** `docs/design/topology.md`, `docs/design/topology.sources.txt`
+
+
+- **quality gates:** artifact-exists — `test -f docs/design/topology.md` · substance-floor — `test "$(wc -w < docs/design/topology.md)" -ge 2400` · sources-manifest-populated — `bash -c 'set -eu; n=$(grep -c . docs/design/topology.sources.txt); test "$n" -ge 6'` · every-cited-url-resolves — `bash -c 'set -eu; while IFS= read -r u || [ -n "$u" ]; do [ -n "$u" ] || continue; curl -sfL --max-time 25 --retry 2 -A "Mozilla/5.0 (relic-link-check)" -o /dev/null "$u"; done < docs/design/topology.sources.txt'`
 
 
 # Goal
 
-Write `docs/design/container.md`: the decided container framing, key material, and reference implementation for Relic. Plus `docs/design/container.sources.txt`, one URL per line, trailing newline.
+Write `docs/design/topology.md`: the decided origin split, edge and TLS topology, domain workstream, the mint trigger, the mint dedup interval, and the naming decision as a blocker. Plus `docs/design/topology.sources.txt`, one URL per line, trailing newline.
 
-**This is the only decision in the run that is irreversible once a single relic exists.** Everything else that lives in a stored object can be migrated or redeployed. **The name is the exception and it is not yours:** it is free today and closes at the domain purchase, which is already a stated deployment blocker, and `design-topology-and-origins` owns it. Do not de-rank it in passing. A relic encrypted under the wrong framing is unreadable forever, and a writer bug ships permanently into every object written under it.
+**Read first:** `darkrun_knowledge_list`, especially `per-relic-subdomain-topology-wildcard-tls-psl-and-hsts`, `link-preview-and-unfurl-behavior-by-client`, `safe-browsing-delisting-and-why-a-zero-knowledge-operator-cannot-comply`, `domain-strategy-and-safe-browsing-blast-radius`, `relic-name-is-crowded-in-its-own-three-categories`, `gcs-cloud-run-architecture-constraints`, `relic-stack-options-and-what-each-forecloses`, `citation-defects-and-the-three-checks-that-catch-them`.
 
-**Read first:** `darkrun_knowledge_list` in full. Load-bearing here: `rfc8188-container-facts-and-implementation-landscape`, `browser-crypto-and-large-file-constraints` (**already corrected in place; do not re-derive its wrong version**), `citation-defects-and-the-three-checks-that-catch-them`, `cross-document-gaps-no-criterion-catches`.
+Then read from the repo root: `docs/frame.md` and `docs/preconditions.md`, locked; `docs/spec/viewer.md` (**§2 the sandbox origin's shape, in full and closely, because the section below turns on what it rests its decision on**, §1.7 redirects, §4 the boundary, §7 item 5 the PSL, which is the only `viewer.md` §7 item that is yours); `docs/spec/service.md` (§2 the static shell and the mint, **§2.2 the mint counting rules**, §6 third-party rewriters, **§7 items 1 and 7, which are yours**); and your sibling input `docs/design/container.md`.
 
-Then read, from the repo root, **do not `cd` into a subdirectory**: `docs/frame.md`, `docs/preconditions.md`, and `docs/spec/format.md`, which is **locked** and routes these decisions to you. Also read `docs/spec/viewer.md` on decryption and platform ceilings, and `docs/spec/publish.md` on retry and re-encryption.
+**If `docs/design/container.md` is missing, fetch it via `git show darkrun/relic/units/shape/design-container-and-crypto:docs/design/container.md` and report which path you used.**
 
-# Source discipline. This run's dominant failure mode.
+# Source discipline
 
-Five citation defects shipped in `specify`, in four modes: a fabricated quotation attributed to an RFC section where it appears **zero times in 10,785 lines**; two pages cited for claims they never make; a relay of a relay presented as first-hand; one wrong word inside quotation marks. **Not one would have failed the URL-resolution gate, because in every case the URL resolved.**
+Five citation defects shipped in `specify`, and **none would have failed the URL-resolution gate**. Pull raw text and grep it. **Never WebFetch a specification.** Audit every quoted string; criterion 15 makes it checkable.
 
-- **Pull raw source text and grep it.** RFCs as `.txt` from rfc-editor.org. For browser compat, `mdn/browser-compat-data` JSON is authoritative where prose is not.
-- **Never use WebFetch on a specification.** It was caught on this run returning text that flatly inverted RFC 9110's meaning.
-- **Audit every quoted string before you finish.** Criterion 9 makes this checkable and it is not optional.
+# What is already foreclosed. Do not design against it.
 
-# Already decided. Do not relitigate.
+- **The Public Suffix List.** A pre-launch project sits inside two published decline criteria, an honest rationale states the declined objective in the maintainers' own words, and a granted entry propagates on browser-release timescales. **Origin isolation comes from separate registrable domains alone.** Read the next section before you design anything against this one; the foreclosure has a consequence nobody carried.
+- **Cloud Run's own custom domain mappings, and nothing wider.** They cannot carry a wildcard certificate and they are preview rather than production-ready, so they are out as the TLS and fronting layer. **That is the whole of the constraint. Cloud Run itself is not foreclosed.** A global external Application Load Balancer with a Certificate Manager wildcard under DNS authorization does support wildcards, and it says nothing about what sits behind it, which throughout this run's knowledge is Cloud Run. Treat the load balancer and a non-GCP edge as a live comparison in §2, not a forced choice.
+  **Why the narrow reading matters, since this is a reversal argument in the other direction:** the over-broad reading pushes the design toward a third-party edge, and §2 already says what a third party in the render path costs belongs in the published disclosure statement. Walking a published disclosure back is a public revision of the zero-knowledge posture. That is a real reversal cost paid for a foreclosure that was never real, and it is the exact pattern `gcs-false-impossibility-claims` records: asserting an impossibility where the real answer is a cost or a design choice, after which nobody reopens a question the spec says is settled.
+- **Any control keyed on User-Agent.** A major privacy-first client impersonates another client's UA in its own published source.
 
-From `format.md`, locked: RFC 8188 `aes128gcm` is the framing family. `keyid` is unused and `idlen` MUST be 0, refused after the fetch. Unknown container versions refuse at both refusal points. The version marker lives in the **fragment**, not the container. Every relic gets a fresh key; convergent encryption is drift routing back to `frame`. The published size number is a plaintext number.
+**One trap you must not fall into, and must state so nobody re-derives it:** a PSL entry would **not** break the wildcard certificate. The CA/Browser Forum requirement that appears to forbid it directs CAs to consult the ICANN section only, not private registrations, and a major CA confirmed that behaviour on the record. Carry the two qualifiers with the claim: the requirement is a SHOULD rather than a MUST, so it is CA-dependent, and the applicant here controls the entire namespace. Getting this backwards would be expensive in the wrong direction.
 
-# What `format.md` §4 routes here, and what it does not
+# The PSL foreclosure removes a locked rationale, and this is the first thing you handle
 
-`format.md` §4 routes six items. **Four are yours: 4.1 the wire format and framing, 4.2 key length, 4.3 the ID entropy bit count, 4.5 bucket padding.** The other two are not, and this is the single-owner assignment for the station, so do not treat a sweep of §4 as authority over them:
+**Settle this before you price the edge in §2, because the answer changes whether a wildcard is needed at all.**
 
-- **4.4, whether the cap is on plaintext or ciphertext and its value**, belongs to `design-storage-grant-and-cost`. It is the same decision `publish.md` 6.3 and `viewer.md` 7.2 also route, the binding arithmetic is in `service.md` 2.3, and storage is the unit that holds that arithmetic. Your document may cite the cap once it exists; it does not pick it.
-- **4.6, whether object metadata is set at upload at all**, also belongs to `design-storage-grant-and-cost`, which holds the grant-branch evidence that decides it.
+`viewer.md` §2 is locked and it decides per-relic subdomains over one fixed sandbox origin. It first concedes that the obvious objection to a fixed origin is not real: under §4's two-layer boundary every rendered document already sits in its own opaque origin, so two relics on one hostname are already mutually cross-origin, and the frame's sandbox flags answer that objection rather than the hostname. It then names what per-relic subdomains actually buy, which is **process-level isolation**, and quotes web.dev for the mechanism, that adding the parent to the PSL is what makes two labels under it cross-site and therefore fully isolated from each other. The same section states that PSL registration of the sandbox parent is required and routes to `shape`.
+
+**This station forecloses the PSL, and process isolation keys on site rather than origin.** Without the entry every per-relic label shares one registrable domain and is same-site, so the mechanism the locked section quotes does not fire. That rationale is gone while every cost stays: the wildcard, DNS-01 and therefore DNS provider API credentials wherever issuance runs, the standing edge cost, and unbounded auto-generated hostnames under a wildcard, which `viewer.md` §2 itself names as exactly the trigger `preconditions.md` §2 describes.
+
+**Criterion 6 does not catch this and cannot.** It forces you to state that the PSL is foreclosed and that a PSL entry would not break the wildcard. Both are true, both are worth stating, and a document can satisfy both while carrying this hole. That is why criterion 7 exists and why repeating the foreclosure does not discharge it.
+
+Four things this document owes, all forced by criterion 7:
+
+- **State the collapse, scoped precisely.** Not "the PSL is foreclosed" again, which is the sentence that hides it. State that the process-isolation rationale depended on the entry, does not survive without it, and that the costs survive regardless.
+- **State what survives, checked rather than assumed.** Do not over-read the collapse. That is the same failure as the Cloud Run foreclosure above, one direction over, and this document has now been burned by it once. `viewer.md` §2 gives a **second** reason and calls it the durable one: a per-relic hostname is defense in depth against Relic's own future bugs, so a misconfigured sandbox flag costs one relic instead of every relic the recipient has open. Work out whether that reason depends on the PSL entry or only on distinct origins, and say which, with the mechanism. Same-origin policy and site-keyed process isolation are different boundaries and the foreclosure does not touch them equally. Check `document.domain` while you are in there, because it is the one origin-side mechanism a PSL entry genuinely touches, and expect it to come out not making the second reason PSL-dependent: it takes effect only where both documents set it, the victim relic's document is never attacker-controlled, and it is deprecated and inert by default in current Chrome.
+- **Design both branches, and do not pick.** Per-relic subdomains retained, with whatever justification actually survives stated honestly and every cost owned. A single fixed sandbox origin, with what is lost named precisely and what the wildcard, the DNS-01 credentials, and the standing edge cost stop buying. `viewer.md` §2 decided per-relic and this station cannot silently undecide it, so the deliverable is two designed branches plus a routed question, never a reversal.
+- **Route it as drift back to `specify`.** Name the sentence in `viewer.md` §2 whose basis is gone, so whoever reads this design knows a locked decision needs revisiting rather than discovering it in `build`. This is the station's standard form: where a finding pressures a locked decision, name it as drift routing back to its owner rather than proposing a change. **Do not edit `viewer.md`, do not propose replacement text for it, and do not treat this as authority to change what it decided.**
+
+**On the foreclosure's honest scope:** the PSL decline criteria include a size gate, so the accurate statement is that an entry is unavailable to a pre-launch project at this scale, not that it is permanently foreclosed. State it that way, because the difference is load-bearing on the branch design: it makes the per-relic branch's process-isolation rationale recoverable at scale rather than dead, which is a different thing to hand `build`.
 
 # The decisions
 
-## 1. The key material, routed wrong, and it must be restated before it can be decided
+## 1. Which origin serves which response, which is baked into the URL scheme and the CSP
 
-`format.md` 4.2 routes "key length, 128 or 256 bits" as though `shape` picks cipher strength. **Under `aes128gcm` it does not.** The coding uses one fixed primitive set, and cipher agility is achieved by defining a new content coding. The fragment value is not the content-encryption key; it is input-keying material that HKDF-SHA256 turns into a 16-octet CEK using the header salt.
+**The split is backwards from how it has been described.** The shared URL is on the **service** origin. The sandbox origin appears only in an iframe `src` and never in anything a human pastes. So the domain hosting attacker-controlled HTML is the one nobody links to and which costs one DNS change to replace, while the domain hosting nothing untrusted is the one in every shared link, every abuse report, and every Safe Browsing sample. **Losing the sandbox domain breaks HTML rendering. Losing the service domain breaks every relic ever shared.**
 
-**Restate the decision as IKM length, decide it, and say AES-128 out loud** so no later reader takes "256-bit key" to mean AES-256. Decide, with consequences stated:
+The two Safe Browsing categories Relic will actually sit in are the download categories, and they attach to whichever origin serves bytes to disk. **Decide whether the download and save path moves onto the disposable origin**, and if it cannot, say exactly why against the absolute rule that the sandbox origin never receives the key. Enumerate three paths and not two: the service origin, the sandbox origin, and a `blob:` save of already-decrypted content, which `safe-browsing-delisting-and-why-a-zero-knowledge-operator-cannot-comply` records as a different path from a direct link to the object. The irreversible term is not the URL scheme or the CSP, both of which are a header and a link target; it is the download-category reputation accrued on the domain that is in every shared link and cannot be replaced. Decide on that basis.
 
-- What IKM length ships, and what it buys. A 32-byte IKM buys fragment entropy, not cipher strength.
-- **The implementation cost of exceeding 16 bytes.** The reference implementation's `Keychain` hard-rejects anything else, and it is the only implementation anywhere with progressive range decryption, which `frame.md`'s wedge boundary makes non-negotiable. Exceeding 16 bytes means driving the lower-level module directly. Price that against the entropy gained.
-- The resulting fragment length in the chosen encoding, checked against `format.md` 2.3's terminal-character rule and its named check.
+## 2. The edge and TLS
 
-## 2. The framing parameters
+**Settle the PSL collapse section above first.** A single fixed sandbox origin needs no wildcard at all, so the branch question sits upstream of everything in this section; price both edges against the per-relic branch and state what the fixed-origin branch would cost instead.
 
-- **`rs`, and the rule that makes it cheap.** `rs` sits in each object's plaintext header, so a decryptor that reads it keeps every old relic working when the default moves. **State the mandatory rule: the reader takes `rs` from the header, never from a compiled-in default**, because the reference implementation throws when the caller's value disagrees with the stream. With that rule stated, decide the writer's default and show the arithmetic: overhead per record, range granularity, and the floor it puts under `format.md` 3.1's envelope header caps.
-- **Padding.** `format.md` 4.5 routes bucket padding. RFC 8188 §4.8 recommends distributing non-padding data across records precisely because trailing pad-only records leak size information under observation, which is what a naive bucket pad produces. The reference implementation emits minimal padding only and has no bucket mode. Decide, and if bucket padding ships, say plainly it is a fork or a custom encryptor rather than a flag, and reconcile it with the RFC's own advice rather than ignoring it.
-- **Header layout and exact byte arithmetic** at `idlen = 0`, so an implementer can write a parser from this document.
+Per-relic subdomains force a wildcard, and a wildcard forces something in front of the app rather than Cloud Run's own domain mappings. **Both remaining edges are live. Decide on cost and on what each puts in the render path, not on a foreclosure:**
 
-## 3. The reference implementation, and the second-implementation problem
+- A Google global external Application Load Balancer with Certificate Manager, which supports wildcards under DNS authorization and carries a standing hourly forwarding-rule charge against a project whose cost precondition is a kill switch. Cloud Run sits behind it unchanged.
+- A third-party edge offering free universal TLS covering exactly the first-level-subdomain shape the spec already constrains itself to, at the cost of a third party in the render path.
 
-The viewer must be JavaScript, so a JS reader exists regardless. **If any non-JS writer ships, it is a second implementation of a format that can never change**, and a writer bug is permanent.
+State what a third party in the render path means for a zero-knowledge claim, because that is the honest cost and it belongs in the disclosure statement rather than buried here. State the Cloud Run scope correctly while you are in this section, so no later reader inherits the wide version.
 
-- Decide the writer's language and library, or decide the writer is JS too.
-- **Price the alternatives honestly.** The only maintained Rust crate carries "This crate has not been security reviewed yet, use at your own risk" in its own README, exposes a web-push-shaped API with the relevant module private, and offers no streaming and no way to supply your own IKM, salt, or `rs`. The Go option has a single-digit star count. Neither is disqualifying alone; both are facts the decision must state.
-- **If two implementations ship, mandate cross-implementation verification against the RFC's published test vectors**, and note that one vector carries a non-zero `keyid` the product forbids, so the harness must parse what production refuses.
-- Name the two properties the reference implementation gives you free that `format.md` already requires: a non-zero `idlen` refusal, and a size derivation matching 3.3 including its minimal-padding qualifier.
+**The certificate rate limits are not the constraint anybody expects.** One wildcard renewed on a normal cadence sits nowhere near any published limit; the limits only bite a design nobody should pick, which is per-relic issuance. The real constraint is the **challenge type**: wildcards require DNS-01, which means DNS provider API credentials wherever issuance runs, and the CA itself names that as a risk. Decide where issuance runs and how those credentials are held.
 
-## 4. The v2 migration cost, stated rather than feared
+## 3. The domain workstream, which has two months-long irreversible items and only one was costed
 
-`format.md` says the format cannot change after content is encrypted, which is true of a given relic and misleading about the system. Because the version marker is in the fragment and therefore **pre-fetch**, a v2 viewer refuses or routes a v1 relic without minting and without spending egress. State the real migration cost: the viewer carries both decoders for as long as any v1 relic can be alive, which a mandatory TTL bounds. State what would make it unbounded, which is a writer that keeps writing v1.
+`viewer.md` §7 costs the PSL and says nothing about **HSTS preload**, which both `format.md` §5 and `viewer.md` §1.7 name as the preferred way to eliminate inside-the-service redirects. Preload entries are hardcoded into browser source and take months to reach stable, removal takes months more with no guarantees across browsers, and the required header's subdomain directive makes a valid certificate on every per-relic hostname a permanent availability dependency.
 
-**The bound is only as real as the TTL ceiling, and that ceiling is `design-storage-grant-and-cost`'s decision, not yours.** Do not write a bounded-sounding claim resting on a number nobody has picked. Name the mandatory TTL as the bound, name storage as the unit that sets its ceiling, and state the need in the sibling form below rather than asserting a value.
+**State that PSL and HSTS preload are the same shape on the same domain: months in, months out, unexpeditable.** Both belong in the domain workstream at the moment of acquisition, ahead of work that looks more urgent. Produce the ordered workstream, and be explicit that the PSL is unavailable at this scale while HSTS preload is not, so they are sequenced for different reasons. The workstream starts at the name, per §6, because everything in it is keyed to a domain that cannot be bought until the name is settled.
 
-## 5. Nonce discipline, as rules an implementer can follow
+## 4. When the mint fires, and the interval it is counted over
 
-`format.md` 3.10 and `publish.md` 4.4 both carry the nonce-reuse consequence. Turn it into implementation rules: how the record sequence is derived, what resuming at the correct index requires of the writer, and what the writer must do rather than merely must not do.
+`service.md` §2 rests the no-mint-on-`/{id}` rule on non-executing fetchers and concedes that a scanner detonating with a real browser does run it. **That scanner is verified, not hypothetical:** at least two major platforms execute JavaScript on linked pages with substantial execution time. A JS-executing previewer runs the shell, mints a signed URL, and pulls ciphertext, which is a phantom open against the primary metric, a consumed unit of the download cap, and real egress, all before a human clicks.
 
-## 6. The ID entropy bit count, which is a number and not a floor
+**Decide: auto-mint on load, or mint behind a signal a headless previewer does not produce**, such as a real user gesture or visible-and-focused. State the cost either way. Gating buys back the metric and the cap and taxes the first five seconds, which is the wedge. Auto-on-load is cheap now and hard to change once the open counter has a baseline and the cap has a published value.
 
-`format.md` 4.3 routes the bit count here. Generation is fixed client-side in 1.3, and 1.2 fixes 122 bits as a **floor**, not the answer. `design-operations-and-abuse` will record enumeration as settled at the entropy floor already fixed, which reads the floor as the decision. Pick the number so that record is true rather than circular.
+**Then decide the mint dedup interval, `service.md` 7.7, because your phantom-open argument is a counting argument and this is the number it counts with.** The rules around it are already fixed in `service.md` 2.2 and are not yours: a refused mint never counts as an open and never consumes cap, and a repeat inside the interval is not a distinct open and does consume cap. **The interval's value is yours.** It decides whether a previewer that hits the shell twice produces one phantom open or two, and whether a recipient who reloads burns a second unit of the cap that `design-storage-grant-and-cost` is sizing. State the value, state what it does to the phantom-open count under each mint-trigger branch, and reconcile it with the frame's 120-second window, which `service.md` 7.7 names as the interaction. `service.md` 2.2 also states the arithmetic this protects: the worst-case egress arithmetic in `docs/preconditions.md` collapses if a mint returns a usable URL without consuming the cap.
 
-Decide the bit count and state both costs: the ID's length in characters under 2.3's unpadded base64url encoding, which `format.md` 1.5 makes the primary reserved-word guard, against the enumeration arithmetic at the value you choose. Apply the same terminal-character check §1 applies to the fragment.
+Also decide the static shell's markup order. The most consequential unfurler **range-fetches the head**, so the Open Graph block must sit early, ahead of scripts and styles, or the result is the blank card `viewer.md` §6.2 calls the visual shape of a phishing link. Note that the constant preview image is fetched on every unfurl and is real recurring egress on the service origin, bounded by that client's cache window, so it wants a long-cacheable static path.
+
+## 5. Edge fidelity, which is `service.md` 7.1 and carries a locked-rule violation
+
+The edge's rate-limit deny status is a one-line config with a spec-level consequence: the natural default is in the valid set and choosing it violates a locked rule, because it makes an MCP client prompt users to sign in against an authorization server that does not exist. Note also which status the edge **cannot** emit, so that code can only come from the application. Decide and state both.
+
+Read this item as edge behavior only, exactly as `service.md` 7.1 scopes it. No status, code, or distinction in `service.md` §1 is yours; those are settled there and nothing here reopens the table. What is yours is which of them the deployed edge can actually produce under load shedding, and the edge's substitute behavior where it cannot emit a problem document per 1.5.
+
+## 6. The name, which is free today and closes at the domain purchase
+
+You own the domain workstream, so you own the decision that gates it. It is the only operator decision in this station with no unit and no forcing criterion, and it is structurally invisible to a routed-coverage audit because it is an operator decision rather than a routed one. `relic-name-is-crowded-in-its-own-three-categories` records the collision and the sequencing: the domain purchase is already a stated external dependency blocking deployment, so the naming decision sits immediately upstream of it.
+
+**Do not pick the name. It is the operator's.** What this document owes is the decision stated as a blocker rather than a detail:
+
+- **State that the naming decision blocks the domain purchase, which blocks deployment.** Free now, brutal after domains are bought and links are in the wild. `frame.md` locks no accounts, so there is no channel to tell an installed MCP client fleet that the domain moved, only the package registry.
+- **Record the collision concretely.** The npm package name is taken by a client-side-encrypted secrets CLI whose own description reads as nearly Relic's positioning sentence, so the clash is in the product category and not only in the string.
+- **Name what is still available**, checked rather than assumed: the candidate registrable domains and the package name, with the check you ran and when.
+- **State what restarts from zero on a later rename:** HSTS preload, Safe Browsing standing, Search Console verification, and any download-category reputation from §1. That is why the workstream in §3 cannot start ahead of the name.
 
 # Do not assign obligations to siblings
 
-`specify`'s two audit blockers both came from a unit finishing before the documents that assign it obligations. **If you need something a sibling owns, state the need and the behaviour that follows, and name the sibling.** Never write that another document "must add" something. Siblings: `design-storage-grant-and-cost`, `design-topology-and-origins`, `design-product-surface`, `design-operations-and-abuse`.
+State needs and name the owner; never write that another document "must add" something. Siblings: `design-container-and-crypto`, `design-storage-grant-and-cost`, `design-product-surface`, `design-operations-and-abuse`.
 
 # Style
 
-Direct, dry, confident, contractions used naturally, brevity, authority through specificity. No corporate-speak, no hedging, no stock AI phrasing. **Never an em-dash or en-dash.** No emoji. No placeholders, no hedging verbs.
+Direct, dry, confident, contractions natural, authority through specificity. **Never an em-dash or en-dash.** No emoji, no placeholders, no hedging verbs.
 
 # Completion criteria
 
-1. `test -f docs/design/container.md` exits 0.
-2. `test "$(wc -w < docs/design/container.md)" -ge 2400` exits 0. The floor is a stub guard with no ceiling. Never pad, and never cut a decided rule to hit a number.
-3. `bash -c 'set -eu; n=$(grep -c . docs/design/container.sources.txt); test "$n" -ge 6'` exits 0.
-4. Every source resolves, verified by the `every-cited-url-resolves` gate. Orphan check both directions.
-5. **The document restates the key-length decision as IKM length and states the cipher is AES-128 regardless.** Verify: `grep -c 'AES-128' docs/design/container.md` returns at least 1.
-6. **The document states the rule that the reader takes `rs` from the header rather than a compiled-in default**, and states the failure that rule prevents.
-7. **The document decides the writer implementation and, if a second implementation ships, mandates cross-implementation verification against the RFC's published test vectors**, naming the non-zero-`keyid` wrinkle.
-8. **The document states the v2 migration cost in bounded terms, names the mandatory TTL as the bound, and states that the TTL ceiling is `design-storage-grant-and-cost`'s decision** rather than asserting a value. It also names what would make the cost unbounded.
-9. **Every string presented inside quotation marks as coming from a source has been verified verbatim against that source's raw text, and the beat reports the audit as a list**: each quoted string, its source, confirmed or corrected.
-10. **The four `format.md` §4 items routed to this document are each decided with the consequence stated, or explicitly eliminated with the reason: 4.1 the wire format and framing, 4.2 key length restated as IKM length, 4.3 the ID entropy bit count, 4.5 bucket padding.** Name all four in the document. **`format.md` 4.4, the cap side and value, and 4.6, object metadata at upload, are not decided here.** They belong to `design-storage-grant-and-cost` and deciding either one in this document is a defect, not thoroughness.
-11. `test "$(grep -c '[—–]' docs/design/container.md)" -eq 0` exits 0.
+1. `test -f docs/design/topology.md` exits 0.
+2. `test "$(wc -w < docs/design/topology.md)" -ge 2400` exits 0. Stub guard, no ceiling.
+3. Manifest has at least six sources, one per line, trailing newline.
+4. Every source resolves. Orphan check both directions.
+5. **The document decides which origin serves the download path**, enumerating all three paths including a `blob:` save, and ties the decision to the Safe Browsing download categories and the domain reputation that cannot be replaced.
+6. **The document states that the PSL is foreclosed AND that a PSL entry would not break the wildcard**, so neither is re-derived wrongly, and carries the SHOULD qualifier with the second claim.
+7. **The document states the PSL rationale collapse and designs both branches.** Criterion 6 is satisfied by the sentence "the PSL is foreclosed," and that sentence is exactly what hides this, so criterion 6 does not discharge criterion 7. All four required:
+   - **(a)** The document states that `viewer.md` §2 rests per-relic subdomains on process-level isolation, that process isolation keys on site rather than origin, and that without the entry every per-relic label shares one registrable domain, is same-site, and buys no process isolation, while every cost remains.
+   - **(b)** The document states which part of the locked rationale survives, with the mechanism, checked rather than asserted, including `viewer.md` §2's second reason, which that section itself calls the durable one.
+   - **(c)** The document designs both branches, per-relic subdomains retained with the surviving justification and the costs owned, and a single fixed sandbox origin with what is lost named precisely, **and does not pick.** `viewer.md` §2 decided per-relic and this station does not undecide it.
+   - **(d)** The document names this as drift routing back to `specify`, quoting the sentence in `viewer.md` §2 whose basis is gone, and states the foreclosure's honest scope as unavailable at this scale rather than permanent.
+   A document that states the foreclosure without all four fails this criterion.
+8. **The document costs HSTS preload as a months-long, effectively irreversible commitment** and places it in the domain workstream alongside the PSL.
+9. **The document decides when the mint fires** and states the cost of the branch not taken.
+10. **The document states the Open Graph placement rule** and the failure it prevents.
+11. **The document decides the edge and states the Cloud Run scope correctly:** custom domain mappings cannot carry a wildcard and are preview, and Cloud Run behind a global external Application Load Balancer with a Certificate Manager wildcard is not foreclosed. Both edge candidates are priced, and the choice is made on cost and render path rather than on a foreclosure.
+12. **The document decides the mint dedup interval as a value**, states what it does to the phantom-open count under the mint-trigger branch chosen in §4, and reconciles it with the frame's 120-second window.
+13. **The document decides edge fidelity (`service.md` 7.1): the rate-limit deny status, naming the locked rule the natural default violates, and the status the edge cannot emit** so that code can only come from the application.
+14. **The document states the naming decision as blocking the domain purchase**, records the npm package collision and the near-identical positioning sentence, names what is still available with the check that was run, and **does not pick the name**, which is the operator's.
+15. **Every quoted string is verified verbatim against raw source text, and the beat reports the audit as a list.**
+16. **The routed decisions assigned to this document are each decided with the consequence stated, or explicitly eliminated with the reason. The list, by name and with no others implied: `viewer.md` 7.5 PSL registration for the sandbox parent; `service.md` 7.1 edge fidelity; `service.md` 7.7 the mint dedup interval.** **`viewer.md` 7.1 platform memory ceilings, 7.3 the truncated-prefix size, and 7.4 the highlighted-region cap are not yours**; they are `design-product-surface`'s, which owns every viewer screen. **`viewer.md` 7.2, the hard size cap, is `design-storage-grant-and-cost`'s.** Deciding any of those four here is a defect, not thoroughness.
+17. `test "$(grep -c '[—–]' docs/design/topology.md)" -eq 0` exits 0.
 
 # Files touched
 
-- `docs/design/container.md`, `docs/design/container.sources.txt` (create)
+- `docs/design/topology.md`, `docs/design/topology.sources.txt` (create)
 
 # Out of scope
 
-- The grant shape, storage topology, cost, **the hard size cap value and its referent (`format.md` 4.4), and whether object metadata is set at upload (`format.md` 4.6)**. Sibling `design-storage-grant-and-cost`.
-- Origins, TLS, edge, which origin serves what, **and the name**. Sibling `design-topology-and-origins`.
-- Viewer screens, art direction, the taskbar, platform memory ceilings. Sibling `design-product-surface`.
-- Abuse operations and legal posture. Sibling `design-operations-and-abuse`.
-- Any product code. This station designs; it does not implement.
+- The container format and key material. Locked by `docs/design/container.md`.
+- The grant construction, cost arithmetic, GCP project topology, **and the hard size cap value (`viewer.md` 7.2)**. Sibling `design-storage-grant-and-cost`.
+- Viewer screens, copy, and art direction, **including platform memory ceilings (`viewer.md` 7.1), the truncated-prefix size (7.3), and the highlighted-region cap (7.4)**. Sibling `design-product-surface`.
+- The abuse pipeline, legal posture, and the published SLA. Sibling `design-operations-and-abuse`.
+- Picking the name itself. You state it as a blocker and name what is available; the operator chooses.
+- **Reversing `viewer.md` §2's per-relic decision.** You design both branches and route the question as drift. Editing or rewriting any locked document is out of scope for this station.
+- Product code.
 
 
 
@@ -166,7 +203,7 @@ Direct, dry, confident, contractions used naturally, brevity, authority through 
 
 Every wave Unit is isolated on its own branch + worktree, forked off the station branch. Run that Unit's beat **inside its worktree** so its diff never tangles with another Unit's in-flight work; the manager lands each Unit back onto the station branch when it locks. Do **not** commit a Unit's work to the station branch yourself.
 
-- `design-container-and-crypto` → `/Users/jwaldrip/dev/src/github.com/thebushidocollective/artifacts/.darkrun/worktrees/relic/units/shape/design-container-and-crypto` (branch `darkrun/relic/units/shape/design-container-and-crypto`)
+- `design-topology-and-origins` → `/Users/jwaldrip/dev/src/github.com/thebushidocollective/artifacts/.darkrun/worktrees/relic/units/shape/design-topology-and-origins` (branch `darkrun/relic/units/shape/design-topology-and-origins`)
 
 
 

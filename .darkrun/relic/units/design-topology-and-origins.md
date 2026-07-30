@@ -1,7 +1,7 @@
 ---
 name: Decide the origins, the edge, and when the mint fires
 unit_type: ''
-status: in_progress
+status: completed
 depends_on:
 - design-container-and-crypto
 worker: ''
@@ -16,6 +16,7 @@ outputs:
 - docs/design/topology.sources.txt
 branch: darkrun/relic/units/shape/design-topology-and-origins
 started_at: 2026-07-30T12:54:23.852329+00:00
+completed_at: 2026-07-30T13:39:09.861834+00:00
 iterations:
 - worker: designer
   started_at: 2026-07-30T12:54:23.852329+00:00

@@ -1,7 +1,7 @@
 ---
 name: Write frame.md — problem, user, value, success metric, non-goals
 unit_type: doc
-status: in_progress
+status: completed
 depends_on: []
 worker: distiller
 model: opus
@@ -11,6 +11,7 @@ outputs:
 - docs/frame.sources.txt
 branch: darkrun/relic/units/frame/frame-artifact
 started_at: 2026-07-30T03:00:30.528869+00:00
+completed_at: 2026-07-30T03:23:42.278612+00:00
 iterations:
 - worker: framer
   started_at: 2026-07-30T03:00:30.528869+00:00

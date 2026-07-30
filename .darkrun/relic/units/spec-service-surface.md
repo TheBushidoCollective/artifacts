@@ -172,6 +172,16 @@ gate_results:
   at: 2026-07-30T07:13:28.147636+00:00
   attempts: 1
   detail: 20 non-empty lines against a floor of 5, one URL per line, trailing newline present. Run by the manager at ed51b43. The manifest gained FusionAuth/fusionauth-issues#629 during resolve, added as the primary source for the Safe Links HEAD observation after the adversary showed the existing Authelia citation was relaying it and that the relayed claim carried its own hedge.
+- name: every-cited-url-resolves
+  status: pass
+  at: 2026-07-30T07:13:34.399941+00:00
+  attempts: 1
+  detail: |-
+    All 20 URLs fetched, exit 0, no DEAD lines. Run by the manager at ed51b43. Orphan check clean both directions after the manifest addition.
+
+    Beyond resolution, this unit carried the run's first **fabricated quotation**: a string attributed to RFC 9110 §15.5.11 that appears zero times in all 10,785 lines of the RFC, sitting in a sentence whose other quote was verbatim. The manager confirmed it against the raw RFC before it reached the tightener, and the tightener re-ran the grep independently rather than trusting that. It then ran a **full quotation audit**, fetching every cited page and substring-matching roughly 30 quoted strings: all verbatim except the one fabrication. It also found and fixed a second unsupported claim nobody had flagged (Proofpoint cited for "urldefense.com", a string absent from the page), and caught itself introducing the same defect class mid-draft.
+
+    Note for later stations: this gate cannot detect modes 2 and 3 of the defect, per `citation-defects-and-the-three-checks-that-catch-them`. A resolving URL proves only that the source exists.
 ---
 
 # Goal

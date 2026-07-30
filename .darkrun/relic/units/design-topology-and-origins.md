@@ -61,6 +61,72 @@ iterations:
     ## One finding no criterion covers, and it is operator-relevant
 
     **The availability check caught its own failure mode.** An RDAP aggregator reported `relic.io` as unregistered; each registry's own RDAP service, resolved through the IANA bootstrap, returns 200 and shows it registered and parked. `relic.com`, `relic.dev`, `relic.app`, `relic.host`, and `getrelic.com` are also all registered. **If any other beat on this run has checked domain availability through an aggregator, that result is suspect.**
+- worker: pressure_tester
+  started_at: 2026-07-30T13:13:30.596049+00:00
+  completed_at: 2026-07-30T13:13:30.596049+00:00
+  result: advance
+  note: |-
+    Fourteen findings against `3d54b6c`, plus verdicts on all five nominated weaknesses. **Two attacks were settled by running Google Chrome 150 headless on this machine rather than by argument.**
+
+    **Its closing line is the finding of the station:** every decision in this document survives. What does not survive is the **stated basis** for three of them, which is the failure mode this run keeps recording and which no criterion in the unit catches.
+
+    **Manager-verified the three decisive claims before recording.**
+
+    ## The nominations, and three come out stronger than the beat believed
+
+    | # | Nomination | Verdict |
+    |---|---|---|
+    | 1 | Mint trigger | **Survives. The beat worried about the wrong half of its own paragraph.** |
+    | 2 | 300 seconds | **Does not survive, and it is worse than nominated.** |
+    | 3 | `blob:` attribution | **Survives. The defence is right.** |
+    | 4 | Certificate Manager | **Survives in substance; the renewal half is unsourced.** |
+    | 5 | Third-party edge sees the signed URL | **Survives, and it is sourced rather than derived.** |
+
+    ## Must fix
+
+    **F1, high. The load-bearing sentence of the mint decision is false, and it is the one the beat did not flag.** The document says a headless previewer structurally cannot produce a trusted user input event. **Measured false:** headless Chrome driven over CDP delivers `pointerdown`, `mousedown`, `click`, `keydown`, and `wheel` all with `isTrusted=true`. Events injected at the browser process are indistinguishable from a human's, and `isTrusted` has never discriminated automation.
+
+    Meanwhile **the half the beat did flag is true and understated.** In both headless modes with no user present, the browser **synthesizes a real focus event at 3ms** and settles at `visibilityState=visible`, `hasFocus=true`, with no `visibilitychange` ever firing. Against the measured 20-second previewer execution budget the margin is three orders of magnitude.
+
+    So rejecting visible-and-focused is correct and now has evidence, while the reason given for preferring trusted input is counterfeit. The fix is to replace the structural claim with the behavioral one that actually holds: link-preview fetchers do not click and have nowhere to click, so the gate defeats the **observed** previewer population and is **not** a barrier against an adversary who wants to burn the cap, because that adversary can inject trusted input for free. F10 and F11 inherit the same overclaim.
+
+    **F2, high. The 300-second rationale rests on a case a locked rule removes.** The document says what is left for the interval is a hard reload, a reopen, or a second tab, and that those happen on a scale of minutes. **A hard reload cannot produce a mint at all.** Manager-confirmed at `format.md:113`: "**A reload loses the key.** The reloaded page is dead and must say so." Strike it and the surviving cases are a reopen or a second tab from the original link, **neither of which is bounded in time**, so the phrase carrying the entire justification for 300 rests on the one case that cannot occur. That is worse than a judgment number with no measurement.
+
+    **Second-order, and it is inherited drift:** `service.md` 2.2 justifies the interval by "a recipient reloading the page," which is in the same tension with `format.md` §2.5. The topology document repeated it rather than catching it. Route as drift alongside the §1.7 routing already there.
+
+    **F3, high. Branch B's edge cost is justified by a reason the document's own cited source contradicts.** It claims the two-domain split is what puts something in front of Cloud Run. The page already in its manifest and quoted three times says "You can map multiple custom domains to the same Cloud Run service." Domain count is not the blocker; the preview status the document itself quotes is. The conclusion survives, but a reader who checks the stated reason lands on "branch B needs no edge, so branch B is free," dropping a standing cost from an already-tilted comparison.
+
+    **F4, high. The ALB is priced as fixed-only and two documented cost terms are missing.** The $18.25 forwarding-rule arithmetic is right and is not the whole cost. Load-balancer data processing is $0.008 per GiB inbound and outbound on the page already cited, and it lands on exactly the traffic §5.3 identifies as recurring egress that **the kill switch cannot stop**, because unfurls do not mint. Cloud Armor is named three times and priced zero times. **Manager-verified arithmetic: $5.00 per policy per month plus $1.00 per rule, so one policy with the four named rules the document deliberately creates gives a $27.25 floor rather than $18.25**, plus per-GiB and per-million-requests. Every omitted term cuts toward the rejected candidate, on a project whose cost precondition is a kill switch.
+
+    ## Should fix
+
+    **F5, medium. The availability table applies one condition and reports two dispositions.** The method says every check resolved through the IANA bootstrap. **Manager-verified against the live bootstrap, publication 2026-07-23: `.io` and `.sh` are both absent.** One row reports a registry RDAP 200 and the other reports no service in the bootstrap. The conclusion is right and independently confirmed by delegation to a parking service, but the stated basis could not have produced it, in the section whose entire value is being trustworthy about exactly this. It also lightly undercuts the beat's own operator finding: it correctly distrusted the aggregator, then recorded a basis its stated method could not yield. Every other row re-verified correct.
+
+    **F6, medium. Both branches are designed and the framing is not symmetric.** Branch A gets one benefit, two negations, and six costs. Branch B gets one loss bounded by "That is the whole of the loss," five cost-removals in positive voice, and two bonus upsides. **The sharpest tell: the passive-DNS residual is a cost of branch A and appears nowhere in A's cost list, only in B's section as B's third advantage.** A reader finishes with a clear preference. That is the smuggling the unit forbids even though no sentence picks.
+
+    **F7, medium.** The mint decision's empirical basis is a 2020 measurement asserted in the present tense, of two vendors that have both rebuilt their preview infrastructure since. The quotes verify; the date is undisclosed. The unit spec inherited the same framing, so this is not the beat's invention.
+
+    **F8, medium. The Certificate Manager mechanism verifies and its renewal half does not.** The CNAME delegation is on the cited page with a worked example and both block quotes verbatim. "Google answers the challenge on every renewal" is **not** on that page; the sentence that closes it is on the overview page, which is neither cited nor in the manifest. **A larger gap in the same section:** choosing Certificate Manager means the CA is Google and the issuance is not ACME, which **moots the entire preceding Let's Encrypt analysis**, and the document never says so. It also states no limit for the CA it does choose, where the relevant one exists: SANs capped at 100 under DNS authorization.
+
+    **F9 through F14, lower.** The third-party-edge cost assumes an unstated deployment and the worse version is missing (a third party serving the shim reads **plaintext**, not just ciphertext). `wheel` is the weakest member of the qualifying input set, since scrolling is exactly what a screenshotting previewer does. §8's "nothing here depends on the number" is wrong, because 300 seconds is a floor constraint on a sibling's validity window and should be routed as one. The 71-character URL ceiling holds over the listed candidates, not over the decision. `frame.md` marks its 120 seconds provisional and this document treats it as fixed. One citation is topical but does not address its claim, low consequence because a neighbouring quote carries it.
+
+    ## Verified clean, and it checked rather than trusted
+
+    **All 61 block quotes verbatim** under the full ordered normalization. Ten initial misses all resolved as documented false negatives: four from markup boundaries, six from locked project documents absent from its web haystack, each then confirmed by direct grep. **No mode 3 defect exists.** The make pass's six fixes held.
+
+    **The mechanical-checkability claim is true and was not taken on trust:** zero double-quoted runs of 12 or more characters outside block quotes.
+
+    **Criterion 7(b) is genuinely done**, with all three `document.domain` checks verified against MDN.
+
+    **And the document is more careful than the unit spec I wrote.** My spec said `document.domain` is "deprecated and inert by default in current Chrome." That is wrong; it is inert **with** COOP/COEP or `Origin-Agent-Cluster`, not by default. The document says "inert under modern isolation," which is correct. **It declined to repeat an overclaim it was handed**, which is the fifth manager error caught on this station.
+
+    **Nomination 3's defence holds and matters:** the sandbox download path is closed by locked rules independently of the attribution question, so the Safe Browsing framing is load-bearing rather than decorative. The document's handling of the open residual is exemplary and should not be softened.
+
+    Gates re-verified, orphan check clean both directions, criterion 16 clean with **no decision-by-implication** against the four foreign routed items. Arithmetic re-derived rather than read, with no factor-class error anywhere.
+
+    ## Suggested order
+
+    F1 and F2 change what the document asserts and are both cheap. F3 and F4 make the edge decision honest without changing it. F5, F6, F8 are integrity repairs to sections whose conclusions stand. The rest are one-sentence additions. **Nothing here argues for reversing a decision.**
 reviews:
   fit:
     at: 2026-07-30T11:40:36.253906+00:00

@@ -130,6 +130,16 @@ gate_results:
   at: 2026-07-30T08:45:19.711151+00:00
   attempts: 1
   detail: '`test -f docs/spec/publish.md` exits 0. Run by the manager in the unit worktree at commit e6ebc99, not taken from a beat''s self-report.'
+- name: substance-floor
+  status: pass
+  at: 2026-07-30T08:45:25.864890+00:00
+  attempts: 1
+  detail: |-
+    `test "$(wc -w < docs/spec/publish.md)" -ge 2200` exits 0. Actual: 11804 words, up from 8832 at the writer's commit. Largest artifact in the station.
+
+    **Density was measured rather than asserted, because this unit's size was the one open question the adversary was told not to take on trust.** It compared all three siblings with an identical script: publish 65.1 words per rule, service 68.4, format 71.2. The largest document is also the **densest**, sitting at the lean end of the run's own recorded 60-to-85 band. Length was never the defect.
+
+    The +2972 is thirteen findings and seven verdict items at roughly 149 words each: three new error codes, four new rules in 4.3, the F1 collision trace written out end to end, the three-candidate grant-shape table, and the F5 branch analysis. Nothing decided was cut to hold a number, consistent with the precedent set three times earlier at this station.
 ---
 
 # Goal

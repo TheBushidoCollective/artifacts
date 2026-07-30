@@ -5,6 +5,7 @@ status: pending
 depends_on:
 - design-storage-grant-and-cost
 - design-topology-and-origins
+- design-product-surface
 worker: ''
 model: opus
 station: shape
@@ -13,6 +14,7 @@ inputs:
 - spec.md
 - docs/design/storage.md
 - docs/design/topology.md
+- docs/design/surface.md
 outputs:
 - docs/design/operations.md
 - docs/design/operations.sources.txt
@@ -35,7 +37,7 @@ Write `docs/design/operations.md`: the abuse pipeline, the monitoring surface, a
 
 **Read first:** `darkrun_knowledge_list`, especially `legal-obligations-of-a-no-accounts-hosting-service`, `safe-browsing-delisting-and-why-a-zero-knowledge-operator-cannot-comply`, `egress-cost-controls-and-what-a-kill-switch-cannot-stop`, `abuse-liability-of-hosting-uninspectable-content`.
 
-Then read `docs/frame.md` and `docs/preconditions.md`, locked; `docs/spec/service.md` §§1.4, 4, 4.1, 5, 6; and sibling inputs `docs/design/storage.md` and `docs/design/topology.md`. **If either is missing, fetch via `git show darkrun/relic/units/shape/<unit>:<path>` and report which path you used.**
+Then read `docs/frame.md` and `docs/preconditions.md`, locked; `docs/spec/service.md` §§1.4, 4, 4.1, 5, 6, **and §7 item 6, the published SLA, which is the one routed decision that is yours**; and sibling inputs `docs/design/storage.md`, `docs/design/topology.md`, and `docs/design/surface.md`. **If any is missing, fetch via `git show darkrun/relic/units/shape/<unit>:<path>` and report which path you used.** `surface.md` decides every recipient-facing screen, including whether the viewer distinguishes cap exhaustion from takedown; you consume that decision and do not redecide it.
 
 # The boundary you must hold, and it is itself a deliverable
 
@@ -66,6 +68,8 @@ Specify the intake-to-resolution path end to end, distinguishing:
 - **Automatable:** receipt acknowledgement, which satisfies the confirmation duty; URL-to-ID extraction; delete-by-ID; ciphertext-hash blocklist add; publishing-IP lookup; bulk delete by publishing IP and time window. Most of these already exist in `service.md` §4.
 - **Not automatable:** the criminal-threat branch, a mandatory-report filing, a law-enforcement request, a reconsideration request, and the judgement of whether a report is credible at all. **That last one is answered by §1, which is what makes one person viable.**
 
+The abuse form's categories, including whether a personal-data category appears and what it is labelled, are `design-product-surface`'s and arrive in `docs/design/surface.md`. **Read what it decided and design the handling behind each category it shipped.** State the need if a category you need is not there; do not add one to the form yourself.
+
 ## 3. The reconsideration artifact, which must exist before it is needed
 
 The listing appeal is not a remedy the operator controls: canonicalization strips the fragment, so the sample URL handed to the operator is the one form of the link that cannot open the content, and the review flow asks the operator to confirm the issue, fix it, and document the outcome. **The only truthful request a zero-knowledge operator can file describes a process and a takedown log rather than a fix.** So specify that document now, name where it lives, and state that it must be publishable before the first listing rather than written under one.
@@ -78,13 +82,17 @@ Specify the standing checks, each with what it catches and what its absence lose
 
 ## 5. Two leaks and one non-issue, none of which any document owns
 
-- **Cross-relic correlation.** `format.md` concedes per-relic length leakage paired with the stored class. The aggregate is not stated anywhere: the mint log retains requesting IP and the relic row holds class and size, so across many relics from one publishing IP the operator holds a cadence and size profile that fingerprints a pipeline or a person. `frame.md` requires publishers to see all of it before publishing, so decide where this is disclosed.
-- **Cap exhaustion and takedown are the same experience for a recipient.** Both return the same status, and the distinct codes are for the operator's log rather than the recipient's screen. Scanners can exhaust a cap before a human opens the link, producing a ticket indistinguishable from "the operator deleted my file." Decide whether the viewer distinguishes them, and note the support-load consequence either way.
-- **Enumeration is settled and should be recorded as settled**, so a later station does not relitigate it as a reason to shorten IDs. At the entropy floor already fixed, walking the ID space is arithmetic rather than a threat model.
+**This section is the highest-value gap-closing work in the unit and criterion 11 forces all three items. None of them closes by omission.**
+
+- **Cross-relic correlation.** `format.md` concedes per-relic length leakage paired with the stored class. The aggregate is not stated anywhere: the mint log retains requesting IP and the relic row holds class and size, so across many relics from one publishing IP the operator holds a cadence and size profile that fingerprints a pipeline or a person. `frame.md` requires publishers to see all of it before publishing, so **decide where this is disclosed.** The published disclosure statement in `service.md` §5 is yours for legal content, so this is your sentence to write. `design-product-surface` writes the sentence at the publishing moment in the MCP tool result, which is a different surface.
+- **Cap exhaustion and takedown are the same experience for a recipient.** Both return the same status, and the distinct codes are for the operator's log rather than the recipient's screen. Scanners can exhaust a cap before a human opens the link, producing a ticket indistinguishable from "the operator deleted my file." **The screen is `design-product-surface`'s decision and it arrives in `docs/design/surface.md`. Do not decide it.** State the need from your side and consume the answer: read what surface decided, state the support-load consequence that follows for §2's intake pipeline, and specify how a ticket that cannot be told apart from a takedown complaint is triaged under §1's delete-on-plausible-report rule. Whether the exhaustion case can arise at all is `design-topology-and-origins`'s mint-trigger decision, which you also read; state which branch it took.
+- **Enumeration is settled and should be recorded as settled**, so a later station does not relitigate it as a reason to shorten IDs. At the entropy value `design-container-and-crypto` decided, walking the ID space is arithmetic rather than a threat model. Quote the decided number rather than the floor. **This is forward-looking protection for `build` and nothing else in this station checks that it was written.**
 
 ## 6. The price of yes, stated as a list the operator can answer
 
-Close with the commitment, itemized and concrete, covering at minimum: the designated agent as a named human at a publicly listed street address with its renewal clock and the narrow waiver condition; the possible EU representative who can be held liable, with geoblocking named as a real alternative; the published SLA in hours, which no regime anchors and which becomes the standard the operator is measured against; the second verified owner; availability for the criminal-threat and mandatory-report branches with the statutory exposure named; and acceptance of delete-on-report with no adjudication.
+Close with the commitment, itemized and concrete, covering at minimum: the designated agent as a named human at a publicly listed street address with its renewal clock and the narrow waiver condition; the possible EU representative who can be held liable, with geoblocking named as a real alternative; **the published SLA as a number of hours**; the second verified owner; availability for the criminal-threat and mandatory-report branches with the statutory exposure named; and acceptance of delete-on-report with no adjudication.
+
+**The SLA is `service.md` 7.6 and it is a routed decision, not a line item.** Price it against the inputs in 4.1. No regime anchors it, so whatever number is published becomes the standard the operator is measured against. A list entry reading "the published SLA in hours" satisfies nothing; the number is the decision.
 
 **State plainly that deciding no now is a good outcome for this run, and deciding it after launch with relics in the wild and a suspension notice running is the bad one.**
 
@@ -107,9 +115,11 @@ Direct, dry, confident, contractions natural. **Never an em-dash or en-dash.** N
 7. **The pipeline separates automatable from non-automatable steps** and names every step in each.
 8. **The reconsideration artifact is specified** and stated as required before the first listing.
 9. **The monitoring surface names each standing check with what its absence loses.**
-10. **The price of yes is an itemized list the operator can answer**, with statutory exposure named where it exists.
-11. **Every quoted string is verified verbatim against raw source text, and the beat reports the audit as a list.** Legal text especially: quote it or do not claim it.
-12. `grep -c '[—–]' docs/design/operations.md` returns 0.
+10. **The price of yes is an itemized list the operator can answer**, with statutory exposure named where it exists, **and every item that routes a number carries the number. The published SLA is stated in hours as a decided value**, not as a line item to be filled in later.
+11. **Section 5's three items are each written and none is left implicit:** where cross-relic correlation is disclosed, decided as a location; what follows for the pipeline from `design-product-surface`'s cap-exhaustion-versus-takedown decision, read from `docs/design/surface.md` and named, including how such a ticket is triaged; and enumeration recorded as settled at the entropy value `design-container-and-crypto` decided, so a later station does not relitigate it as a reason to shorten IDs.
+12. **The one routed decision assigned to this document is decided: `service.md` 7.6, the published SLA in hours.** It is a number, priced against `service.md` 4.1's inputs, and it is the only routed item that is yours.
+13. **Every quoted string is verified verbatim against raw source text, and the beat reports the audit as a list.** Legal text especially: quote it or do not claim it.
+14. `test "$(grep -c '[—–]' docs/design/operations.md)" -eq 0` exits 0.
 
 # Files touched
 
@@ -118,5 +128,6 @@ Direct, dry, confident, contractions natural. **Never an em-dash or en-dash.** N
 # Out of scope
 
 - The container format, the grant construction, origins, and art direction. Owned by the four siblings.
+- **Recipient-facing screens and their copy, including the cap-exhaustion screen and the abuse form's category labels. Sibling `design-product-surface`.** You own the pipeline behind them and the legal content of the published disclosure statement; surface owns the screens and the sentence at the publishing moment in the MCP tool result.
 - Choosing whether to build. This unit prices the decision; the operator makes it.
 - Product code.

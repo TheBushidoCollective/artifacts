@@ -44,3 +44,4 @@
 {"at":"2026-07-30T12:24:47.231387+00:00","event":"darkrun.unit.completed","run":"relic","station":"shape","unit":"design-container-and-crypto"}
 {"action":"manufacture","at":"2026-07-30T12:25:15.057386+00:00","event":"darkrun.manager.action","run":"relic","station":"shape"}
 {"at":"2026-07-30T13:39:09.892715+00:00","event":"darkrun.unit.completed","run":"relic","station":"shape","unit":"design-topology-and-origins"}
+{"action":"manufacture","at":"2026-07-30T13:39:22.289215+00:00","event":"darkrun.manager.action","run":"relic","station":"shape"}

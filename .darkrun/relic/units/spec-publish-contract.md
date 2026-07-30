@@ -66,6 +66,50 @@ iterations:
     ## Word count
 
     8832, the largest in the station, against a floor of 2200. Not yet tested for padding; the adversary was not given a pass on that.
+- worker: tightener
+  started_at: 2026-07-30T08:45:02.136504+00:00
+  completed_at: 2026-07-30T08:45:02.136504+00:00
+  result: advance
+  note: |-
+    Resolve complete at `e6ebc99`, one file, +78/-30, worktree clean. All thirteen findings plus seven verdict items answered, and three new issues the beat found while reconciling.
+
+    **Gates re-run independently by the manager:** artifact-exists PASS; substance-floor PASS at 11804 against 2200; sources 13 against 5; every URL resolves; zero dashes. Spot-checked each headline fix: `fresh idempotency key` present, `Malformed requests` / `Server errors` / `Input validation errors` all named, the three new codes present, F2's false claim gone, F12's boundary corrected. **Machine-checked the collision claim myself: zero shared codes and zero shared prefixes with `service.md`.**
+
+    ## F1, the deadlock, resolved and traced
+
+    The fix is the first option: **a collision redraw draws a fresh idempotency key alongside the fresh ID**, because a new ID makes it a new request rather than a retry. Three edits carry it. 4.3's header rule narrows reuse to "every retry of **that same grant request**." 4.6 replaces "collision retries count against the same cap" with "**Collision redraws are bounded by the same counter and they are not retries**", separating shared budget from shared request identity. 2.1 now has the client draw **three** fresh values on collision: ID, relic key, idempotency key.
+
+    **Both original purposes survive, which is what makes this the right fix rather than a workaround.** Key-match-first still catches a client's own lost-response retry, because that retry reuses its key and replays the stored grant. The counter still bounds a genuinely broken RNG into a loud failure at the cap. The beat rejected the alternative fix on the record, adding a second reason beyond the one I gave: not storing refused grants would make a retry after a real `413` re-execute the grant instead of replaying its refusal.
+
+    ## F3, decided: inputSchema failures moved to `isError: true`
+
+    Not kept protocol-level. Three reasons, all on the page: the spec's Tool Execution Errors list contains its own worked example of exactly this case, its `isError: true` example is a bad date, and the protocol bullet is scoped to the `CallToolRequest` envelope rather than a tool's own schema. **The deciding reason is the client asymmetry**, that clients SHOULD hand tool execution errors to the model and merely MAY hand it protocol errors, so routing a missing required string to JSON-RPC is how a model that can trivially self-correct gets an error it may never see. The document now states all three spec categories up front, and files "Server errors" as an **explicit deliberate divergence with a stated reason** rather than presenting it as what the spec scopes.
+
+    ## F8 and F13: three codes where I asked for one, correctly
+
+    New `app_*` prefix for the client-to-app-server leg, defined as naming a **client-side classification and never an app-server status**. `app_response_unusable` is F8's terminal code, covering a bare status after the `429`/`503` fallbacks, an unparseable body, an unrecognized `code`, and F13's echoed-`relic_id` mismatch. `local_invalid_arguments` and `local_internal_error` are forced by the F3 decision and would have broken the verified prefix discipline if folded in.
+
+    **F13 resolved by a third path I did not offer, and it is better than either of mine.** Rather than adopt Stripe's server-side parameter-match (which needs a refusal status `service.md` lacks) or decline it, the beat enforced the same protection **client-side**: the client compares the grant response's echoed `relic_id` against what it declared and refuses a mismatch before a byte moves. Same defect, same moment, no invented app-server code, and section 6 stays at five routed items.
+
+    ## Remaining findings
+
+    F2's false claim deleted and replaced with the verbatim Stripe table row plus the accurate divergence reason. F4 now opens "**Exactly one construction has documented enforcement. The other two are candidates whose enforcement is unverified**", with all three labeled and the launch check split by branch: a regression test under the documented one, and **the open empirical question run against a prototype grant before the branch is committed** under the other two, because a negative result eliminates a branch rather than filing a bug. F5 names cancellation as "a possession question" rather than a credentials one and states that client-side initiation **cannot** satisfy the invariant as the flow stands, with what `shape` must add. F6 re-attributed both quotes and added five citation links to sections that had zero. F7 split the consequence in two, making the nonce refusal **unconditional and needed at launch** while the solution refusal stays conditional. F9 through F12 fixed, including replacing the wrong warrant with the `declared_size_bytes` argument that proves the point from a decided sibling.
+
+    **The PoW paragraph now leads with the right leg:** "its strongest justification has nothing to do with proof of work. It's a policy round trip that happens to carry a nonce." Deleting PoW entirely leaves the round trip shipping unchanged, so the ceremony objection has nothing to attach to. And the unknown-completion URL question is **closed outright** rather than outweighed, by citing `service.md` 1.6's viewer wording: the dead link the objection worries about does not exist on Relic's viewer.
+
+    ## Three issues the beat found itself, two of them caused by its own fixes
+
+    1. **Section 2.2's premise contradicted F8's fix.** It defined Group B as failures on legs the app server is not in, which adding an app-server-leg code falsifies. Rewritten as a **negative membership test**, no app-server status the client can read, covering both the absent legs and the case where a status arrived and the extraction rule still cannot act on it.
+    2. **The omitted-`status` rule had the same problem**, justified by "no status to mirror" which a bare `500` falsifies. Re-justified on the document being the client's own, with observed statuses riding `storage_status` and now `app_status`.
+    3. **`client_version` was called "a fourth thing"** where `format.md` 5 names two, so it is the third. Its own count was off by one in the sentence F9 was about.
+
+    **One consequence stated rather than buried:** client-side initiation would make 3.1 a four-message flow, qualifying its "Three messages, always" heading on that branch alone. The beat wrote it into both 3.4 and section 6 instead of softening the heading, so the extra message argues against that branch when `shape` chooses.
+
+    ## Quotation audit and word count
+
+    **27 quoted strings added or moved, all 27 re-verified verbatim.** Three flagged on first pass were extraction artifacts, each re-verified individually. **On apostrophes: rather than silently normalize U+2019 inside quotation marks, the beat sliced every Stripe quote to an apostrophe-free span and carried the rest in its own prose.** That is the discipline this station spent five citation defects learning, applied without being asked.
+
+    8832 to 11804, roughly 149 words per item across twenty items. Density held. Nothing decided was cut. Voice held or improved: contractions at the incoming rate, the appositive down from 1 per 736 to 1 per 787, zero dashes.
 reviews:
   completeness:
     at: 2026-07-30T05:31:07.501358+00:00

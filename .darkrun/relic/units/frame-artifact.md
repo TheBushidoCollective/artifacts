@@ -75,16 +75,16 @@ gate_results:
   at: 2026-07-30T02:57:33.811944+00:00
   attempts: 1
   detail: exit=0. All 13 URLs fetched with curl -sfL. Pre-screened 22 candidates first; no URL-shape templates (file.kiwi/abcdef12#secretKey, wormhole.app/{roomId}) included.
-- name: substance-floor
-  status: pass
-  at: 2026-07-30T02:59:12.389919+00:00
-  attempts: 2
-  detail: Re-run after fixing the trust-condition wording. `test "$(wc -w < docs/frame.md)" -ge 1300` exit=0. Final word count 2542, floor 1300. All four gates re-run green at commit 5e19438.
 - name: artifact-exists
   status: pass
   at: 2026-07-30T03:10:50.056460+00:00
   attempts: 2
   detail: Challenger beat re-run. `test -f docs/frame.md` exit=0 in the frame-artifact worktree after the cut-and-fix pass.
+- name: substance-floor
+  status: pass
+  at: 2026-07-30T03:10:52.383454+00:00
+  attempts: 3
+  detail: Challenger beat re-run after cutting. `test "$(wc -w < docs/frame.md)" -ge 1300` exit=0. Word count now 2411, down from 2542. Floor 1300.
 ---
 
 # Goal

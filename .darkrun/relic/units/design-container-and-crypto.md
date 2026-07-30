@@ -6,6 +6,9 @@ depends_on: []
 worker: ''
 model: opus
 station: shape
+inputs:
+- frame.md
+- spec.md
 outputs:
 - docs/design/container.md
 - docs/design/container.sources.txt

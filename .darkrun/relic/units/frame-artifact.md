@@ -109,11 +109,6 @@ quality_gates:
 - name: every-cited-url-resolves
   command: bash -c 'set -eu; while IFS= read -r u || [ -n "$u" ]; do [ -n "$u" ] || continue; curl -sfL --max-time 25 --retry 2 -A "Mozilla/5.0 (relic-link-check)" -o /dev/null "$u"; done < docs/frame.sources.txt'
 gate_results:
-- name: artifact-exists
-  status: pass
-  at: 2026-07-30T03:10:50.056460+00:00
-  attempts: 2
-  detail: Challenger beat re-run. `test -f docs/frame.md` exit=0 in the frame-artifact worktree after the cut-and-fix pass.
 - name: substance-floor
   status: pass
   at: 2026-07-30T03:10:52.383454+00:00
@@ -129,6 +124,11 @@ gate_results:
   at: 2026-07-30T03:11:06.202549+00:00
   attempts: 2
   detail: Challenger beat re-run. exit=0. All 11 URLs fetched individually with curl -sfL --max-time 25 --retry 2; each printed OK. No URL-shape templates present.
+- name: artifact-exists
+  status: pass
+  at: 2026-07-30T03:18:27.793212+00:00
+  attempts: 3
+  detail: Distiller beat, final state. `test -f docs/frame.md` exit=0 in the frame-artifact worktree after four reconciliation edits.
 ---
 
 # Goal

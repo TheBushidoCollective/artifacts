@@ -53,6 +53,52 @@ iterations:
     ## Open, not blocking this beat
 
     The station branch and the run branch both carry a unit generation several rounds stale: format 2000, viewer 2200, publish 1800, service 1800, viewer's route list still holding the mint-response clause, and publish still holding the pre-split `isError` bullet. The engine dispatched this beat from current state, so the contract the beat worked against was correct, and 4644 clears every floor variant. Verify at the land boundary that the `main -> darkrun/relic/main -> darkrun/relic/specify` sync carries the current definitions forward rather than the stale ones overwriting them.
+- worker: adversary
+  started_at: 2026-07-30T06:06:33.437487+00:00
+  completed_at: 2026-07-30T06:06:33.437487+00:00
+  result: advance
+  note: |-
+    Adversary returned **verdict: does not satisfy the contract as written.** Criterion 4 fails, criteria 5 and 10 carry defects, criteria 1, 2, 3, 6, 7, 8, 9 pass cleanly. Eleven findings. No files edited, no commits, findings only, as instructed.
+
+    **Two of the three high findings were independently re-verified by the manager against live sources, because this run has now produced three confidently-stated wrong facts that only a second reader caught.** Both confirmed:
+    - The MDN `SubtleCrypto/encrypt` page returns **zero** hits for `192` and zero for key length. It says nothing about AES key-size browser support.
+    - The GCS metadata docs say verbatim: "After you have created a custom metadata key:value pair, you can delete the key or change the value."
+
+    ## What the tightener must fix
+
+    **F1, high, factual.** Section 2.3 cites MDN for "192-bit AES-GCM is untested across browsers." The page does not say that. This matters because 4.2 narrows a routed decision to "128 or 256 bits, **per the browser constraint**," so `shape`'s option set is being constrained by a source that does not support it. The conclusion survives on the terminal-character arithmetic alone, which was verified correct. Drop the clause or re-source it, and re-warrant 4.2.
+
+    **F2, high, inverted reasoning, the most serious finding.** Section 1.1 justifies having no canonicalizing redirect by invoking RFC 9110 §10.2.2 fragment inheritance. The quoted mechanism is verbatim correct, but the rule is a **cross-origin** rule (§17.11, "disclosing one site's fragment to another site"), and an ID-case canonicalizing redirect is **same-origin**, where inheritance is the desired behavior. Worse, applied literally the rule deletes the key: the server never sees the fragment, so the only explicit fragment it can emit is an empty one, and an empty fragment blocks inheritance. A later station following 1.1 as written ships a viewer that loses the key on every redirected request. Third, the real cross-origin rule never reaches `spec-service-surface`, which owns routing. Keep the conclusion, rewrite the justification, and put the actual rule in section 5 in its cross-origin form with the service-to-sandbox case named.
+
+    **F3, high, factual.** Section 4.6 claims the app server "can't set metadata on an object it never touches," therefore custom metadata is "client-declared, omissible, and forgeable." All three fail. The server holds bucket-mutating credentials already, since delete-by-ID is a v1 control, so it can patch metadata post-upload. And signed metadata headers in the grant's `SignedHeaders` cannot be altered without invalidating the signature, which the document's own next sentence concedes. The adversary traced the error's origin precisely: the knowledge topic states the true narrower fact, that the app server cannot set **response headers** on a GCS-served object, and the document generalized that into object metadata. Replace the impossibility claim with the real constraint so 4.6 becomes an open question rather than a closed one.
+
+    **F4, medium-high, contract.** Key encoding is resolved in 2.3 (unpadded base64url) and re-routed as an open pick in 4.2. Both cannot be true. 2.3 wins; narrow 4.2 to key length only.
+
+    **F5, medium-high, contract.** Section 5's `spec-publish-contract` bullet says "nothing content-descriptive crosses to the server," contradicting its own cited section 3.2 (renderer class goes in a server-side record) and the locked frame (the coarse class is the entire concession). Handed that summary, `spec-publish-contract` has grounds to omit the class from the publish body, which breaks the frame's primary metric at its root since the class is telemetry item 1. Section 5 also drops two obligations the body assigns: `Referrer-Policy: no-referrer` to `spec-viewer`, and the redirect rule to `spec-service-surface`. Every other section 5 claim was verified line by line against its cited section and holds.
+
+    **F6, medium, gap.** Excluding the class from the container is correct, but it removes the precondition for the run's own disagreement rule, which needs a **declared** type at the viewer to close the polyglot class. With the class only in a server-side record, the viewer has no declared type unless the mint response carries it, and the document does not say whether it does. Pick: either the mint response returns the class (leaks nothing new, the operator already holds it) or the first release is sniff-only and the disagreement rule is explicitly deferred. This is a container question, so it belongs here.
+
+    **F7, medium, padding.** 4644 words at 172 per mandated item against a calibrated 60 to 85. The adversary judged this document long rather than the estimate low, with measured per-section counts. Section 0 (152 words) relitigates the locked URL shape and its rebuttal does not work, answering what the server learns when the claimed property was about `Referer` and proxy logs, then paying that exact cost two sentences later. Section 1.2 (362) enumerates a position nobody proposed. Section 3.1 (376) re-derives the range-decryption chain already stated in `frame.md`. Six rules are stated twice or three times. Section 4 should reference its sections rather than re-explain them.
+
+    **F8, medium, unresolved mandated detail.** Crockford ignores hyphens on decode. The document says lookup "applies Crockford's decode aliases," which leaves hyphen handling undecided, while 1.5's structural guard asserts IDs have "no `-`." If lookup implements Crockford faithfully, every ID gets unbounded spellings and the fixed-length guard breaks. Decide it. "Hyphens are rejected, not stripped" is cheaper and keeps the length guard exact.
+
+    **F9, medium, reasoning.** 1.5 names the alphabet as the primary guard and length as the shaky one. Backwards, and the document's own 1.2 proves it: a 122-bit floor at 5 bits per character is 25 characters minimum, and the longest reserved word is 20. Length excludes every reserved word by at least 5 characters under the weakest permitted entropy. Also, "unspellable" is true of encoding and false of accepted input: under the document's own alias folding, `policy`, `api`, and `health` fold to valid Crockford strings. The append rule must compare **normalized** forms.
+
+    **F10, low.** The `idlen != 0` refusal has no stated refusal point, unlike 3.7 which gives version refusals two. It is necessarily after-the-fetch; say so.
+
+    **F11, low, voice.** Zero em-dashes and en-dashes, confirmed. One instance of the banned "isn't a tradeoff, it's a trap" construction in 2.1. Separately, the "X, not Y" appositive runs 24 times in 4644 words, roughly one per 195 words, which reads as a tic at that density. Thinning it by half costs no decisions.
+
+    ## The five flagged calls: the beat was right on all five
+
+    The adversary confirmed every judgment call and said so plainly rather than manufacturing objections. Excluding the class from the container is the recorded knowledge correction applied correctly. The `idlen` MUST-refuse is justified because RFC 8188 explicitly invites human-readable strings into `keyid`, which is exactly the quiet frame violation this spec names. Crockford for the ID is right, and the adversary found a **stronger** warrant the document did not use: the abuse policy already commits to asking for the relic ID alone, so ID-in-isolation is a designed workflow rather than a hypothesis. The reserved set is fine and its spellability claim verified character by character. No canonicalizing redirect is the right conclusion via wrong reasoning, per F2.
+
+    ## Verified clean, do not spend tightener effort here
+
+    Zero dashes. Manifest hygiene passes byte-level including trailing newline. Orphan check clean both directions. All 21 mandated items addressed and no seventh item routed. Criteria 6 through 9 pass on substance. **No silent frame violation on the filename**, checked specifically as the named likely one: 3.2 puts filename and mimetype in the encrypted envelope only, 2.4 rejects fragment placement with the correct audience argument, and the check is named. No relitigating of locked material except section 0. Scope leaks are three single clauses, all arguably required. No Relic parameter fixed to a value the Route list assigns to `shape`. The container chain (3.1, 3.3, 3.9, 3.11) is mutually consistent and is the strongest reasoning in the document.
+
+    ## Fact-check ledger
+
+    Sixteen of eighteen load-bearing claims verified correct, most verbatim: the RFC 8188 header layout, padding delimiter values, header-outside-AEAD, §4.7 and §4.3 quotes with correct section numbers, the `keyid` SHOULD-be-UTF-8 line, the exact GFM trailing-punctuation set, the Crockford exclusions and alphabet, and the wormhole-crypto API. The base64url arithmetic was independently re-derived over 300k samples: 16 bytes yields final indices exactly {0,16,32,48}, 32 bytes yields multiples of 4 capped at 60, and 24 bytes yields all 64 including 62 and 63, so the multiple-of-three claim is confirmed. Two failed, F1 and F3. One partial: the MCP entropy guidance is quoted loosely and its source section is labeled non-normative, while the document presents it as spec authority.
 reviews:
   completeness:
     at: 2026-07-30T05:31:07.501358+00:00

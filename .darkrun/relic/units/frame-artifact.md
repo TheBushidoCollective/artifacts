@@ -65,11 +65,6 @@ quality_gates:
 - name: every-cited-url-resolves
   command: bash -c 'set -eu; while IFS= read -r u || [ -n "$u" ]; do [ -n "$u" ] || continue; curl -sfL --max-time 25 --retry 2 -A "Mozilla/5.0 (relic-link-check)" -o /dev/null "$u"; done < docs/frame.sources.txt'
 gate_results:
-- name: artifact-exists
-  status: pass
-  at: 2026-07-30T02:57:20.603686+00:00
-  attempts: 1
-  detail: '`test -f docs/frame.md` exit=0 in the frame-artifact worktree.'
 - name: sources-manifest-populated
   status: pass
   at: 2026-07-30T02:57:31.400331+00:00
@@ -85,6 +80,11 @@ gate_results:
   at: 2026-07-30T02:59:12.389919+00:00
   attempts: 2
   detail: Re-run after fixing the trust-condition wording. `test "$(wc -w < docs/frame.md)" -ge 1300` exit=0. Final word count 2542, floor 1300. All four gates re-run green at commit 5e19438.
+- name: artifact-exists
+  status: pass
+  at: 2026-07-30T03:10:50.056460+00:00
+  attempts: 2
+  detail: Challenger beat re-run. `test -f docs/frame.md` exit=0 in the frame-artifact worktree after the cut-and-fix pass.
 ---
 
 # Goal

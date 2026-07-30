@@ -12,6 +12,9 @@ inputs:
 outputs:
 - docs/preconditions.md
 - docs/preconditions.sources.txt
+reviews:
+  feasibility:
+    at: 2026-07-30T02:44:12.712554+00:00
 quality_gates:
 - name: artifact-exists
   command: test -f docs/preconditions.md

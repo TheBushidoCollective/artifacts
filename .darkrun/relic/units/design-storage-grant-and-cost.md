@@ -182,6 +182,11 @@ gate_results:
   at: 2026-07-30T15:08:21.144184+00:00
   attempts: 1
   detail: 18 non-empty lines against a floor of 6, one URL per line, trailing newline present. Up from 17 at the designer beat; the added source is the GCS request-preconditions page, cited by D15's leaf-4 preservation sentence for `x-goog-if-generation-match`.
+- name: every-cited-url-resolves
+  status: pass
+  at: 2026-07-30T15:08:36.443285+00:00
+  attempts: 1
+  detail: 'All 18 URLs return 2xx under the gate''s own curl invocation, manager-run. Orphan check clean both directions, 18 cited and 18 listed. Worth recording that this gate is the weakest in the set: it passed on all five citation defects `specify` shipped, on the 21 found here, and on the manager''s own wrong-table misreading. What actually caught those was the verbatim sweep plus, new this unit, resolving each match offset to its enclosing heading.'
 ---
 
 # Goal

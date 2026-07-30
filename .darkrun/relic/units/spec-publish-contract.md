@@ -1,7 +1,7 @@
 ---
 name: Specify the MCP tool surface and the publish contract
 unit_type: doc
-status: pending
+status: in_progress
 depends_on:
 - spec-relic-format
 - spec-service-surface
@@ -15,6 +15,57 @@ outputs:
 - docs/spec/publish.md
 - docs/spec/publish.sources.txt
 branch: darkrun/relic/units/specify/spec-publish-contract
+started_at: 2026-07-30T07:59:00.999395+00:00
+iterations:
+- worker: spec_writer
+  started_at: 2026-07-30T07:59:00.999395+00:00
+  completed_at: 2026-07-30T07:59:00.999395+00:00
+  result: advance
+  note: |-
+    `docs/spec/publish.md` (8832 words) and `docs/spec/publish.sources.txt` (13 URLs) committed at `4a9507c`. Worktree clean. Both siblings read via the unit-branch refs the manager verified in advance; the station refs still do not resolve.
+
+    **Gates re-run independently by the manager:** artifact-exists PASS; substance-floor PASS at 8832 against 2200; sources 13 against 5; every URL resolves; zero dashes. Spot-checked criterion 15 (`relic_id_collision` cited three times) and four Group B codes present.
+
+    ## Criterion 14 worked, and it caught a defect during writing rather than after
+
+    **This is the first unit to carry the quotation-audit criterion, and it paid for itself on the first pass.** The beat pulled raw source text (RFCs as `.txt`, MCP and Claude Code docs as raw `.md`, GCS and Stripe tag-stripped), then **programmatically string-matched every double-quoted span** against it, normalizing only whitespace, RFC line-wrap de-hyphenation, and the space-before-punctuation artifact HTML stripping introduces.
+
+    **47 quoted strings audited. All confirmed verbatim, one corrected mid-draft.** Item 25 closed an RFC 8188 quote as `...is not safe."` where the source reads `...is not safe [RFC5116].`, so the period was not part of the quoted string. Moved outside. **Manager-verified: the committed file reads `is not safe".`** That is a one-character defect inside quotation marks, the exact class that shipped four times across the sibling units, and it was caught by string comparison rather than by reading.
+
+    The beat also declined one quote deliberately: it worked around the phrase "leaks the cipher's authentication key" because the source uses a typographic apostrophe and reproducing it as ASCII would have been a one-character alteration inside quotation marks. It additionally listed the seven quoted strings that are **coined phrasing rather than citations**, so no reader mistakes them for sources.
+
+    ## The beat corrected the manager's brief, and was right
+
+    **Judgment call (a), independently verified by the manager against the Claude Code docs: all three strings confirmed present.** My brief gave 60-second time-to-first-byte and a five-minute idle timeout. Those are HTTP-side figures. The publishing client is **stdio**, where the docs say "Stdio and WebSocket servers have no per-request timer" and the idle window is "30 minutes for stdio servers".
+
+    The beat kept the progress requirement in full, restated the numbers for the transport Relic actually uses, and gave four reasons it still binds (user-settable idle variable, cap-sized uploads on poor links, an eventual remote surface, and that designing to the tighter figure costs nothing). It also surfaced a property that is easy to get backwards and is load-bearing: **progress defeats the idle timeout and does not defeat the wall-clock limit**, which "is a hard wall-clock limit per tool call, and progress notifications from the server don't extend it."
+
+    This is the sixth upstream claim a beat has corrected on this run.
+
+    ## Decisions the siblings and `shape` consume
+
+    - **`outputSchema` declared and strict**, seven required success members, `structuredContent` on success only. Every failure returns `isError: true` with **no `structuredContent`**, carrying the RFC 9457 problem document in a text block. The legality argument is sharper than the brief's: the spec binds "structured results that conform to this schema", which constrains what a server provides rather than obliging one on every call.
+    - **`isError` rule:** protocol-level JSON-RPC errors for exactly two cases, unknown tool name and `inputSchema` validation failure, both defects the tool body never runs for. Everything else sets `isError: true`.
+    - **Twelve Group B codes**, leg-prefixed (`source_*`, `local_*`, `upload_*`), none colliding with `service.md`'s thirteen. **Three size refusals distinguished**, not two: `local_size_precheck_failed`, Group A's `size_over_cap`, and `upload_size_refused`. Group B problem documents **omit `status`** (RFC 9457: "The 'status' member, if present, is only advisory") and put storage-leg codes in a `storage_status` extension so nobody reads a GCS code as an app-server one.
+    - **Group A invents nothing.** All eight rows map onto statuses, codes, and field names already fixed in `service.md` 1.1 and 1.6.
+
+    ## Where the adversary should push
+
+    Seven judgment calls surfaced, plus two sourced findings. Priority order:
+
+    1. **PoW: the contract is decided now and only difficulty is routed.** Challenge-then-grant **unconditionally**, difficulty zero in the first release, solution member present but unvalidated. Reasoning: a conditional round trip is the same foreclosure in disguise, because the conditional branch never gets exercised. **Names a consequence rather than absorbing it: turning difficulty on creates a grant-time refusal `service.md` has no code for, and that code is `service.md`'s to add.**
+    2. **The URL is emitted on the three unknown-completion upload failures**, inside the problem document and never in a typed field. Reasoning: the key lives only in process memory, so discarding it on an ambiguous failure means a landed object consumes quota and egress until TTL while being permanently unreadable by anyone including the publisher.
+    3. **Idempotency serializes rather than returning an in-flight status.** The brief cited 409 as prior art; the current Stripe page does not say that, and inventing an app-server status is barred. Added rule: **key match is checked before ID existence**, without which a client's own retry hits `409 relic_id_collision` and follows the redraw instruction, which is exactly wrong for a duplicate of itself.
+    4. **The `resource_link` phantom-open claim was qualified rather than restated.** Under `service.md` section 2, fetching `/{id}` returns a static shell and mints nothing, so a plain fetch does not hit the counter. The real hazard is narrower and the same rule follows.
+    5. **Tool name `relic_publish`**, where the knowledge topic informally says `publish_relic`. One-token change if the reconciler prefers the topic's spelling.
+    6. **`client_version` against `format.md` section 5**, which says nothing finer than the class and client name crosses. The beat sends it, states the reading (a content-leakage bar, and a version describes the client not the content), and names the narrower publisher fingerprint as the cost.
+    7. **Grant expiry must be enforced on the storage leg**, because the app server is not in it. Under a signed URL the signature does it, bounded by 604800 seconds. Under a **server-initiated resumable session it does not come free**, since "A session URI expires after one week but can be cancelled prior to expiring." Invariant stated: no object may land after the app server declared the grant expired, because `service.md` case 6 makes that ID permanently unservable and the late object becomes billed storage nobody can reach.
+
+    **The sharpest finding: the two grant-shape requirements pull against each other**, which is the real substance of routed item 1. The POST policy document is the shape whose size enforcement is documented explicitly and it has no resume story; the resumable session is the shape that satisfies the retry requirement. The beat required the same launch check under either: upload a body larger than the constraint under a real grant and assert refusal, so the enforcement claim becomes an observation rather than a reading of documentation.
+
+    ## Word count
+
+    8832, the largest in the station, against a floor of 2200. Not yet tested for padding; the adversary was not given a pass on that.
 reviews:
   completeness:
     at: 2026-07-30T05:31:07.501358+00:00

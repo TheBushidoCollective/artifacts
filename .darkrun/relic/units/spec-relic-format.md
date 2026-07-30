@@ -164,6 +164,11 @@ gate_results:
   at: 2026-07-30T06:23:49.737455+00:00
   attempts: 1
   detail: '`test "$(wc -w < docs/spec/format.md)" -ge 1600` exits 0. Actual: 5365 words. Run by the manager at commit 2838a4d. Note the document sits well above the calibrated 1620 to 2295 band; the tightener''s net +721 came from five findings that mandated new content (the corrected GCS constraint, the corrected reserved-path guard analysis, and the real cross-origin redirect rule), while all four named padding sources were cut. A deliberate reduction pass was offered and declined, because trading verified-correct reasoning for a lower count is the wrong trade and the floor is a stub guard.'
+- name: sources-manifest-populated
+  status: pass
+  at: 2026-07-30T06:23:53.728183+00:00
+  attempts: 1
+  detail: '12 non-empty lines against a floor of 5, one URL per line, trailing newline confirmed byte-level. Run by the manager at commit 2838a4d. The manifest changed during resolve: the MDN `SubtleCrypto/encrypt` URL was removed because it did not support the AES-192 claim attached to it, and the GCS canonical-requests page was added as the source for signed-header pinning.'
 ---
 
 # Goal

@@ -1,7 +1,7 @@
 ---
 name: Design the abuse pipeline and state what the go/no-go actually costs
 unit_type: ''
-status: pending
+status: in_progress
 depends_on:
 - design-storage-grant-and-cost
 - design-topology-and-origins
@@ -19,6 +19,50 @@ outputs:
 - docs/design/operations.md
 - docs/design/operations.sources.txt
 branch: darkrun/relic/units/shape/design-operations-and-abuse
+started_at: 2026-07-30T15:34:52.492520+00:00
+iterations:
+- worker: designer
+  started_at: 2026-07-30T15:34:52.492520+00:00
+  completed_at: 2026-07-30T15:34:52.492520+00:00
+  result: advance
+  note: |-
+    `docs/design/operations.md` (9,164 words) and `operations.sources.txt` (12 URLs) committed at `5179000`. Worktree clean.
+
+    **Gates re-run independently by the manager:** 9,164 against 2,600; 12 sources against 8; all 12 resolve; zero dashes. `git diff --name-only HEAD~1 HEAD` returns exactly the two artifact files, no locked file. All three sibling inputs via `git show`, and it read storage at the resolved tip `a9cea77` rather than `95853da`, which is what the numbers in §5 and §6 depend on.
+
+    **Manager-verified independently, not taken from the report:** criterion 11's three items each present and decided; criterion 5's counsel questions in their own section; the SLA a real number with both bounds; and `container.md`'s enumeration conclusion quoted **verbatim**, confirmed by normalized match against the sibling file. That last one matters because `container.md` §7 wrote its conclusion anticipating this exact consumer, saying this unit "can record it as settled and the record is true rather than circular." **Cross-unit reception worked as designed rather than by luck.**
+
+    ## The beat found a defect in my brief
+
+    **I told it receipt acknowledgement satisfies "the confirmation duty." DSA Article 16(4) is conditional**, on the notice carrying electronic contact information, and the document carries the condition rather than repeating my unconditional framing. My brief inherited that overstatement from the knowledge topic. It also **extended the Article 13(3) quotation to its full clause rather than cutting at "non-compliance" as the knowledge topic does.** Both are corrections to the run's own record, not to a source.
+
+    It also found **a second place the no-accounts non-goal reduces the compliance surface**, where the brief established only one: Article 16(2)(c) excuses reporter contact details for the offences it names, so on an anonymous report there is no duty, no address, and nothing owed.
+
+    ## The scope-resolution check transferred to legal text and immediately paid
+
+    The fifth citation mode was recorded against a pricing page. **Its legal analogue is sharper and the beat hit it head-on.** DSA Article 13 reads as a general obligation to appoint a liable EU representative; its entire trigger lives in **Article 3, heading "Definitions"**, two pages earlier, at points (d) and (e). Quoting 13 without 3 would state an obligation whose applicability is unresolved as though it were settled. It also caught Article 19(1) being **doubly** scoped, to Section 3 only and to online platforms only, and 18 U.S.C. 2258A(f) being a construction rule about that section rather than the general immunity it reads as. **Every statutory quotation in its audit carries its heading and scope clause, not just an article number.**
+
+    ## The two-variant sweep stopped a false deviation on the load-bearing DMCA quotation
+
+    17 U.S.C. 512(i)(1)(A) **missed in the space-separated variant and matched in the concatenated one**, because a tag boundary rendered `provider 's`. That is a fifth false-negative mode, the possessive split by markup, and it is the first time the second variant has been load-bearing rather than merely correct discipline. **A single-variant check would have reported a false deviation on §512's eligibility condition**, which is the sentence counsel question 1 turns on.
+
+    Audit: 83 candidates swept, 76 source quotations, **76 verified, zero deviations**, with the 7 non-source runs classified rather than dropped. It independently confirmed storage's `preconditions.md` substitution finding from its own raw pull.
+
+    ## Decisions
+
+    **SLA 24 hours**, bounded from both sides with real constraints: shorter is unmeetable by one human without follow-the-sun coverage and a missed published number is evidence in exactly the processes this document exists to survive; longer is capped because a takedown SLA approaching the 259,200-second TTL makes deletion indistinguishable from expiry. It names **two clocks the SLA does not govern**, so nobody reads 24 hours as covering the mandatory report or the criminal-threat notification.
+
+    Branch B's operator-side lookup is specified in **five ordered steps**, and the fifth is the one nobody else states: past storage's 90-day record limit the three-way split collapses to `relic_not_found` and **the operator cannot answer at all**. It puts that in the disclosure statement rather than leaving a publisher to find it.
+
+    ## Its ranked weaknesses, and the one worth attacking first
+
+    It ranked honestly and **attacked its own SLA from both sides**, which no prior beat has done: it ruled out 8 hours on one-human-plus-same-timezone-backup grounds, then noted `preconditions.md` requires only "a named backup" and never says same-timezone, so a backup in another timezone closes the sleep gap and makes 24 loose by a factor of three.
+
+    Its number one is **§5.2's claim that branch A is cheaper**, resting on an unsupported empirical sentence: that an exhaustion screen is self-explaining enough that recipients ask the sender rather than the operator. **Every Relic error screen carries a report link by mandate**, which is the counter it names against itself. If ticket volumes converge the recommendation to surface is wrong.
+
+    Its number two is the branch-B free-text matcher, with a concrete failure it supplies: "this file contains employee records from my former employer" attaches the possessive to the employer, not the subject, so the trigger misses and the obligations go unmet silently.
+
+    **Base rate to carry into the challenge: three units in a row had their number-one nomination come back sound. Do not let this list steer the sweep.**
 reviews:
   fit:
     at: 2026-07-30T11:40:36.253906+00:00

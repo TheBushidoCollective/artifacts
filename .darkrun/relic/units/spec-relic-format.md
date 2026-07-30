@@ -155,11 +155,6 @@ quality_gates:
 - name: every-cited-url-resolves
   command: bash -c 'set -eu; while IFS= read -r u || [ -n "$u" ]; do [ -n "$u" ] || continue; curl -sfL --max-time 25 --retry 2 -A "Mozilla/5.0 (relic-link-check)" -o /dev/null "$u"; done < docs/spec/format.sources.txt'
 gate_results:
-- name: substance-floor
-  status: pass
-  at: 2026-07-30T06:23:49.737455+00:00
-  attempts: 1
-  detail: '`test "$(wc -w < docs/spec/format.md)" -ge 1600` exits 0. Actual: 5365 words. Run by the manager at commit 2838a4d. Note the document sits well above the calibrated 1620 to 2295 band; the tightener''s net +721 came from five findings that mandated new content (the corrected GCS constraint, the corrected reserved-path guard analysis, and the real cross-origin redirect rule), while all four named padding sources were cut. A deliberate reduction pass was offered and declined, because trading verified-correct reasoning for a lower count is the wrong trade and the floor is a stub guard.'
 - name: sources-manifest-populated
   status: pass
   at: 2026-07-30T06:23:53.728183+00:00
@@ -175,6 +170,11 @@ gate_results:
   at: 2026-07-30T07:31:35.866934+00:00
   attempts: 2
   detail: Re-recorded against `e2420ae`, the fb-09 fix commit, superseding the attestation at 2838a4d. `test -f docs/spec/format.md` exits 0. Run by the manager in the unit worktree.
+- name: substance-floor
+  status: pass
+  at: 2026-07-30T07:31:39.471734+00:00
+  attempts: 2
+  detail: 'Re-recorded against `e2420ae`. Actual: 5495 words against a floor of 1600, up from 5365 at 2838a4d. The +130 is the fb-09 fix: one contiguous passage in section 5 replaced so the redirect rule splits on the destination''s trust boundary rather than mandating an explicit fragment on every redirect. `git diff --stat HEAD~1 HEAD` is one file, one insertion, one deletion. Zero dashes in both the committed file and the commit message.'
 ---
 
 # Goal

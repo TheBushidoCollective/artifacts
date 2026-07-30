@@ -94,6 +94,43 @@ iterations:
     # Your job beyond those three
 
     Verify the challenger's fixes rather than assuming them, especially the two-filters paragraph, since it introduces a mechanism statement that did not exist before and is now load-bearing for criterion 9. Confirm the 38 contractions read as natural voice and not as find-and-replace. Re-run all four gates and re-record with the nonce after any edit. Verify criteria 5 through 9 by reading. No em-dashes or en-dashes, verified by grep. Commit in the unit worktree, never the station branch.
+- worker: distiller
+  started_at: 2026-07-30T03:20:16.476010+00:00
+  completed_at: 2026-07-30T03:20:16.476010+00:00
+  result: advance
+  note: |-
+    Distiller beat complete. Committed at `fbd966d`. Worktree clean, branch correct, nothing touched outside it. **Final state: 2449 words, 11 sources, all four gates green, re-run against the final post-edit state and re-recorded with the nonce.** Verdict: ready to lock.
+
+    # The three open calls, decided
+
+    **1. Length: accept 2449.** The distiller measured independently and reproduced the challenger's per-section numbers exactly, then disagreed with the challenger's beat count *against* the challenger's own interest: the metric section carries roughly 18 spec-mandated beats, not 13, which at 1096 words is about 61 words per beat. It went through the 506-word confound subsection paragraph by paragraph hunting for prose to cut and found none that was not a mandated beat. Criterion 2's "lands near 1,400 words written tightly" would require deleting roughly 1,000 words of contract-demanded content. **The calibration is stale, not the document**, because it predates criterion 9 growing to four parts plus the permanence statement plus the no-clean-separation rule.
+
+    **2. Consultant-to-client segment stays cut**, on a stronger ground than the challenger had. The section's topic sentence is "Two segments, both defined by the absence of a first-party path rather than by dissatisfaction with one." A consultant on Claude Code Pro *has* Artifacts and objects to the byline, which is dissatisfaction with an existing path, the exact category that sentence excludes. Restoring it would make the section's own framing false. It also checked whether the segment could be sourced properly and could not: the knowledge base has one sentence about the artifact header and nothing about what consultants do today.
+
+    **3. Sources 13 to 11: correct discipline.** It ran the orphan check in **both** directions, which neither prior beat did. Every manifest URL is cited in the body and every body URL is in the manifest, with the sole exception of the `https://<relic-domain>/{id}#{secret}` shape template, correctly excluded per the contract's warning.
+
+    # The fourth instance of the unobservable-quantity error class
+
+    The third sweep found it, and it was in the worst possible place. **Supporting condition 1** claims the service domain stays unflagged by "Safe Browsing, VirusTotal consensus, and the major mail-gateway blocklists" and calls itself checkable on a schedule. Only the first two answer a scheduled query. A block inside a single company's mail tenant is invisible from outside, so that half surfaces as a recipient reporting a dead link rather than as a check going red. This matters more than the previous three instances because **this condition's consequence is "shut it down,"** making a false sense of detection the most expensive blind spot in the document. Fixed in the same shape used for condition 2, with the limit stated in the same breath as the claim, and no new citation, so the manifest stays at 11 with zero orphans.
+
+    **This error class has now been caught four times, by four different readers.** It is the specific failure mode of this material. Whoever executes `frame-preconditions` must sweep for it deliberately rather than incidentally.
+
+    # Verified independently rather than taken on trust
+
+    - **The "Two filters, both partial" paragraph holds.** `gcs-cloud-run-architecture-constraints` records "short-lived signed download URLs minted by the app server at view time," so the app server does see the viewer's requesting IP at mint. `abuse-liability-of-hosting-uninspectable-content` records "Record upload IP plus timestamp," so the publishing IP is already retained. The publish leg runs on the user's machine, not a browser, so neither filter touches the viewing origin. Both are genuinely server-observable and the claim is sound.
+    - **Zero em-dashes, zero en-dashes, and in fact zero non-ASCII characters at all** in both files.
+    - **All 11 URLs fetched individually with status codes captured**, all returning HTTP 200, not merely a green loop exit.
+    - **Criteria 5 through 9 by reading.** All met. Criterion 9's four parts are present, permanence is stated twice (topic sentence plus a bolded "The first clause can't be made fully trustworthy under this architecture"), and telemetry item 2 is bare with no clean-separation qualifier.
+    - **Dangling-reference sweep after the cuts.** Zero hits for 0bin, consultant, gallery, "four supporting", Microsoft, or Tenant. The forward reference "the publisher filters below" correctly resolves.
+    - **Contractions read in context, not counted.** Two of the challenger's 38 read as mechanical and were reverted: "isn't fully solvable" back to "is not fully solvable" because that is the load-bearing permanence claim and the flat form carries the emphasis, and "That's no corner case here" back to "Not a corner case here" because the contraction cost doubled deixis and the crisp fragment matched the surrounding staccato. Net 37, all natural.
+    - Also fixed "a relic (a relic, not an artifact", a compression artifact putting "relic" twice in six words in the first paragraph every downstream station reads.
+
+    The only thing the challenger's report got wrong was its own beat count, understating its case.
+
+    # Carry forward to the checkpoint
+
+    1. **Criterion 2's word guidance is off by roughly 1,000 words against its own criterion 9** and should be corrected for whoever writes the next frame-shaped unit. Recorded here rather than silently left.
+    2. **The IP filter is a no-op for the headless/CI segment**, since a CI runner's egress IP will never match a human viewer's. Harmless, because it can only fail in the safe direction or not fire at all, and the confound barely applies there anyway with no publisher at a phone to self-check. Deliberately not written into the document, because that would add a requirement the spec does not ask for. Worth knowing when a later station tunes the 120-second window. Being recorded as durable knowledge separately.
 reviews:
   feasibility:
     at: 2026-07-30T02:47:23.386041+00:00

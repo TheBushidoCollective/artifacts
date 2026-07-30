@@ -5,6 +5,7 @@ status: pending
 depends_on:
 - design-storage-grant-and-cost
 - design-topology-and-origins
+- design-container-and-crypto
 worker: ''
 model: opus
 station: shape
@@ -13,6 +14,7 @@ inputs:
 - spec.md
 - docs/design/storage.md
 - docs/design/topology.md
+- docs/design/container.md
 outputs:
 - docs/design/operations.md
 - docs/design/operations.sources.txt
@@ -35,7 +37,7 @@ Write `docs/design/operations.md`: the abuse pipeline, the monitoring surface, a
 
 **Read first:** `darkrun_knowledge_list`, especially `legal-obligations-of-a-no-accounts-hosting-service`, `safe-browsing-delisting-and-why-a-zero-knowledge-operator-cannot-comply`, `egress-cost-controls-and-what-a-kill-switch-cannot-stop`, `abuse-liability-of-hosting-uninspectable-content`.
 
-Then read `docs/frame.md` and `docs/preconditions.md`, locked; **`docs/spec/service.md` §1 in full**, because you reason about the status taxonomy your tickets arrive as, including 1.2 cap exhaustion and 1.4 takedown disclosure, plus §§4, 4.1, 5, 6, **and §7 item 6, the published SLA, which is the one routed decision that is yours**; and sibling inputs `docs/design/storage.md` and `docs/design/topology.md`. **If either is missing, fetch via `git show darkrun/relic/units/shape/<unit>:<path>` and report which path you used.**
+Then read `docs/frame.md` and `docs/preconditions.md`, locked; **`docs/spec/service.md` §1 in full**, because you reason about the status taxonomy your tickets arrive as, including 1.2 cap exhaustion and 1.4 takedown disclosure, plus §§4, 4.1, 5, 6, **and §7 item 6, the published SLA, which is the one routed decision that is yours**; and sibling inputs `docs/design/storage.md`, `docs/design/topology.md`, and `docs/design/container.md`. **If any of the three is missing, fetch via `git show darkrun/relic/units/shape/<unit>:<path>` and report which path you used.**
 
 **`design-product-surface` runs beside you, not ahead of you, and you do not read its output.** It owns every recipient-facing screen and its copy. Where your pipeline depends on a screen it decides, **state the need and design your side against both branches in one pass**, which is the same discipline every unit in this station follows. Do not wait on it, do not assume an answer, and do not decide a screen.
 

@@ -155,11 +155,6 @@ quality_gates:
 - name: every-cited-url-resolves
   command: bash -c 'set -eu; while IFS= read -r u || [ -n "$u" ]; do [ -n "$u" ] || continue; curl -sfL --max-time 25 --retry 2 -A "Mozilla/5.0 (relic-link-check)" -o /dev/null "$u"; done < docs/spec/format.sources.txt'
 gate_results:
-- name: artifact-exists
-  status: pass
-  at: 2026-07-30T06:23:45.483783+00:00
-  attempts: 1
-  detail: '`test -f docs/spec/format.md` exits 0. Run by the manager in the unit worktree at commit 2838a4d, not taken from a beat''s self-report.'
 - name: substance-floor
   status: pass
   at: 2026-07-30T06:23:49.737455+00:00
@@ -175,6 +170,11 @@ gate_results:
   at: 2026-07-30T06:23:56.710852+00:00
   attempts: 1
   detail: 'All 12 URLs fetched, exit 0, no DEAD lines. Run by the manager at commit 2838a4d. Orphan check re-run separately in both directions and clean: no manifest URL uncited in the body, no body citation missing from the manifest. Beyond resolution, the adversary beat verified that each citation actually says what the document claims, checking 18 load-bearing claims against raw source text and finding two false (both fixed during resolve) and one loosely quoted. The manager independently re-confirmed both failures against the live pages before they were handed to the tightener.'
+- name: artifact-exists
+  status: pass
+  at: 2026-07-30T07:31:35.866934+00:00
+  attempts: 2
+  detail: Re-recorded against `e2420ae`, the fb-09 fix commit, superseding the attestation at 2838a4d. `test -f docs/spec/format.md` exits 0. Run by the manager in the unit worktree.
 ---
 
 # Goal

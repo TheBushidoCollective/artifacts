@@ -6,6 +6,8 @@ depends_on: []
 worker: ''
 model: opus
 station: specify
+inputs:
+- frame.md
 outputs:
 - docs/spec/format.md
 - docs/spec/format.sources.txt

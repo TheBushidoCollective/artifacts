@@ -167,6 +167,11 @@ gate_results:
   at: 2026-07-30T07:13:24.828395+00:00
   attempts: 1
   detail: '`test "$(wc -w < docs/spec/service.md)" -ge 2800` exits 0. Actual: 6551 words, up from 4808 at the writer''s commit. Run by the manager at ed51b43. The growth is fourteen adversary findings answered plus a new section 1.6 carrying three grant-time refusal codes that `format.md` mandates, against roughly 100 words of tightening returned. Consistent with the precedent set on `format.md`: the band is guidance, the floor is a stub guard, and correctness wins over the count.'
+- name: sources-manifest-populated
+  status: pass
+  at: 2026-07-30T07:13:28.147636+00:00
+  attempts: 1
+  detail: 20 non-empty lines against a floor of 5, one URL per line, trailing newline present. Run by the manager at ed51b43. The manifest gained FusionAuth/fusionauth-issues#629 during resolve, added as the primary source for the Safe Links HEAD observation after the adversary showed the existing Authelia citation was relaying it and that the relayed claim carried its own hedge.
 ---
 
 # Goal

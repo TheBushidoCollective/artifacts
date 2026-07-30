@@ -109,11 +109,6 @@ quality_gates:
 - name: every-cited-url-resolves
   command: bash -c 'set -eu; while IFS= read -r u || [ -n "$u" ]; do [ -n "$u" ] || continue; curl -sfL --max-time 25 --retry 2 -A "Mozilla/5.0 (relic-link-check)" -o /dev/null "$u"; done < docs/frame.sources.txt'
 gate_results:
-- name: sources-manifest-populated
-  status: pass
-  at: 2026-07-30T03:11:03.386010+00:00
-  attempts: 2
-  detail: 'Challenger beat re-run after pruning two orphaned sources. exit=0. 11 non-empty lines (was 13), all ^https://, trailing newline confirmed (last byte 0x0a). Verified every manifest URL is still cited in the body: zero orphans.'
 - name: every-cited-url-resolves
   status: pass
   at: 2026-07-30T03:11:06.202549+00:00
@@ -129,6 +124,11 @@ gate_results:
   at: 2026-07-30T03:18:32.493951+00:00
   attempts: 4
   detail: 'Distiller beat, final state. `test "$(wc -w < docs/frame.md)" -ge 1300` exit=0. Final count 2449 (challenger left 2411; +38 for the mail-gateway observability limit added to supporting condition 1). Floor 1300. Length accepted deliberately: independently measured the metric section at 1096 words carrying ~18 spec-mandated beats, everything else 1315 across preamble plus eight sections. The spec''s "near 1,400 words" guidance predates criterion 9 growing to four parts and is stale; no prose slack found.'
+- name: sources-manifest-populated
+  status: pass
+  at: 2026-07-30T03:18:35.788924+00:00
+  attempts: 3
+  detail: 'Distiller beat, final state. exit=0. 11 non-empty lines against a floor of 6; 0 lines failing ^https://; trailing newline confirmed (last byte 0x0a). Ran the orphan check in BOTH directions: every manifest URL is cited in the body, and every body URL appears in the manifest. The only body URL absent from the manifest is the `https://<relic-domain>/{id}#{secret}` shape template, correctly excluded per the unit contract.'
 ---
 
 # Goal

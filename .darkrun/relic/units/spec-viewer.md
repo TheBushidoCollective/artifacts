@@ -1,7 +1,7 @@
 ---
 name: Specify viewer routing, rendering, the sandbox boundary, and every recipient screen
 unit_type: doc
-status: pending
+status: in_progress
 depends_on:
 - spec-relic-format
 worker: ''
@@ -13,6 +13,60 @@ outputs:
 - docs/spec/viewer.md
 - docs/spec/viewer.sources.txt
 branch: darkrun/relic/units/specify/spec-viewer
+started_at: 2026-07-30T06:45:45.341264+00:00
+iterations:
+- worker: spec_writer
+  started_at: 2026-07-30T06:45:45.341264+00:00
+  completed_at: 2026-07-30T06:45:45.341264+00:00
+  result: advance
+  note: |-
+    `docs/spec/viewer.md` (4752 words) and `docs/spec/viewer.sources.txt` (15 URLs) committed at `e5db812` on the unit branch. Worktree clean.
+
+    **Gates reported by the beat:** exists 0; floor 0 at 4752 against 2600; 15 sources against a floor of 6; urls exit 0; zero em-dashes or en-dashes; trailing newline present. Orphan check clean both directions, 15 in doc and 15 in manifest. Only non-ASCII is `§`. Contractions 94 tokens. The "X, not Y" appositive is down to 5 total, one per 950 words, against the one-per-195 rate flagged on the sibling.
+
+    **Sibling input read via `git show darkrun/relic/units/specify/spec-relic-format:docs/spec/format.md`**, the fallback rung the manager verified in advance. The station ref still does not resolve. Confirmed: the disagreement rule compares the **encrypted envelope header's declared mimetype and filename** against the magic-byte sniff, since no renderer class is available to this unit and it never asks for one.
+
+    ## This beat fact-checked the brief and found three of its claims wrong
+
+    **All three independently re-verified by the manager against MDN browser-compat-data. The beat is correct on every one, and `browser-crypto-and-large-file-constraints` has been corrected in place.**
+
+    - **"iOS Safari and mobile lack the service-worker fetch support the streaming path needs" is false.** `FetchEvent` and `FetchEvent.respondWith` are both `safari: 11.1` with `safari_ios` mirroring. hat.sh does cap Safari and mobile at 1 GB and does state that rationale, but the rationale no longer matches the platform. **The beat's response is better than a corrected list:** tier by runtime feature detection and explicitly forbid a hardcoded browser list, on the grounds that a hardcoded list encodes exactly the kind of claim that just failed verification.
+    - **The "500 to 800 MB band" is one forum thread**, not a measured range, and the 512 MB `ArrayBuffer` figure was wrong. Restated as a practitioner report with Apple publishing no per-tab ceiling.
+    - **The Safari `for await` gap is narrower than stated.** `ReadableStream[@@asyncIterator]` is Chrome 124 and Safari 27, and Safari 27 has not shipped. So no shipping Safari has it, `getReader()` loops are the portable path, and the constraint has a known expiry.
+    - **CVE-2026-41238 checks out** on range (3.0.1 to 3.3.3), fix (3.4.0), and CVSS (6.9), with one qualification the shorthand loses: the advisory requires a prototype pollution primitive in the same execution context, so DOMPurify at default config is not independently bypassable. What is true is that no special config is needed. The beat stated the sharper version.
+
+    **Tooling caveat, now recorded as run knowledge.** WebFetch's summarizer returned text **flatly inverting** RFC 9110's meaning, claiming fragments are not forwarded across redirects when §10.2.2 mandates the opposite. The beat caught it by pulling the raw RFC and confirming the knowledge-base quotes are exact. Do not trust a fetched summary of a specification on this run.
+
+    ## The four unroutable decisions
+
+    - **`{markdown, code}` routing.** A silent sniff means untyped bytes, and untyped bytes get exactly one treatment: plain text, built as DOM text nodes on the viewing origin, after a valid-UTF-8 check (failure means binary means download-only). The declared mimetype or extension may select a **decoration** (highlighter grammar) or request a **downgrade** (`.md` to the sandbox), never an upgrade. A publisher lying about `.md` gets the sandbox, where HTML already goes, so the lie buys nothing.
+    - **Markdown renders on the sandbox origin**, treated as forced rather than balanced: Markdown builds markup structure from attacker bytes regardless of raw-HTML handling, so rendering on the viewing origin makes sanitization the only layer, which the locked precondition forbids. Consequence stated, including the resulting split of viewer responsibilities across the two domains.
+    - **Per-relic subdomain**, isolation consequence stated both ways.
+    - **Stripped fragment honored** per `format.md` 2.5: explicit copy-link control present from load and backed by the in-memory key; dead-reload screen distinguished from "link missing its key" via `PerformanceNavigationTiming`. Presented as shrinking the window rather than closing it, naming history sync, extensions reading `window.location.href` at load, and the referring app.
+
+    ## Fields needed on the mint response, stated as needs
+
+    The signed URL; its absolute expiry (so repeat opens judge reuse instead of re-minting); object length in bytes (refuse-before-allocating, and a real total for the fetch progress phase); the object's CRC32C (the transport-corruption versus wrong-key discriminator, framed as integrity and never authenticity); and a machine-readable refusal reason on a refused mint. **`spec-service-surface` was writing its field set in parallel and independently landed a superset**, so these reconcile.
+
+    ## Routed to `shape`
+
+    Five, all from this unit's own Route section, nothing else. **PSL lead time, named as the finding it is:** there is none. The list's guidelines state "There are NO SERVICE LEVEL AGREEMENTS ON TIME nor any expectation of processing speed or urgency" and "Unfortunately, there is no way to expedite." Unbounded and unexpeditable, so it starts first in the domain workstream.
+
+    ## Where the adversary should push
+
+    Seven judgment calls, surfaced rather than buried:
+
+    1. **The subdomain label is a one-way hash of the relic ID, not the ID.** Nothing prescribed it. Reasoning: a raw ID in a DNS query is a live bearer token for the ciphertext, visible along the resolution path, and a hashed label gives the shim a pseudonym it cannot invert, which partly answers the brief's "arguably never send the relic ID to the shim."
+    2. **Deterministic derivation rather than a random per-render value**, chosen for repeat-open stability and shim cacheability, accepting that two viewers of the same relic share an origin.
+    3. **Plain text and highlighted code stay on the viewing origin**, resting entirely on the stated principle that the viewing origin may place attacker bytes into text nodes but never parses them into markup. If that principle breaks, section 3 changes shape.
+    4. **Markdown-on-sandbox treated as forced** rather than balanced.
+    5. **The downgrade-only asymmetry** in the `{markdown, code}` rule.
+    6. **The PWA relaunch claim is an inference, not a cited fact:** that an installed PWA opens its `start_url` and therefore holds no key.
+    7. **`PerformanceNavigationTiming`** as the dead-reload discriminator, and whether its compat story is stated honestly.
+
+    ## On word count
+
+    4752 against a 2580 to 3655 band. Deliberate, per the calibration precedent set when `format.md` landed at 5365. The beat states the overage is concentrated in section 5, where two corrected claims needed their evidence stated. The adversary was asked to test that rather than accept it.
 reviews:
   completeness:
     at: 2026-07-30T05:31:07.501358+00:00

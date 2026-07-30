@@ -15,6 +15,8 @@ outputs:
 - docs/design/topology.md
 - docs/design/topology.sources.txt
 reviews:
+  fit:
+    at: 2026-07-30T11:40:36.253906+00:00
   reversibility:
     at: 2026-07-30T11:39:37.092582+00:00
 quality_gates:

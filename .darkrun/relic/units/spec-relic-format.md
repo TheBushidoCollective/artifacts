@@ -155,11 +155,6 @@ quality_gates:
 - name: every-cited-url-resolves
   command: bash -c 'set -eu; while IFS= read -r u || [ -n "$u" ]; do [ -n "$u" ] || continue; curl -sfL --max-time 25 --retry 2 -A "Mozilla/5.0 (relic-link-check)" -o /dev/null "$u"; done < docs/spec/format.sources.txt'
 gate_results:
-- name: sources-manifest-populated
-  status: pass
-  at: 2026-07-30T06:23:53.728183+00:00
-  attempts: 1
-  detail: '12 non-empty lines against a floor of 5, one URL per line, trailing newline confirmed byte-level. Run by the manager at commit 2838a4d. The manifest changed during resolve: the MDN `SubtleCrypto/encrypt` URL was removed because it did not support the AES-192 claim attached to it, and the GCS canonical-requests page was added as the source for signed-header pinning.'
 - name: every-cited-url-resolves
   status: pass
   at: 2026-07-30T06:23:56.710852+00:00
@@ -175,6 +170,11 @@ gate_results:
   at: 2026-07-30T07:31:39.471734+00:00
   attempts: 2
   detail: 'Re-recorded against `e2420ae`. Actual: 5495 words against a floor of 1600, up from 5365 at 2838a4d. The +130 is the fb-09 fix: one contiguous passage in section 5 replaced so the redirect rule splits on the destination''s trust boundary rather than mandating an explicit fragment on every redirect. `git diff --stat HEAD~1 HEAD` is one file, one insertion, one deletion. Zero dashes in both the committed file and the commit message.'
+- name: sources-manifest-populated
+  status: pass
+  at: 2026-07-30T07:31:41.974774+00:00
+  attempts: 2
+  detail: Re-recorded against `e2420ae`. 12 non-empty lines against a floor of 5, unchanged by the fb-09 fix. The fix reused the RFC 9110 citation already in the manifest; no source was added or removed.
 ---
 
 # Goal

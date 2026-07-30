@@ -4,7 +4,7 @@ The locked frame for the Relic run. Every later station inherits it. If a statio
 
 ## What Relic is
 
-A zero-knowledge publishing service driven by an MCP tool. You tell your coding agent to publish a file as a relic (a relic, not an artifact, because Claude already has Artifacts). A local stdio MCP server generates a random secret on your machine, encrypts the file in-process, and uploads only ciphertext to a service backed by Google Cloud Storage. You share `https://<relic-domain>/{id}#{secret}`. URL fragments are never transmitted to a server, so the operator never receives the key. A PWA fetches the ciphertext, decrypts it in the browser, and renders it by mimetype under a branded taskbar.
+A zero-knowledge publishing service driven by an MCP tool. You tell your coding agent to publish a file as a relic (named relic, not artifact, because Claude already has Artifacts). A local stdio MCP server generates a random secret on your machine, encrypts the file in-process, and uploads only ciphertext to a service backed by Google Cloud Storage. You share `https://<relic-domain>/{id}#{secret}`. URL fragments are never transmitted to a server, so the operator never receives the key. A PWA fetches the ciphertext, decrypts it in the browser, and renders it by mimetype under a branded taskbar.
 
 ## Locked constraints
 
@@ -60,11 +60,11 @@ All server-side. None of it needs a script on the viewing origin.
 
 ### The confound in the first clause, which is permanent
 
-Separating a recipient's open from the publisher's own isn't fully solvable under the locked non-goals. Accounts would solve it. Accounts are a non-goal. So this gets documented, never engineered away.
+Separating a recipient's open from the publisher's own is not fully solvable under the locked non-goals. Accounts would solve it. Accounts are a non-goal. So this gets documented, never engineered away.
 
 **Two filters, both partial.** The baseline filter drops opens whose requesting IP matches the relic's publishing IP, both of which the server already sees. The second drops opens minted within 120 seconds of publish: a pure time delta between the publish timestamp and the mint timestamp, computed server-side, needing nothing from the viewing origin. Treat 120 seconds as a provisional value set by judgment. A later station moves it once there's real data.
 
-**The asymmetry runs both directions, and only one is safe.** IP exclusion undercounts harmlessly: a genuine recipient behind the publisher's NAT gets dropped, which can only make you believe you lost when you won. The dangerous direction is the publisher opening their own relic from cellular, a VPN, or a second machine, which counts as a recipient and inflates the exact clause the metric rests on. That's no corner case here. Relic ships a PWA whose point is mobile viewing, and checking your own link before sending it is the most likely thing a publisher does.
+**The asymmetry runs both directions, and only one is safe.** IP exclusion undercounts harmlessly: a genuine recipient behind the publisher's NAT gets dropped, which can only make you believe you lost when you won. The dangerous direction is the publisher opening their own relic from cellular, a VPN, or a second machine, which counts as a recipient and inflates the exact clause the metric rests on. Not a corner case here. Relic ships a PWA whose point is mobile viewing, and checking your own link before sending it is the most likely thing a publisher does.
 
 **What the time window fails to catch.** It shaves the dominant false positive, the immediate self-check from a second device, and leaves residue both ways. It misses a publisher who checks twice, and the publisher who sends the link and then opens it on a phone five minutes later, which is precisely the mobile-PWA behavior the product encourages. At the other end, when a publisher never self-checks, the window eats a genuinely fast first recipient open. Tuning the number trades one direction for the other. It doesn't remove either.
 
@@ -82,7 +82,7 @@ This leaks a coarse content category, a client name, and IP-correlated open acti
 
 Three, each checkable, none primary.
 
-1. **The service domain stays unflagged** by Safe Browsing, VirusTotal consensus, and the major mail-gateway blocklists. Checked on a schedule against every registrable domain, all verified in Search Console before launch ([Google](https://support.google.com/webmasters/answer/6347750)). This one differs in kind from the others: failing it means shut it down, not tune it.
+1. **The service domain stays unflagged** by Safe Browsing, VirusTotal consensus, and the major mail-gateway blocklists. Checked on a schedule against every registrable domain, all verified in Search Console before launch ([Google](https://support.google.com/webmasters/answer/6347750)). Only the public lists answer a scheduled query. A block inside a single company's mail tenant isn't visible from outside, so that half surfaces as a recipient reporting a dead link rather than as a check going red. This one differs in kind from the others: failing it means shut it down, not tune it.
 2. **The publishing client distribution includes headless, CI, and non-Claude clients**, rather than only interactive Claude Code. Computable from telemetry item 3, and only as good as it: a CI run and an interactive run can report the same client name, so the headless half holds only where the client says so itself. If it's all interactive Claude Code, Relic is serving the audience that already has Artifacts.
 3. **Egress spend stays under the kill-switch ceiling.** Read off the billing export.
 

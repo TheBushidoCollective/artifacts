@@ -141,6 +141,8 @@ iterations:
 
     **I chose not to amend criterion 7's wording.** Editing a completion criterion after the deliverable exists, so that it matches the deliverable, is goalpost-moving even when the intent is honest. The criterion's intent was always "reserved paths can never be issued as IDs" and that is satisfied. Recording the imprecision here instead, so the audit phase reads criterion 7 as being about the ID space rather than the alphabet specifically.
 reviews:
+  completeness:
+    at: 2026-07-30T09:30:39.382518+00:00
   testability:
     at: 2026-07-30T09:30:18.432248+00:00
 quality_gates:

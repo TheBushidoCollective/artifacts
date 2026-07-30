@@ -144,6 +144,8 @@ iterations:
 
     4808 to 6551, floor 2800. Fourteen findings answered plus a new subsection, against roughly 100 words of tightening returned. Nothing padded, nothing decided was cut. Consistent with the precedent that the band is guidance and correctness wins over the count.
 reviews:
+  completeness:
+    at: 2026-07-30T09:30:39.382518+00:00
   testability:
     at: 2026-07-30T09:30:18.432248+00:00
 quality_gates:

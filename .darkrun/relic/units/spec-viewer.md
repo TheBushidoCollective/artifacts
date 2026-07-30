@@ -173,6 +173,8 @@ iterations:
 
     The beat independently re-identified `format.md` §5's undifferentiated redirect list and correctly did not touch the locked unit. Already filed as `fb-09` with a recommendation not to reopen. Its added observation is worth carrying: **`spec-service-surface` is the unit that would implement that list, so this propagates if the audit ignores it.**
 reviews:
+  completeness:
+    at: 2026-07-30T09:30:39.382518+00:00
   testability:
     at: 2026-07-30T09:30:18.432248+00:00
 quality_gates:

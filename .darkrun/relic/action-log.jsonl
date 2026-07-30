@@ -25,3 +25,4 @@
 {"action":"audit","at":"2026-07-30T09:34:28.377945+00:00","station":"specify","track":"run"}
 {"action":"reflect","at":"2026-07-30T09:37:25.182325+00:00","station":"specify","track":"run"}
 {"action":"checkpoint","at":"2026-07-30T09:39:08.595940+00:00","station":"specify","track":"run"}
+{"action":"spec","at":"2026-07-30T09:40:07.076861+00:00","station":"shape","track":"run"}

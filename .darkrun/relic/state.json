@@ -19,11 +19,13 @@
     },
     "shape": {
       "station": "shape",
-      "status": "pending",
-      "phase": "spec",
+      "status": "in_progress",
+      "phase": "review",
       "checkpoint": {
         "kind": "auto"
-      }
+      },
+      "branch": "darkrun/relic/shape",
+      "started_at": "2026-07-30T09:40:05.805154+00:00"
     },
     "specify": {
       "station": "specify",

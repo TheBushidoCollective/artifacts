@@ -40,6 +40,11 @@ gate_results:
   at: 2026-07-30T02:57:31.400331+00:00
   attempts: 1
   detail: exit=0. 13 non-empty lines, all matching ^https://, trailing newline confirmed (last byte 0x0a).
+- name: every-cited-url-resolves
+  status: pass
+  at: 2026-07-30T02:57:33.811944+00:00
+  attempts: 1
+  detail: exit=0. All 13 URLs fetched with curl -sfL. Pre-screened 22 candidates first; no URL-shape templates (file.kiwi/abcdef12#secretKey, wormhole.app/{roomId}) included.
 ---
 
 # Goal

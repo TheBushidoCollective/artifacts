@@ -27,7 +27,7 @@ quality_gates:
 
 Write `docs/design/container.md`: the decided container framing, key material, and reference implementation for Relic. Plus `docs/design/container.sources.txt`, one URL per line, trailing newline.
 
-**This is the only decision in the run that is irreversible once a single relic exists.** Everything else can be migrated, redeployed, or renamed. A relic encrypted under the wrong framing is unreadable forever, and a writer bug ships permanently into every object written under it.
+**This is the only decision in the run that is irreversible once a single relic exists.** Everything else that lives in a stored object can be migrated or redeployed. **The name is the exception and it is not yours:** it is free today and closes at the domain purchase, which is already a stated deployment blocker, and `design-topology-and-origins` owns it. Do not de-rank it in passing. A relic encrypted under the wrong framing is unreadable forever, and a writer bug ships permanently into every object written under it.
 
 **Read first:** `darkrun_knowledge_list` in full. Load-bearing here: `rfc8188-container-facts-and-implementation-landscape`, `browser-crypto-and-large-file-constraints` (**already corrected in place; do not re-derive its wrong version**), `citation-defects-and-the-three-checks-that-catch-them`, `cross-document-gaps-no-criterion-catches`.
 
@@ -44,6 +44,13 @@ Five citation defects shipped in `specify`, in four modes: a fabricated quotatio
 # Already decided. Do not relitigate.
 
 From `format.md`, locked: RFC 8188 `aes128gcm` is the framing family. `keyid` is unused and `idlen` MUST be 0, refused after the fetch. Unknown container versions refuse at both refusal points. The version marker lives in the **fragment**, not the container. Every relic gets a fresh key; convergent encryption is drift routing back to `frame`. The published size number is a plaintext number.
+
+# What `format.md` §4 routes here, and what it does not
+
+`format.md` §4 routes six items. **Four are yours: 4.1 the wire format and framing, 4.2 key length, 4.3 the ID entropy bit count, 4.5 bucket padding.** The other two are not, and this is the single-owner assignment for the station, so do not treat a sweep of §4 as authority over them:
+
+- **4.4, whether the cap is on plaintext or ciphertext and its value**, belongs to `design-storage-grant-and-cost`. It is the same decision `publish.md` 6.3 and `viewer.md` 7.2 also route, the binding arithmetic is in `service.md` 2.3, and storage is the unit that holds that arithmetic. Your document may cite the cap once it exists; it does not pick it.
+- **4.6, whether object metadata is set at upload at all**, also belongs to `design-storage-grant-and-cost`, which holds the grant-branch evidence that decides it.
 
 # The decisions
 
@@ -76,9 +83,17 @@ The viewer must be JavaScript, so a JS reader exists regardless. **If any non-JS
 
 `format.md` says the format cannot change after content is encrypted, which is true of a given relic and misleading about the system. Because the version marker is in the fragment and therefore **pre-fetch**, a v2 viewer refuses or routes a v1 relic without minting and without spending egress. State the real migration cost: the viewer carries both decoders for as long as any v1 relic can be alive, which a mandatory TTL bounds. State what would make it unbounded, which is a writer that keeps writing v1.
 
+**The bound is only as real as the TTL ceiling, and that ceiling is `design-storage-grant-and-cost`'s decision, not yours.** Do not write a bounded-sounding claim resting on a number nobody has picked. Name the mandatory TTL as the bound, name storage as the unit that sets its ceiling, and state the need in the sibling form below rather than asserting a value.
+
 ## 5. Nonce discipline, as rules an implementer can follow
 
 `format.md` 3.10 and `publish.md` 4.4 both carry the nonce-reuse consequence. Turn it into implementation rules: how the record sequence is derived, what resuming at the correct index requires of the writer, and what the writer must do rather than merely must not do.
+
+## 6. The ID entropy bit count, which is a number and not a floor
+
+`format.md` 4.3 routes the bit count here. Generation is fixed client-side in 1.3, and 1.2 fixes 122 bits as a **floor**, not the answer. `design-operations-and-abuse` will record enumeration as settled at the entropy floor already fixed, which reads the floor as the decision. Pick the number so that record is true rather than circular.
+
+Decide the bit count and state both costs: the ID's length in characters under 2.3's unpadded base64url encoding, which `format.md` 1.5 makes the primary reserved-word guard, against the enumeration arithmetic at the value you choose. Apply the same terminal-character check §1 applies to the fragment.
 
 # Do not assign obligations to siblings
 
@@ -97,10 +112,10 @@ Direct, dry, confident, contractions used naturally, brevity, authority through 
 5. **The document restates the key-length decision as IKM length and states the cipher is AES-128 regardless.** Verify: `grep -c 'AES-128' docs/design/container.md` returns at least 1.
 6. **The document states the rule that the reader takes `rs` from the header rather than a compiled-in default**, and states the failure that rule prevents.
 7. **The document decides the writer implementation and, if a second implementation ships, mandates cross-implementation verification against the RFC's published test vectors**, naming the non-zero-`keyid` wrinkle.
-8. **The document states the v2 migration cost in bounded terms** and names what would make it unbounded.
+8. **The document states the v2 migration cost in bounded terms, names the mandatory TTL as the bound, and states that the TTL ceiling is `design-storage-grant-and-cost`'s decision** rather than asserting a value. It also names what would make the cost unbounded.
 9. **Every string presented inside quotation marks as coming from a source has been verified verbatim against that source's raw text, and the beat reports the audit as a list**: each quoted string, its source, confirmed or corrected.
-10. **Every decision routed to this document by `format.md` §4 is decided with its consequence stated, or explicitly eliminated with the reason.** No routed item left open.
-11. `grep -c '[—–]' docs/design/container.md` returns 0.
+10. **The four `format.md` §4 items routed to this document are each decided with the consequence stated, or explicitly eliminated with the reason: 4.1 the wire format and framing, 4.2 key length restated as IKM length, 4.3 the ID entropy bit count, 4.5 bucket padding.** Name all four in the document. **`format.md` 4.4, the cap side and value, and 4.6, object metadata at upload, are not decided here.** They belong to `design-storage-grant-and-cost` and deciding either one in this document is a defect, not thoroughness.
+11. `test "$(grep -c '[—–]' docs/design/container.md)" -eq 0` exits 0.
 
 # Files touched
 
@@ -108,8 +123,8 @@ Direct, dry, confident, contractions used naturally, brevity, authority through 
 
 # Out of scope
 
-- The grant shape, storage topology, and cost. Sibling `design-storage-grant-and-cost`.
-- Origins, TLS, edge, and which origin serves what. Sibling `design-topology-and-origins`.
-- Viewer screens, art direction, the taskbar. Sibling `design-product-surface`.
+- The grant shape, storage topology, cost, **the hard size cap value and its referent (`format.md` 4.4), and whether object metadata is set at upload (`format.md` 4.6)**. Sibling `design-storage-grant-and-cost`.
+- Origins, TLS, edge, which origin serves what, **and the name**. Sibling `design-topology-and-origins`.
+- Viewer screens, art direction, the taskbar, platform memory ceilings. Sibling `design-product-surface`.
 - Abuse operations and legal posture. Sibling `design-operations-and-abuse`.
 - Any product code. This station designs; it does not implement.

@@ -12,6 +12,8 @@ outputs:
 reviews:
   feasibility:
     at: 2026-07-30T02:44:12.712554+00:00
+  value:
+    at: 2026-07-30T02:45:12.239582+00:00
 quality_gates:
 - name: artifact-exists
   command: test -f docs/frame.md

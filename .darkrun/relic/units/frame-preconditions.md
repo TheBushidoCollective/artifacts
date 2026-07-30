@@ -33,6 +33,11 @@ gate_results:
   at: 2026-07-30T03:33:36.462560+00:00
   attempts: 1
   detail: test -f docs/preconditions.md -> exit 0
+- name: substance-floor
+  status: pass
+  at: 2026-07-30T03:33:38.703971+00:00
+  attempts: 1
+  detail: exit 0; wc -w = 3492, floor 1000
 ---
 
 # Goal

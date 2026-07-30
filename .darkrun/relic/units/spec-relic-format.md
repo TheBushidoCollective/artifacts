@@ -155,11 +155,6 @@ quality_gates:
 - name: every-cited-url-resolves
   command: bash -c 'set -eu; while IFS= read -r u || [ -n "$u" ]; do [ -n "$u" ] || continue; curl -sfL --max-time 25 --retry 2 -A "Mozilla/5.0 (relic-link-check)" -o /dev/null "$u"; done < docs/spec/format.sources.txt'
 gate_results:
-- name: every-cited-url-resolves
-  status: pass
-  at: 2026-07-30T06:23:56.710852+00:00
-  attempts: 1
-  detail: 'All 12 URLs fetched, exit 0, no DEAD lines. Run by the manager at commit 2838a4d. Orphan check re-run separately in both directions and clean: no manifest URL uncited in the body, no body citation missing from the manifest. Beyond resolution, the adversary beat verified that each citation actually says what the document claims, checking 18 load-bearing claims against raw source text and finding two false (both fixed during resolve) and one loosely quoted. The manager independently re-confirmed both failures against the live pages before they were handed to the tightener.'
 - name: artifact-exists
   status: pass
   at: 2026-07-30T07:31:35.866934+00:00
@@ -175,6 +170,16 @@ gate_results:
   at: 2026-07-30T07:31:41.974774+00:00
   attempts: 2
   detail: Re-recorded against `e2420ae`. 12 non-empty lines against a floor of 5, unchanged by the fb-09 fix. The fix reused the RFC 9110 citation already in the manifest; no source was added or removed.
+- name: every-cited-url-resolves
+  status: pass
+  at: 2026-07-30T07:31:46.587702+00:00
+  attempts: 2
+  detail: |-
+    Re-recorded against `e2420ae`. All 12 URLs fetched, exit 0, no DEAD lines.
+
+    The fb-09 fix **changed which RFC 9110 sentence is quoted**, and the new one was verified verbatim before it shipped. The reconciler pulled `rfc9110.txt` raw (10785 lines), flattened newlines to defeat the RFC's line wrapping, and `grep -c -F` returned exactly 1 for "redirects to other sites include a (possibly empty) fragment component in order to block that inheritance". No WebFetch touched the specification, per the standing caveat that its summarizer was caught inverting this exact rule's meaning on this run.
+
+    That substitution is the fix. The replaced quote carried no scope qualifier and was attached to a blanket MUST; the shipped quote carries "to other sites," which is the clause the correction turns on.
 ---
 
 # Goal

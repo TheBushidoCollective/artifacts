@@ -1,7 +1,7 @@
 ---
 name: Specify the URL, the relic ID, and the ciphertext container
 unit_type: doc
-status: in_progress
+status: completed
 depends_on: []
 worker: ''
 model: opus
@@ -13,6 +13,7 @@ outputs:
 - docs/spec/format.sources.txt
 branch: darkrun/relic/units/specify/spec-relic-format
 started_at: 2026-07-30T05:50:06.587472+00:00
+completed_at: 2026-07-30T06:24:27.778198+00:00
 iterations:
 - worker: spec_writer
   started_at: 2026-07-30T05:50:06.587472+00:00

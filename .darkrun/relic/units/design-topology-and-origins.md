@@ -127,6 +127,56 @@ iterations:
     ## Suggested order
 
     F1 and F2 change what the document asserts and are both cheap. F3 and F4 make the edge decision honest without changing it. F5, F6, F8 are integrity repairs to sections whose conclusions stand. The rest are one-sentence additions. **Nothing here argues for reversing a decision.**
+- worker: resolver
+  started_at: 2026-07-30T13:38:14.510060+00:00
+  completed_at: 2026-07-30T13:38:14.510060+00:00
+  result: advance
+  note: |-
+    Resolve complete at `18494dc`, 7,457 to 10,213 words, manifest 23 to 25 URLs, worktree clean. **All fourteen findings fixed. No decision reversed.**
+
+    **Gates re-run independently by the manager:** 10213 words against 2400; 25 sources against 6; all 25 URLs resolve; zero dashes. **Scope re-verified:** A and B still not picked, the name still not picked, the four foreign routed items still appear exactly once in the disclaimer.
+
+    ## It corrected the challenge pass three times, and all three corrections hold
+
+    **1. The Cloud Armor arithmetic is $25.25, not $27.25.** The challenge pass assumed four named rules. The resolver checked: `grep -oh '[a-z_]*rate_limited' docs/spec/*.md` returns exactly **two** codes, `mint_rate_limited` and `publish_rate_limited`, and §6's rule is one rule per code. **Manager-confirmed: two codes, and one policy plus two rules plus the forwarding rule is $25.25.** It also states the per-rule term explicitly so the figure moves a dollar at a time if the count grows.
+
+    **2. The Certificate Manager CA framing was wrong in the challenge note.** That note said the CA is Google and issuance is not ACME. The overview page says Certificate Manager supports **both the Public CA and the Let's Encrypt CA**. The accurate load-bearing point is that the ACME account, client, and challenge response are Certificate Manager's rather than Relic's, so the Let's Encrypt analysis describes the path not taken rather than a mooted CA.
+
+    **3. It could not reproduce the 3ms focus-event timestamp**, because its listener attached post-load, so the document states the settled state it measured and does not repeat 3ms. **It documents the artifact reading in the text**, so anyone repeating the test is not misled.
+
+    ## It also diagnosed its own contradictory measurement rather than picking a side
+
+    Its first focus probe returned `hasFocus() === false`, diverging from the challenge pass. It found the cause: it had navigated into a tab opened at `about:blank` and never focused. Re-run with the page as the browser's **startup URL**, which is how a previewer actually drives it, gives `visible`, `hidden: false`, `hasFocus: true` in both headless modes, sampled to 3 seconds, with no `visibilitychange`. **The challenge pass's substance holds and now has a stated reproduction condition it lacked.**
+
+    ## The two findings that changed what the document asserts
+
+    **F1:** the structural claim is gone, replaced with the measured behavioral one. The gate defeats the observed previewer population and is not a barrier against an adversary who can inject trusted input. Decision unchanged.
+
+    **F2:** the hard-reload case is struck against `format.md` §2.5, quoted, and 300 seconds is restated as a judgment value with nothing pinning it. `service.md` 2.2's tension with that locked rule is **routed as a second drift item**, alongside the PSL routing already present.
+
+    ## F5 rebuilt on re-verified data, with a rule stated
+
+    Live IANA bootstrap, publication `2026-07-23T02:00:03Z`, independently confirmed: `.io` and `.sh` absent, eight other TLDs present. Every row re-queried. The table now splits basis by registrar and states the rule that makes one absence mean registered and another mean not established: **positive evidence promotes, absence never does.**
+
+    ## F6 fixed in the direction that matters
+
+    The passive-DNS residual moved into branch A's cost list where it belongs, branch A given a closing paragraph matching B's, and B's two consequences relabeled as mirrors of A's costs rather than upsides. Brittle cost counts removed.
+
+    ## One it caught on its own review
+
+    It had written the validity-window constraint **backwards** in §5.2, flooring the interval by the window rather than the window by the interval. Corrected, with §8 made to agree.
+
+    ## Quotation audit
+
+    **66 block quotes, 66 verbatim, zero defects.** Three MISSes all resolved as markup-boundary false negatives, confirmed against raw HTML: two from `<code>` spans inserting a space before punctuation, and one where the quote stops immediately before a literal em-dash entity, a deliberate truncation to keep criterion 17 clean.
+
+    It also verified the PSL guidelines quotes resolve against the guidelines page itself rather than only against `viewer.md`, which quotes the same text. **That is the relay-of-a-relay check, run unprompted.**
+
+    **The mechanical property is preserved:** zero double-quoted runs of 12 or more characters outside block quotes. All six new figures are stated in prose with citations rather than quoted from table cells, because those cells concatenate label and value across a markup boundary.
+
+    ## Left alone, correctly
+
+    Nomination 3's handling untouched, including the explicit statement that no source states the `blob:` attribution residual. Criterion 7(b) untouched, with `document.domain` still reading **inert under modern isolation** rather than the unit spec's incorrect "inert by default." Every decision block present and unreversed; the only decision-text change is `wheel` leaving the mint gate's qualifying set, which was F10.
 reviews:
   fit:
     at: 2026-07-30T11:40:36.253906+00:00

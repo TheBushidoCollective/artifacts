@@ -1,7 +1,7 @@
 ---
 name: Specify the MCP tool surface and the publish contract
 unit_type: doc
-status: in_progress
+status: completed
 depends_on:
 - spec-relic-format
 - spec-service-surface
@@ -16,6 +16,7 @@ outputs:
 - docs/spec/publish.sources.txt
 branch: darkrun/relic/units/specify/spec-publish-contract
 started_at: 2026-07-30T07:59:00.999395+00:00
+completed_at: 2026-07-30T08:47:39.360699+00:00
 iterations:
 - worker: spec_writer
   started_at: 2026-07-30T07:59:00.999395+00:00

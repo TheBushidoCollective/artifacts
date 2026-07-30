@@ -24,3 +24,4 @@
 {"at":"2026-07-30T07:20:36.225290+00:00","event":"darkrun.unit.completed","run":"relic","station":"specify","unit":"spec-viewer"}
 {"action":"fix_feedback","at":"2026-07-30T07:22:29.907409+00:00","event":"darkrun.manager.action","run":"relic","station":"specify"}
 {"action":"manufacture","at":"2026-07-30T07:32:41.352697+00:00","event":"darkrun.manager.action","run":"relic","station":"specify"}
+{"at":"2026-07-30T08:47:39.369516+00:00","event":"darkrun.unit.completed","run":"relic","station":"specify","unit":"spec-publish-contract"}

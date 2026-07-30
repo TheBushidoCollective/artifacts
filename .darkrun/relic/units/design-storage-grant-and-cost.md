@@ -172,6 +172,11 @@ gate_results:
   at: 2026-07-30T15:08:02.039513+00:00
   attempts: 1
   detail: '`test -f docs/design/storage.md` exits 0 at `a9cea77`. Companion manifest `docs/design/storage.sources.txt` present. Manager-run, not taken from the worker''s report.'
+- name: substance-floor
+  status: pass
+  at: 2026-07-30T15:08:11.013615+00:00
+  attempts: 1
+  detail: '`wc -w` returns 11,459 against a floor of 2,600. Grew from 8,527 at the designer beat; the resolve pass added a third, all of it the D21 pricing-scope guard, the §1.2 copy-set enumeration, drift item 5, and the leaf-4 preservation sentences. No ceiling on this gate.'
 ---
 
 # Goal

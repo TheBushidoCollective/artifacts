@@ -66,6 +66,56 @@ iterations:
     5. **TTL 72 hours covers the Friday-to-Monday case by exactly zero margin**, and was chosen partly because it lands in the expressible lifecycle regime, which the beat calls a tidiness argument rather than a product one.
 
     It names the tier-collapse analysis and the residual-is-time-bounded framing as where it expects to be strongest, and asks for those to be attacked rather than accepted, citing both prior units having a nominated weakness turn out stronger than believed.
+- worker: pressure_tester
+  started_at: 2026-07-30T14:24:41.746468+00:00
+  completed_at: 2026-07-30T14:24:41.746468+00:00
+  result: advance
+  note: |-
+    **21 defects, ordered by severity. Four change a decision. Nonce returned verbatim. Nothing edited, nothing committed.**
+
+    ## The challenge premise was mine, and it was wrong
+
+    I directed this pass to fix the document's inbound-transfer claim first. **The pass refuted me, I verified the refutation independently, and the document is right.**
+
+    The `Data transfer in $0.0032 / 1 gibibyte` row I quoted sits at offset 1973019 under the H3 `Rapid Bucket`, whose opening sentence is **"Rapid Bucket is only available in zonal buckets."** The applicable row under `General network usage` at offset 1890632 reads **"Inbound data transfer  Free."** Both rows are on the page. I read the wrong table.
+
+    The pass's reductio is the part worth keeping: the companion row in that same table is `Data transfer out $0.0006 / 1 gibibyte`, **200x cheaper than the $0.12 the entire cost section rests on**. A neighboring row that contradicts an already-trusted number by two orders of magnitude means you are in the wrong table, and that check fires in one step without parsing anything.
+
+    Recorded as `verbatim-but-wrong-table-the-fifth-citation-defect-mode`. **This is the first citation mode in the run that is a false positive rather than a false negative**, so it fails toward confident action, and all four existing citation checks pass on it cleanly. The fix is a scope-resolution step before normalization: resolve a match offset to its enclosing heading and read that section's first sentence.
+
+    §5.2 stands unchanged. The leaf 3 and leaf 4 ranking survives. `publish.md` 4.4's doubling-or-tripling claim is an operator-cost claim and it is still wrong. **The only fix this generates is defect 21**, one sentence fixing Standard storage in a single region, which is the guard that would have stopped me.
+
+    ## Four defects that change a decision
+
+    **1. §7.2's `+900` double-counts a term already discharged.** `service.md` §3 locks the clamp to `min(url_validity, relic_expiry)` at mint, and §4.2 of this document restates it, so no signed URL outlives relic expiry. The v1 retirement bound is **259,200 seconds, not 259,200 plus 900.** The document contradicts itself between §4.2 and §7.2. **This is the station's third basis-discharge instance**, and the discharged basis is sitting in `preconditions.md` §3 and repeated in `container.md` §8, which asked for this number and would otherwise receive a wrong one.
+
+    **2. §9 need 4 is routed to a sibling that cannot receive it.** The rotation propagation measurement goes to `design-operations-and-abuse`, whose brief names the grant construction as out of scope, whose fourteen criteria produce no signing-key measurement, and which is a `shape` design unit with no more GCP access than this one. §3.4 says the second stage is bounded by the validity window until that measurement exists, so an unreceivable routing leaves the kill switch's second stage permanently unproven. Belongs in `build` with needs 3 and 5. **The reception sweep worked exactly as designed**, and the pass confirmed need 1 to `design-product-surface` is receivable by reading that brief.
+
+    **3. §5.2's five-minute retry budget is shorter than a single cap-sized upload.** §4.2 of the same document computes 419 seconds at 2 Mbit/s. `upload_retries_exhausted` fires with `attempts: 1` on exactly the slow-link population the retry machinery exists to serve, and it contradicts `publish.md` 3.4's sizing to a slow upload of a cap-sized object.
+
+    **4. §4.4 drops the third factor from a three-factor product.** `preconditions.md` §3 defines worst-case egress as size times mint cap times **fetches per minted URL** times rate. §4.4 computes two factors and asserts a byte bound. **§3.3 of the same document gets it right** and concludes bounded in time and not in bytes. 6.25 GiB is the one-fetch-per-mint case. This is the residual-is-time-bounded framing the make pass nominated as a strength: §3.3 is sound, §4.4 contradicts it.
+
+    ## Quotation audit
+
+    **35 of 35 verified verbatim, zero deviations, matching the make pass's self-report exactly.** First self-report in this station to hold. The two-variant tag-stripping claim is corroborated. Manifest orphan check clean both directions, 17 and 17.
+
+    **The one failure a verbatim sweep cannot catch is defect 11**: the salrashid demo's signed-PUT arm produces four results, not three, and the omitted line is a correctly sized body with a wrong hash also refused. Every wrong-size body carries a wrong MD5, so no run isolates `Content-Length`. The quotation is verbatim; the characterization of what the demo shows is not. `Content-Length` is still enforced by signature construction, so the conclusion holds and the evidence claim overstates.
+
+    ## Two nominations came back sound, and the pass named them
+
+    **Nomination 2, the in-flight expiry dependency: genuinely removed, not relabeled.** §4.2's argument runs on transfer duration, both figures re-derived. The only surviving reference is explicitly conditional and marked, and the observation is routed to `build` with a stated cost.
+
+    **Nomination 3, whether `publish.md` 3.1 already decided proof of work: the nomination is unfounded and the document adjudicated correctly.** 3.1 locks difficulty zero at launch and calls turning it on a tuning change. §5.1 says exactly that and decides the genuinely open part. **That is now three units in a row where a self-nominated weakness turned out stronger than believed**, which is worth carrying into the remaining wave.
+
+    Nominations 4 and 5 both land. 64 is a judgment value presented as computed, and one of its three headroom drivers is the floor of 40 restated. 72 hours fails on a Monday holiday, on a Friday-morning publish, and cross-timezone, where `service.md` §3 makes the app server's clock authoritative so local Friday afternoon is not a fixed point.
+
+    ## Independent arithmetic
+
+    The ciphertext bound **105,298,736 re-derived exactly to the octet** from RFC 8188 framing, including the 25,708-record count, confirming `container.md`'s conversion is applied correctly. Every grep-based negative claim verified true. Numbers found wrong: the `+900`, "thirteen" routed items against twelve, "five quotations" against six, a false overhead-match claim at 0.415 against 0.421, egress priced on plaintext rather than the ciphertext GCS actually bills, "lists three" candidates when two are named, and MB/GB read as binary in two factors.
+
+    ## All seventeen criteria pass, and none of them catches any of the 21 defects
+
+    Criterion 16's twelve routed decisions walked one at a time, including 7.4's compound requirement, both halves present. Locked-file check clean: the commit touches only the two new files. All four drift routings verified against their targets.
 reviews:
   fit:
     at: 2026-07-30T11:40:36.253906+00:00

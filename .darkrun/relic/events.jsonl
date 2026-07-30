@@ -20,3 +20,4 @@
 {"action":"noop","at":"2026-07-30T06:24:11.426560+00:00","event":"darkrun.manager.action","run":"relic","station":null}
 {"at":"2026-07-30T06:24:27.788007+00:00","event":"darkrun.unit.completed","run":"relic","station":"specify","unit":"spec-relic-format"}
 {"action":"manufacture","at":"2026-07-30T06:24:39.500379+00:00","event":"darkrun.manager.action","run":"relic","station":"specify"}
+{"at":"2026-07-30T07:13:43.335046+00:00","event":"darkrun.unit.completed","run":"relic","station":"specify","unit":"spec-service-surface"}

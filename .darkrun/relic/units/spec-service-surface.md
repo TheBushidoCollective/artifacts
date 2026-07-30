@@ -1,7 +1,7 @@
 ---
 name: Specify the status taxonomy, expiry semantics, mint rules, and the abuse surface
 unit_type: doc
-status: in_progress
+status: completed
 depends_on:
 - spec-relic-format
 worker: ''
@@ -14,6 +14,7 @@ outputs:
 - docs/spec/service.sources.txt
 branch: darkrun/relic/units/specify/spec-service-surface
 started_at: 2026-07-30T06:46:17.115603+00:00
+completed_at: 2026-07-30T07:13:43.326472+00:00
 iterations:
 - worker: spec_writer
   started_at: 2026-07-30T06:46:17.115603+00:00

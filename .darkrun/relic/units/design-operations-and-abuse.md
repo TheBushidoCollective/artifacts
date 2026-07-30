@@ -5,7 +5,6 @@ status: pending
 depends_on:
 - design-storage-grant-and-cost
 - design-topology-and-origins
-- design-product-surface
 worker: ''
 model: opus
 station: shape
@@ -14,7 +13,6 @@ inputs:
 - spec.md
 - docs/design/storage.md
 - docs/design/topology.md
-- docs/design/surface.md
 outputs:
 - docs/design/operations.md
 - docs/design/operations.sources.txt
@@ -37,7 +35,9 @@ Write `docs/design/operations.md`: the abuse pipeline, the monitoring surface, a
 
 **Read first:** `darkrun_knowledge_list`, especially `legal-obligations-of-a-no-accounts-hosting-service`, `safe-browsing-delisting-and-why-a-zero-knowledge-operator-cannot-comply`, `egress-cost-controls-and-what-a-kill-switch-cannot-stop`, `abuse-liability-of-hosting-uninspectable-content`.
 
-Then read `docs/frame.md` and `docs/preconditions.md`, locked; `docs/spec/service.md` §§1.4, 4, 4.1, 5, 6, **and §7 item 6, the published SLA, which is the one routed decision that is yours**; and sibling inputs `docs/design/storage.md`, `docs/design/topology.md`, and `docs/design/surface.md`. **If any is missing, fetch via `git show darkrun/relic/units/shape/<unit>:<path>` and report which path you used.** `surface.md` decides every recipient-facing screen, including whether the viewer distinguishes cap exhaustion from takedown; you consume that decision and do not redecide it.
+Then read `docs/frame.md` and `docs/preconditions.md`, locked; **`docs/spec/service.md` §1 in full**, because you reason about the status taxonomy your tickets arrive as, including 1.2 cap exhaustion and 1.4 takedown disclosure, plus §§4, 4.1, 5, 6, **and §7 item 6, the published SLA, which is the one routed decision that is yours**; and sibling inputs `docs/design/storage.md` and `docs/design/topology.md`. **If either is missing, fetch via `git show darkrun/relic/units/shape/<unit>:<path>` and report which path you used.**
+
+**`design-product-surface` runs beside you, not ahead of you, and you do not read its output.** It owns every recipient-facing screen and its copy. Where your pipeline depends on a screen it decides, **state the need and design your side against both branches in one pass**, which is the same discipline every unit in this station follows. Do not wait on it, do not assume an answer, and do not decide a screen.
 
 # The boundary you must hold, and it is itself a deliverable
 
@@ -68,7 +68,7 @@ Specify the intake-to-resolution path end to end, distinguishing:
 - **Automatable:** receipt acknowledgement, which satisfies the confirmation duty; URL-to-ID extraction; delete-by-ID; ciphertext-hash blocklist add; publishing-IP lookup; bulk delete by publishing IP and time window. Most of these already exist in `service.md` §4.
 - **Not automatable:** the criminal-threat branch, a mandatory-report filing, a law-enforcement request, a reconsideration request, and the judgement of whether a report is credible at all. **That last one is answered by §1, which is what makes one person viable.**
 
-The abuse form's categories, including whether a personal-data category appears and what it is labelled, are `design-product-surface`'s and arrive in `docs/design/surface.md`. **Read what it decided and design the handling behind each category it shipped.** State the need if a category you need is not there; do not add one to the form yourself.
+**Design the handling for a data-subject report, which is the pipeline question and is yours regardless of the form.** A person reporting their own leaked file is owed the same handling whether or not the form offers them a category to say so, so specify the path, the obligations it triggers, and its resolution against the report type rather than against a label. **Whether the form shows a personal-data category, and what it is called, is `design-product-surface`'s decision and it is not in your inputs.** State the need, name surface as the owner, and note what changes for intake in each case: a dedicated category routes these reports directly, and no category means they arrive in `other` and the pipeline has to detect them from free text. Design for both. Do not add a category to the form.
 
 ## 3. The reconsideration artifact, which must exist before it is needed
 
@@ -85,7 +85,7 @@ Specify the standing checks, each with what it catches and what its absence lose
 **This section is the highest-value gap-closing work in the unit and criterion 11 forces all three items. None of them closes by omission.**
 
 - **Cross-relic correlation.** `format.md` concedes per-relic length leakage paired with the stored class. The aggregate is not stated anywhere: the mint log retains requesting IP and the relic row holds class and size, so across many relics from one publishing IP the operator holds a cadence and size profile that fingerprints a pipeline or a person. `frame.md` requires publishers to see all of it before publishing, so **decide where this is disclosed.** The published disclosure statement in `service.md` §5 is yours for legal content, so this is your sentence to write. `design-product-surface` writes the sentence at the publishing moment in the MCP tool result, which is a different surface.
-- **Cap exhaustion and takedown are the same experience for a recipient.** Both return the same status, and the distinct codes are for the operator's log rather than the recipient's screen. Scanners can exhaust a cap before a human opens the link, producing a ticket indistinguishable from "the operator deleted my file." **The screen is `design-product-surface`'s decision and it arrives in `docs/design/surface.md`. Do not decide it.** State the need from your side and consume the answer: read what surface decided, state the support-load consequence that follows for §2's intake pipeline, and specify how a ticket that cannot be told apart from a takedown complaint is triaged under §1's delete-on-plausible-report rule. Whether the exhaustion case can arise at all is `design-topology-and-origins`'s mint-trigger decision, which you also read; state which branch it took.
+- **Cap exhaustion and takedown are the same experience for a recipient.** Both return the same status, and the distinct codes are for the operator's log rather than the recipient's screen. Scanners can exhaust a cap before a human opens the link, producing a ticket indistinguishable from "the operator deleted my file." **The screen is `design-product-surface`'s decision and you do not have its answer, so state the need and design your side against both branches:** if the viewer distinguishes the two, say what the ticket volume and the triage path look like; if it does not, say the same for a support queue that cannot tell a deleted relic from an exhausted one without an operator-side log lookup, and specify that lookup. State the support-load consequence of each branch and which one is cheaper for a one-person operation, then say plainly that surface owns the choice. Whether the exhaustion case can arise at all is `design-topology-and-origins`'s mint-trigger decision, which **is** in your inputs; read it and state which branch it took.
 - **Enumeration is settled and should be recorded as settled**, so a later station does not relitigate it as a reason to shorten IDs. At the entropy value `design-container-and-crypto` decided, walking the ID space is arithmetic rather than a threat model. Quote the decided number rather than the floor. **This is forward-looking protection for `build` and nothing else in this station checks that it was written.**
 
 ## 6. The price of yes, stated as a list the operator can answer
@@ -112,11 +112,11 @@ Direct, dry, confident, contractions natural. **Never an em-dash or en-dash.** N
 4. Every source resolves. Orphan check both directions.
 5. **The document states explicitly that it is not legal advice and separates what the text says from what needs counsel**, listing the counsel questions by name.
 6. **The triage policy is decided**, written as publishable policy language, with both consequences stated.
-7. **The pipeline separates automatable from non-automatable steps** and names every step in each.
+7. **The pipeline separates automatable from non-automatable steps** and names every step in each, **and specifies the data-subject report path against both branches of the form's category question**, naming `design-product-surface` as the owner of the category itself.
 8. **The reconsideration artifact is specified** and stated as required before the first listing.
 9. **The monitoring surface names each standing check with what its absence loses.**
 10. **The price of yes is an itemized list the operator can answer**, with statutory exposure named where it exists, **and every item that routes a number carries the number. The published SLA is stated in hours as a decided value**, not as a line item to be filled in later.
-11. **Section 5's three items are each written and none is left implicit:** where cross-relic correlation is disclosed, decided as a location; what follows for the pipeline from `design-product-surface`'s cap-exhaustion-versus-takedown decision, read from `docs/design/surface.md` and named, including how such a ticket is triaged; and enumeration recorded as settled at the entropy value `design-container-and-crypto` decided, so a later station does not relitigate it as a reason to shorten IDs.
+11. **Section 5's three items are each written and none is left implicit:** where cross-relic correlation is disclosed, decided as a location; the support-load consequence of the cap-exhaustion-versus-takedown screen **designed for both branches**, with the triage path specified for each and `design-product-surface` named as the owner of the choice, plus which mint-trigger branch `docs/design/topology.md` took; and enumeration recorded as settled at the entropy value `design-container-and-crypto` decided, so a later station does not relitigate it as a reason to shorten IDs.
 12. **The one routed decision assigned to this document is decided: `service.md` 7.6, the published SLA in hours.** It is a number, priced against `service.md` 4.1's inputs, and it is the only routed item that is yours.
 13. **Every quoted string is verified verbatim against raw source text, and the beat reports the audit as a list.** Legal text especially: quote it or do not claim it.
 14. `test "$(grep -c '[—–]' docs/design/operations.md)" -eq 0` exits 0.
@@ -128,6 +128,6 @@ Direct, dry, confident, contractions natural. **Never an em-dash or en-dash.** N
 # Out of scope
 
 - The container format, the grant construction, origins, and art direction. Owned by the four siblings.
-- **Recipient-facing screens and their copy, including the cap-exhaustion screen and the abuse form's category labels. Sibling `design-product-surface`.** You own the pipeline behind them and the legal content of the published disclosure statement; surface owns the screens and the sentence at the publishing moment in the MCP tool result.
+- **Recipient-facing screens and their copy, including the cap-exhaustion screen and the abuse form's category labels. Sibling `design-product-surface`, which runs beside you and whose output you do not read.** You own the pipeline behind those screens and the legal content of the published disclosure statement; surface owns the screens and the sentence at the publishing moment in the MCP tool result. Where you need one of its answers, design both branches and name it as the owner.
 - Choosing whether to build. This unit prices the decision; the operator makes it.
 - Product code.

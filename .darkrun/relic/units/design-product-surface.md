@@ -1,7 +1,7 @@
 ---
 name: Decide the art direction, the taskbar hierarchy, and every recipient state
 unit_type: ''
-status: pending
+status: in_progress
 depends_on:
 - design-container-and-crypto
 - design-topology-and-origins
@@ -19,6 +19,58 @@ outputs:
 - docs/design/surface.md
 - docs/design/surface.sources.txt
 branch: darkrun/relic/units/shape/design-product-surface
+started_at: 2026-07-30T15:42:37.067275+00:00
+iterations:
+- worker: designer
+  started_at: 2026-07-30T15:42:37.067275+00:00
+  completed_at: 2026-07-30T15:42:37.067275+00:00
+  result: advance
+  note: |-
+    `docs/design/surface.md` (9,511 words) and `surface.sources.txt` (14 URLs) committed at `01c88af`. Worktree clean.
+
+    **Gates re-run independently by the manager:** 9,511 against 2,600; 14 sources against 6; all 14 resolve; zero dashes; diff is exactly the two artifact files with no locked file. Read `storage.md` at `a9cea77` by explicit SHA rather than branch name, having first checked the log to confirm the resolve sat on top of `95853da`.
+
+    ## The arithmetic is exact and the manager re-derived all of it
+
+    `105,298,736 + 104,857,600 + 104,857,600 + 4,194,304 = 319,208,240`, matching to the octet. Factors 1.57, 2.51, 3.13 under the three candidate ceilings all confirm. Prefix 50x below the cap, highlight cap one eighth of the prefix, threshold 8 as one eighth of 64, decimal MB 104.9 and 105.3. **Every number checks.**
+
+    **The strongest cross-unit result in the station: storage found a break condition and this unit closed it.** `storage.md` 1.2 found a four-copy case at 524,729,136 octets that **breaches** a 500 MB floor candidate, driven by a whole-plaintext UTF-16 decode. This beat sized the truncated prefix at 2 MiB specifically against that, dropping the decode term from 209,715,200 to 4,194,304 and bringing peak to 319,208,240. **It reproduced storage's 524,729,136 exactly as a check on its own arithmetic before building on it.** That is deliberate consumption of a sibling's finding, not luck.
+
+    ## The sweep caught two deviations the beat would not have listed, and the second fix is the right kind
+
+    Both found by sweeping the committed blob, not the worktree, and both fixed before commit. A case fold with a dropped terminal period on `viewer.md` §5, and an ASCII single-for-double substitution on a nested token.
+
+    **The second fix is structural rather than another normalization fold.** It converted the clause to a block quote so the source's own double quotes stand, instead of adding a single-to-double fold that would silently rewrite genuine apostrophes. That is the remedy the citation topic prescribes and the first beat to reach for it.
+
+    Audit: 36 double-quoted runs, 31 source quotations, **31 of 31 verified**, 5 non-source classified rather than dropped, plus 40 block-quote lines of which 2 are source and both verified. It also caught its own **test harness** dropping a `§` from a needle and correctly concluded the document was never wrong.
+
+    ## Two provenance dimensions nobody asked for
+
+    **Heading resolution on eleven quotations**, and it found the MCP page **renders its body twice**, with the same strings appearing again around offsets 619k and 766k under a different governing heading, because the page embeds a copy for its llms/print surface. It used the canonical body and said so. That is the fifth defect mode handled at a level past what the brief specified.
+
+    **Firefox Send branch provenance per key.** `downloadConfirmDescription` and `reportReasonPii` exist only in v4 and are cited as unshipped; six others exist in both and are cited to v3 as shipped. **Shipped and unshipped are different evidence classes** and nothing in the criteria checks that distinction.
+
+    ## Decisions
+
+    **In-memory ceiling 500,000,000 octets, hardcoded**, at the bottom of the band, with hat.sh's 1 GB rejected on `viewer.md` §5's own record that its rationale is superseded and Apple rejected because inventing a number they do not publish is fabrication. **It pre-empts the misreading**: `viewer.md` §5 bans a hardcoded browser list for tier selection, and that ban stands untouched; this is one global scalar with no user-agent branch, and streaming feature detection stays required. Detection eliminated on the merits, including that `measureUserAgentSpecificMemory()` needs cross-origin isolation, which fights the shim `viewer.md` §4 makes the architecture.
+
+    **The pair collapses three tiers into one**, and it carries the cost honestly rather than burying it: with no streaming path, raising the cap later is building tier 1 and its ServiceWorker rules, not a config change. Tier 3's screen ships anyway as an invariant alarm.
+
+    **Highlight cap 262,144 octets plus an independent 8,192-octet single-line guard.** The second guard exists because `viewer.md` 3.3's pathological input is many megabytes on one line, and **a byte cap alone does not answer a grammar going superlinear inside one long line well within 256 KiB.** Two guards, two different failures.
+
+    **§7.2: no plaintext byte count before decryption, and it found a better reason than the discharged one.** Exactly derivable and trustworthy are different properties and only the first was discharged. The surviving reason is that the number is unauthenticated, outside every AEAD tag and operator-mutable per `container.md` 3.2, while the envelope's content length inside the AEAD is authoritative. It substitutes `object_length`, which `service.md` 2.1 already carries and `viewer.md` §5 already certifies exact, and **defers the plaintext number to the first moment it is authenticated rather than withholding it.**
+
+    **It routed drift anyway, at §10, though criterion 15 did not force it**, because the discharge belongs to the owner of the locked text even when the rule survives. The request is to restate the reason, not change the rule, and it says explicitly that nothing downstream should read this as permission to act on the discharge. **That is the trap the basis-discharge topic names and it did not take it.**
+
+    ## Its ranking, which it reordered against its own interest
+
+    It moved two items above the one instinct put first, saying plainly it would not leave the ranking where it flattered itself.
+
+    **Number one: the icon-URI-as-callback finding in §9 has no source.** It asserts a client rendering the tool list fetches an HTTPS icon URI, turning discovery into a beacon. It verified `icons` exists and that the spec calls icon bytes untrusted; **it verified nothing about when clients fetch**, and this is the primary stated reason for refusing `icons`.
+
+    **Number four it labels itself**: a 71-character URL wrapping claim derived from 71 being greater than 62 rather than from rendering anything, and it names the shape, "a decorative rationale under a sound rule, which is the shape this run keeps catching." **Applying the run's own lesson to itself.**
+
+    **Base rate for the challenge: four units in a row have had their number-one nomination come back sound. Do not let this list steer the sweep.** The unstated minimum viewport width at nomination 2 is a criterion-9 deliverable with an unstated bound and is the one I would look at hardest.
 reviews:
   fit:
     at: 2026-07-30T11:40:36.253906+00:00

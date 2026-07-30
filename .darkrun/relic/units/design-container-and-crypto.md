@@ -1,7 +1,7 @@
 ---
 name: Decide the container framing, the key material, and the reference implementation
 unit_type: ''
-status: in_progress
+status: completed
 depends_on: []
 worker: ''
 model: opus
@@ -14,6 +14,7 @@ outputs:
 - docs/design/container.sources.txt
 branch: darkrun/relic/units/shape/design-container-and-crypto
 started_at: 2026-07-30T11:15:50.599322+00:00
+completed_at: 2026-07-30T12:24:47.220887+00:00
 iterations:
 - worker: designer
   started_at: 2026-07-30T11:15:50.599322+00:00

@@ -41,3 +41,4 @@
 {"action":"fix_feedback","at":"2026-07-30T11:21:34.819945+00:00","event":"darkrun.manager.action","run":"relic","station":"shape"}
 {"action":"noop","at":"2026-07-30T11:43:16.094850+00:00","event":"darkrun.manager.action","run":"relic","station":null}
 {"action":"noop","at":"2026-07-30T11:44:03.423143+00:00","event":"darkrun.manager.action","run":"relic","station":null}
+{"at":"2026-07-30T12:24:47.231387+00:00","event":"darkrun.unit.completed","run":"relic","station":"shape","unit":"design-container-and-crypto"}

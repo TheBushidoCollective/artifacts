@@ -43,6 +43,11 @@ gate_results:
   at: 2026-07-30T03:33:47.966499+00:00
   attempts: 1
   detail: exit 0; 19 non-empty URL lines, floor 5; trailing newline confirmed via xxd (0a)
+- name: every-cited-url-resolves
+  status: pass
+  at: 2026-07-30T03:33:50.079873+00:00
+  attempts: 1
+  detail: exit 0; all 19 URLs resolved via curl -sfL. Each was pre-screened with the identical command before being cited.
 ---
 
 # Goal

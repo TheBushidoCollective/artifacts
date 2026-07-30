@@ -124,6 +124,12 @@ quality_gates:
   command: bash -c 'set -eu; n=$(grep -c . docs/spec/publish.sources.txt); test "$n" -ge 5'
 - name: every-cited-url-resolves
   command: bash -c 'set -eu; while IFS= read -r u || [ -n "$u" ]; do [ -n "$u" ] || continue; curl -sfL --max-time 25 --retry 2 -A "Mozilla/5.0 (relic-link-check)" -o /dev/null "$u"; done < docs/spec/publish.sources.txt'
+gate_results:
+- name: artifact-exists
+  status: pass
+  at: 2026-07-30T08:45:19.711151+00:00
+  attempts: 1
+  detail: '`test -f docs/spec/publish.md` exits 0. Run by the manager in the unit worktree at commit e6ebc99, not taken from a beat''s self-report.'
 ---
 
 # Goal

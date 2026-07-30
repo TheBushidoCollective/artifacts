@@ -19,11 +19,13 @@
     },
     "specify": {
       "station": "specify",
-      "status": "pending",
-      "phase": "spec",
+      "status": "in_progress",
+      "phase": "review",
       "checkpoint": {
         "kind": "auto"
-      }
+      },
+      "branch": "darkrun/relic/specify",
+      "started_at": "2026-07-30T04:12:58.155047+00:00"
     }
   },
   "created_with_version": "0.12.1",

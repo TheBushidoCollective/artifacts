@@ -109,6 +109,48 @@ iterations:
     **2. Length: 4507 words, up 29 percent, against a 1000 floor.** Per section: preamble 176, s1 829, s2 640, **s3 1981**, s4 504, s5 289, closing 50. Section 3 is 1981 for twelve controls, about 165 each for condition plus mechanism plus limit. The challenger cut ~110 words of prose in the same pass and says every word added is a mechanism clause, a limit clause, or a binary condition. It argues the only remaining place to cut is evidence and argues against that. **Measure independently before accepting, as you did on the sibling, where you found the challenger's own beat count understated its case.** The sibling's length held up on measurement; this one is 84 percent longer than that, so it deserves the same scrutiny rather than the same answer.
 
     **Your job beyond those.** Verify the four HIGH fixes rather than assuming them, especially finding 4, since it changes what this document claims the architecture guarantees and routes deviation to `frame` as drift. Confirm the soft-delete claims against the cited Google docs rather than trusting the summary. Sample the framer's "fully observable" set again: the challenger found two defects there after the framer marked it clean, so a third pass is warranted precisely because two passes already paid. Re-run all four gates and re-record with the nonce. Verify criteria 5 through 9 by reading. Grep for dashes. `docs/frame.md` is still not in the worktree; read it via `git show darkrun/relic/units/frame/frame-artifact:docs/frame.md`, read-only.
+- worker: distiller
+  started_at: 2026-07-30T04:01:06.229571+00:00
+  completed_at: 2026-07-30T04:01:06.229571+00:00
+  result: advance
+  note: |-
+    Distiller beat complete. Committed `4799c15`. Worktree clean. **4662 words, 22 sources, all four gates re-run for real and re-recorded with the nonce, all exit 0.** Verdict: ready to lock.
+
+    # The two open calls, decided
+
+    **1. Section 4 ciphertext-path bullet: KEPT.** The distiller checked the boundary itself against `frame.md`, which says only that the client "uploads only ciphertext to a service backed by Google Cloud Storage." That does not lock the publish path. It locks the download leg, because telemetry item 2 is "Open counts taken at signed-URL mint time," which only makes sense if the browser fetches from storage under a minted URL. The challenger's finding 4 is correct on the facts, and it undersold its own case: **four of section 3's sharpest limit clauses are made of the server being outside the data path.** The alternative to stating it as a precondition is hedging all four into conditionals, converting the document's best criterion-9 work into "if `shape` picks X, then." Strictly worse. Boundary confirmed: the bullet says `frame.md` "already fixes the download half" and this "states the publish half as a condition," so it extends the frame rather than overriding it, names no framework or topology or wire format, and routes deviation to `frame`, which is this unit's own station.
+
+    **2. Length 4507 accepted, and measured one level deeper than the challenger did.** Per-section numbers reproduced exactly. The challenger's "the only cut left is evidence" defense was true but unfalsifiable as stated, so the distiller decomposed section 3: **64 percent of it (1257 of 1959 words) sits inside `*Mechanism:*` and `*Limit:*` clauses, which criterion 9 mandates verbatim.** The remaining 702 words across 12 controls plus framing is about **55 words per control** for the condition and its rationale. Criterion 2's own sizing model is "roughly twelve controls with a rationale line each," section 3 enumerates exactly 12, and its non-mandated prose is a rationale line each. **The length is what criterion 9 costs when applied honestly.** It hunted for prose fat anyway and found none worth cutting.
+
+    # The third sweep paid off three more times
+
+    Sampling the conditions that read as most obviously fine, per instruction:
+
+    1. **The no-scripts-on-the-viewing-origin bullet was the real find**, and it guards the single highest-consequence secret in the system. It claimed double checkability (CSP response header is fetchable, absence of a third-party script is a build-time check) with **no limit clause at all**. Both checks cover the third-party half only. **An analytics or error-reporting SDK pulled from a package registry and bundled is first-party-served: it satisfies `script-src 'self'` and presents no external host to scan for.** Sentry's browser SDK is exactly that shape, and the knowledge base already records that it needed explicit fragment scrubbing. The project's signature defect, in a section 4 bullet two passes read straight past.
+    2. **The 429 check was scoped to the application.** A test proves what the app returns. Anything in front of it that sheds load has its own default status, and that is what the client actually sees.
+    3. **"Age of the oldest record proves the window is enforced" is vacuous** until that sink has been running longer than the window.
+
+    All three now state the limit in the same breath.
+
+    # Where the challenger was wrong, caught by going to source
+
+    Fixing the soft-delete claim, the challenger introduced a smaller error: it wrote the policy is "set at bucket creation." Google's page says a soft delete policy **"can be set, deleted, or edited during a bucket creation or update request."** The immutability the precondition argument leaned on does not exist. The distiller corrected it and rebuilt the argument on the fact that actually carries it: **a policy change only reaches objects deleted after it takes effect, and anything already soft-deleted keeps the duration in force when it was deleted, even if the policy is later removed.** Setting it late leaves a tail nobody can retroactively clear, which is a better reason than the one it replaced.
+
+    It also confirmed the half that matters more and the challenger had not reported: **"Objects deleted by Object Lifecycle Management become soft-deleted,"** so lifecycle expiry lands in the same state. The durable knowledge topic has been corrected accordingly.
+
+    Everything else verified verbatim by fetching pages and grepping raw text rather than trusting summaries: all three soft-delete quotes, all three Search Console quotes (so the second-owner requirement follows from source, not inference), CRC32C at 32 bits with the data-validation citation genuinely supporting "records on every object," and criterion 8's three telemetry items matching `frame.md` word for word under its own heading "All server-side. None of it needs a script on the viewing origin."
+
+    # Final state
+
+    4662 words (+155). Four edits, no structure touched, no requirements added. Sources 22, sorted, unique, trailing newline via `xxd`. Orphan check re-run clean both directions, `comm -23` and `comm -13` both empty. Dash sweep by `grep -nP` over U+2010 to U+2015, U+2212, U+FE58, U+FE63, U+FF0D across both files and **all three commit messages**: none, plus no ASCII double-hyphen. Voice: 48 unambiguous authorial contractions against 22 flat forms, counted after stripping quoted source material and code spans (its numbers run under the challenger's 50/32 because that count included quotations); 14 of the 22 flat forms are "is not" on load-bearing claims. Criteria 5 through 9 verified by reading, including that the cost precondition's "or Relic doesn't deploy" is correctly a deployment blocker in the domain-dependency class, so section 1 remains the only "do not build" branch.
+
+    **Convergence argument for the lock:** framer found eleven partial-observability limits, challenger found four HIGH plus five more, distiller found three plus one factual error. Severity falling, finds moving from load-bearing claims to qualifiers on already-correct mechanisms. That is convergence, not a document still coming apart.
+
+    # For the checkpoint
+
+    **`docs/frame.md` still is not in this worktree and `frame-artifact`'s output has not landed on the station branch.** All three beats read it via `git show darkrun/relic/units/frame/frame-artifact:docs/frame.md`. **The two units' outputs are on branches that have never met, so nothing has ever validated them side by side in one tree.** Cross-checks were done against the sibling branch's content directly, which is the best available, but the station branch needs repairing before the checkpoint means what it should. Both unit branches have been pushed to origin so the work is recoverable regardless.
+
+    The soft-delete knowledge topic is recorded and now carries the distiller's correction rather than the challenger's version.
 reviews:
   feasibility:
     at: 2026-07-30T02:47:23.386041+00:00

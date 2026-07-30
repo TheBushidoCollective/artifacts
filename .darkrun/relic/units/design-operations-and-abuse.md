@@ -9,6 +9,8 @@ worker: ''
 model: opus
 station: shape
 inputs:
+- frame.md
+- spec.md
 - docs/design/storage.md
 - docs/design/topology.md
 outputs:

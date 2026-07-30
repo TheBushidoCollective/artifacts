@@ -1,7 +1,7 @@
 ---
 name: Decide the grant shape, the storage topology, and the cost controls
 unit_type: ''
-status: in_progress
+status: completed
 depends_on:
 - design-container-and-crypto
 - design-topology-and-origins
@@ -18,6 +18,7 @@ outputs:
 - docs/design/storage.sources.txt
 branch: darkrun/relic/units/shape/design-storage-grant-and-cost
 started_at: 2026-07-30T14:04:03.683989+00:00
+completed_at: 2026-07-30T15:08:46.095471+00:00
 iterations:
 - worker: designer
   started_at: 2026-07-30T14:04:03.683989+00:00

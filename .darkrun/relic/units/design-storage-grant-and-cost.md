@@ -116,6 +116,40 @@ iterations:
     ## All seventeen criteria pass, and none of them catches any of the 21 defects
 
     Criterion 16's twelve routed decisions walked one at a time, including 7.4's compound requirement, both halves present. Locked-file check clean: the commit touches only the two new files. All four drift routings verified against their targets.
+- worker: resolver
+  started_at: 2026-07-30T15:07:38.284735+00:00
+  completed_at: 2026-07-30T15:07:38.284735+00:00
+  result: advance
+  note: |-
+    **All 21 defects applied, none disputed. Commit `a9cea77`, worktree clean.**
+
+    Manager re-verification: `git diff --name-only HEAD~1 HEAD` returns exactly the two artifact files. **No locked file appears in the diff across the whole branch**, checked against the specify HEAD `3ad0283`, not just the last commit. 11,459 words against 2,600. 18 sources, all 18 resolve. Zero dashes.
+
+    ## The worktree was dirty when the resolver entered, and it handled that correctly
+
+    My first resolve dispatch was interrupted after it had already made edits. The second resolver found uncommitted work at `95853da`, **refused to trust it, and re-verified every fix against primary sources before committing.** That was the right call and it paid: it found three real defects inside the interrupted work.
+
+    1. **§1.2's UTF-16 peak was internally inconsistent.** Prose said the decoded string sits on top of three copies, then computed a two-copies-plus-string figure. Fixed by naming the render path's actual copy set, and the observation that fixes it is a good one: **a rendered class is displayed, not downloaded, so no Blob.** The four-copy case then **breaches** 500 MB at 524,729,136 octets rather than approaching it, which is a stronger statement than the one it replaced. The conclusion and the truncated-prefix scoping survive.
+    2. **"For buckets located in a single region" is a table lead-in, not a heading.** Caught by applying the fifth-mode rule to its own fix, which is the discipline working on itself.
+    3. **419 seconds was priced on plaintext** after §1.1 had just committed to pricing wire figures on ciphertext. The 105,298,736 octets that actually cross are **421** seconds at 2 Mbit/s.
+
+    ## D1's basis-discharge handling is the shape the knowledge topic asks for
+
+    §7.2 now reads 259,200 seconds flat, names `service.md` §3's clamp as what discharges the term, and carries the tighter form. Drift item 5 does all four things: names the discharge, states **the rule stays exactly as locked** and only the reason for the extra term is gone, declines to act, and says why it routes rather than merely notes. **It has a consumer.** `container.md` §8 repeats the additive reasoning and names this document as the owner of the number, so §7.2 supplying 259,200 rather than 259,200 plus 900 puts the discrepancy on the record instead of leaving it looking like an arithmetic slip.
+
+    ## D21 is the fix that outlives this unit
+
+    I asked for one guarding sentence. The resolver wrote a paragraph that **encodes the reductio in the document**: the pricing page prices several bucket geometries on one URL, `$0.0006` of egress is 200 times below the `$0.12` the cost section rests on, and a neighbouring row two orders of magnitude off an established number means the wrong table rather than a discovery. Standard storage in a single region is now decided as a value with the Standard and single-region halves each argued from the access pattern.
+
+    **That paragraph is the check that would have stopped my false challenge, written where the next reader will hit it.** §3.1 also now reports every pricing quotation against its own resolved heading rather than against the page.
+
+    ## Quotation audit
+
+    **40 double-quoted runs, 40 verified, zero deviations.** Five new since the make pass's 35, one of which is a quotation of a locked file and was matched against the file rather than a URL. Manifest orphan check clean both directions at 18 and 18. Heading resolution run on every pricing-page quotation.
+
+    ## What grew
+
+    8,527 words to 11,459, a third larger. The growth is the D21 guard, the copy-set enumeration in §1.2, drift item 5, and the leaf-4 preservation sentences. No criterion has a ceiling and none of it reads as padding, but it is worth the station audit knowing the resolve pass grew the artifact by a third.
 reviews:
   fit:
     at: 2026-07-30T11:40:36.253906+00:00

@@ -1,7 +1,7 @@
 ---
 name: Specify the status taxonomy, expiry semantics, mint rules, and the abuse surface
 unit_type: doc
-status: pending
+status: in_progress
 depends_on:
 - spec-relic-format
 worker: ''
@@ -13,6 +13,53 @@ outputs:
 - docs/spec/service.md
 - docs/spec/service.sources.txt
 branch: darkrun/relic/units/specify/spec-service-surface
+started_at: 2026-07-30T06:46:17.115603+00:00
+iterations:
+- worker: spec_writer
+  started_at: 2026-07-30T06:46:17.115603+00:00
+  completed_at: 2026-07-30T06:46:17.115603+00:00
+  result: advance
+  note: |-
+    `docs/spec/service.md` (4808 words) and `docs/spec/service.sources.txt` (19 URLs) committed at `6e74350` on the unit branch. Worktree clean.
+
+    **Gates reported by the beat:** exists 0; floor 0 at 4808 against 2800; 19 sources against a floor of 5; urls exit 0; zero em-dashes or en-dashes; trailing newline present. The beat ran the orphan check itself with `comm`, found two orphaned manifest entries (GCP AUP and RFC 6585), and **fixed them by adding real cited claims rather than deleting the sources**, which is the right direction. Remaining regex hits are the placeholder `https://<relic-domain>/problems/` and Microsoft's own verbatim `https://<DataCenterLocation>.safelinks.protection.outlook.com`, both quoted format text rather than citations.
+
+    **Sibling input read via `git show darkrun/relic/units/specify/spec-relic-format:docs/spec/format.md`**, the fallback rung the manager verified in advance. The station ref still does not resolve. The ID entropy dependency checks out: it quotes `format.md` 1.2's "The ID carries full bearer-token entropy... it is unguessable, not merely unique" and the clause naming the consequence for this unit directly, and cites the section rather than re-deciding it.
+
+    ## The three reasoned status decisions
+
+    - **Cap exhaustion: `410 download_cap_exhausted`.** The cap has no reset window, so the relic is terminal for its remaining life, making RFC 9110's "no longer available at any location" literally true. **Cost accepted and stated:** cap exhaustion, expiry, and all three deletion flavors share one status, so no status-grouped view separates them and no later query undoes it. Paid for with a hard rule that the mint log records `code` and not only status, and that every dashboard, alert, and abuse metric keys on `code`.
+    - **Expired versus never-existed: distinguished.** `410 relic_expired` against `404 relic_not_found`, resting on the full-entropy ID. Stated limit: the informative `410` is served to scanners too, which costs nothing because a scanner holding the ID already had the URL.
+    - **Takedown disclosure: the fact is disclosed, the reason is not.** Abuse, legal process, and blocklist match all return `410 relic_removed`, with the reason class recorded privately on the tombstone. Decided here, not routed, per criterion 15.
+
+    ## The mint response field set, for `spec-viewer`
+
+    `url`, `url_expires_at`, `relic_expires_at`, `object_length`, `object_crc32c`, `mints_remaining`. Two expiry fields because either can outlive the other. **Explicitly excluded:** filename, declared mimetype, renderer class (barred by `format.md` 3.2 and 3.6), and the format version (lives in the fragment, so a second copy could only disagree).
+
+    **This independently reconciles with `spec-viewer`**, which was written in parallel and asked for the URL, its absolute expiry, object length, CRC32C, and a machine-readable refusal reason. This set is a superset of that ask. The two units converged without coordination, which is the decomposition working.
+
+    ## The error shape, for `spec-publish-contract`
+
+    RFC 9457 `application/problem+json`, standard members plus **every field a client extracts:** `code`, `retry_after_seconds`, `size_limit_bytes`, `declared_size_bytes`, `size_basis`, `relic_id`, `download_cap`, `report_url`. `code` is the bare token and `type` is the problems URL plus `code`, generated from one table so they cannot disagree. `size_basis` is `plaintext` or `ciphertext`, and it exists because `format.md` 3.11 requires the published number be a plaintext number while `shape` picks the enforced side. Ten codes over twelve cases, since the three deletion cases share `relic_removed`. Edge degradation specified: a bare `429` reads as the endpoint's rate-limit code, a bare `503` as `service_paused`.
+
+    ## Where the adversary should push
+
+    Eight judgment calls, surfaced rather than buried. Two are potentially serious and the adversary was pointed at both first.
+
+    1. **It fixed every status value AND routed "the exact status values" to `shape`.** It reports its two instructions genuinely conflicted, resolved in favor of fixing them, and narrowed the route item to edge fidelity. This is either a criterion 5 violation, a criterion 6 satisfaction, or an incoherence that must resolve one way. Most consequential item.
+    2. **It widened the 401/403 ban from rate limiting to every public endpoint**, scoping an exception for the operator admin prefix. The preconditions lock it **only** for rate limiting. The beat calls this a tightening rather than a loosening, which is fair, but **a tightening of a locked constraint is still a modification of locked material**, and that is drift unless it survives scrutiny.
+    3. **`413` for size-over-cap is admitted as a stretch.** RFC 9110 defines `413` in terms of request content, and the grant request's content is small; what is oversized is the declared object. `403` fits better and is banned. The beat took `413` and said so plainly.
+    4. **Case 6, grant expired with no object, got `410` rather than `404`**, justified by the server never overwriting so the ID is permanently spent.
+    5. **Dedup applies to the open counter but not the download cap.** Neither locked document says. Reasoning: the preconditions' worst-case egress arithmetic collapses if a successful mint returns a usable URL without consuming cap.
+    6. **Delete blocklists automatically only for `abuse` and `blocklist_match`**, not legal process, so a legal takedown of lawful content does not poison the blocklist.
+    7. **Retention published per sink rather than as one number**, on the judgment that a single figure is the claim that goes false first.
+    8. **A new sourced observation, stated as a caveat and not a change:** a URL disallowed in `robots.txt` never has its indexing rules read, so the locked `X-Robots-Tag: noindex` does its work on fetchers that ignore the disallow rather than on Googlebot. Both controls ship exactly as locked; only the interaction is named.
+
+    **Two claims the beat correctly attributed rather than overstated.** The `Go-http-client/1.1` HEAD observation rests on an Authelia issue, a practitioner report, attributed as observed rather than documented. And it reports reading the Safe Links and Proofpoint pages itself to confirm the **negative** claim that neither documents fragment handling. Negative claims resting on a single reader are exactly what the adversary beat exists to double-check, and it was told so.
+
+    ## On word count
+
+    4808 against a 2460 to 3485 band, treated as guidance rather than a ceiling per the precedent set when `format.md` landed at 5365. The beat attributes the overage to the twelve-case table, the reasoning on each contested status, and 15 inline citations. The adversary was asked to test that rather than accept it.
 reviews:
   completeness:
     at: 2026-07-30T05:31:07.501358+00:00

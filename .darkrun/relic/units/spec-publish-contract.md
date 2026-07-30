@@ -73,6 +73,7 @@ git show darkrun/relic/units/specify/spec-service-surface:docs/spec/service.md
 - **The result shape.** Must carry the full URL including the fragment; the agent cannot hand over a link otherwise. Decide each of: relic ID separately (without it a publisher cannot report their own relic without hand-parsing the URL), expiry timestamp (TTL is fixed and known, so it is free, and omitting it means the recipient learns the TTL by clicking a dead link), declared renderer class (so the agent can say "this will download rather than render"), filename echo, abuse URL.
 - **`resource_link` is a trap.** It is a link a client may fetch, so a client that helpfully fetches it mints a signed URL and **produces a phantom open against the frame's primary counter.** If used at all, it must not point at the viewer URL.
 - **`outputSchema` versus error results.** A schema with `url` required, plus an error result carrying no `structuredContent`, is a shape the spec neither blesses nor forbids. A permissive schema loses validation; omitting `outputSchema` loses typing; a conforming object with a null URL lies in a typed field. Pick one, or three implementers pick three.
+- **Which failures set `isError: true` on the tool result, and which are protocol-level errors.** State the rule explicitly. The answer is close to forced, since every failure in section 2 is a tool execution error the model can read and act on rather than a malformed request, but **leaving it unstated is how an implementer returns a protocol error the model cannot self-correct from**, which throws away the entire point of the field-level error mapping below. It also interacts with the `outputSchema` decision directly, because an error result's obligations depend on which of the two shapes it is.
 - **Progress notifications are a requirement, not a nicety.** Claude Code's time-to-first-byte default is 60 seconds and its HTTP idle timeout is 5 minutes. A large upload exceeds that routinely, and an agent's response to a hung tool is to retry, producing the duplicate-publish case. **Without progress the client times out, the model reports failure, the upload completes anyway, and the result is an orphaned relic that consumed quota and storage and that nobody has the URL for.** It also biases the frame's metric downward as published-and-never-opened.
 - **Tool count.** One tool or several. A delete tool cannot be specified until publisher self-delete is decided below.
 
@@ -132,7 +133,7 @@ Direct, dry, confident, **contractions used naturally**, brevity, authority thro
 # Completion criteria
 
 1. `test -f docs/spec/publish.md` exits 0.
-2. `test "$(wc -w < docs/spec/publish.md)" -ge 2200` exits 0. **Calibration:** roughly 31 mandated items at an observed 60 to 85 words per item, so a compliant document lands between about 1860 and 2635 words. 2200 sits inside that band; if you are near it, check for skipped items before assuming you are short.
+2. `test "$(wc -w < docs/spec/publish.md)" -ge 2200` exits 0. **Calibration:** roughly 38 mandated items at an observed 60 to 85 words per item, so a compliant document lands between about 2280 and 3230 words. 2200 sits just below that band deliberately. **The floor is a stub guard, never a target**, and completeness here is carried by criteria 5 through 13, not by word count. If you are near the floor, check for skipped items before assuming you are short, and never pad to clear it.
 3. Manifest has at least five sources, one per line, trailing newline.
 4. Every source resolves. **Do not invent citations.** Orphan check both directions.
 5. Every item in "What this document must decide" is resolved into a stated rule or routed to `shape`. **Routing is legitimate only for items named in this unit's own "Route to `shape`" section; routing anything else fails this criterion.**
@@ -143,6 +144,7 @@ Direct, dry, confident, **contractions used naturally**, brevity, authority thro
 10. The document contains the transcript disclosure obligation from section 5.
 11. **Every app-server-originated failure maps onto a status and named fields from `docs/spec/service.md`, inventing no status, and the document states the client extracts codes and fields rather than matching prose.**
 12. **Every failure with no app-server status is enumerated in Group B with its own stable machine-readable code, and the document names the grant-time and upload-time size refusals separately.**
+13. **The document states which failures set `isError: true` and which are protocol-level errors, consistently with its `outputSchema` decision.**
 
 # Files touched
 

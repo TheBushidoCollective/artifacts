@@ -177,6 +177,9 @@ reviews:
     at: 2026-07-30T09:30:39.382518+00:00
   testability:
     at: 2026-07-30T09:30:18.432248+00:00
+approvals:
+  testability:
+    at: 2026-07-30T09:36:02.428787+00:00
 quality_gates:
 - name: artifact-exists
   command: test -f docs/spec/viewer.md

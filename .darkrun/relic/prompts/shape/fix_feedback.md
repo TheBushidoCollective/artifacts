@@ -4,7 +4,7 @@
 > Eliminates: _expensive-structural-reversal_
 
 
-# Fix Feedback — `fb-14`
+# Fix Feedback — `fb-23`
 
 Open feedback preempts forward run progress. Something a reviewer or operator flagged is unresolved, and it routes to a **fix-worker** before the line moves on.
 
@@ -24,17 +24,17 @@ Dispatch one of **this station's** fix-workers — `builder`, `reconciler`, `val
 
 ## This fix has its own worktree — work in it
 
-The repair is isolated on its own branch + worktree, forked off the station branch: **`/Users/jwaldrip/dev/src/github.com/thebushidocollective/artifacts/.darkrun/worktrees/relic/fixes/shape/fb-14`**. Make the fix **inside that worktree** so its diff never tangles with in-flight unit work; the manager lands it back onto the station branch when you resolve the feedback. Don't commit the fix to the station branch yourself.
+The repair is isolated on its own branch + worktree, forked off the station branch: **`/Users/jwaldrip/dev/src/github.com/thebushidocollective/artifacts/.darkrun/worktrees/relic/fixes/shape/fb-23`**. Make the fix **inside that worktree** so its diff never tangles with in-flight unit work; the manager lands it back onto the station branch when you resolve the feedback. Don't commit the fix to the station branch yourself.
 
 
 ## What to do
 
-1. **Read the feedback item** `fb-14` in full (station `shape`). Understand the actual complaint, not your guess at it.
+1. **Read the feedback item** `fb-23` in full (station `shape`). Understand the actual complaint, not your guess at it.
 2. **Reproduce or locate** the problem in the real artifact. Don't fix what you can't first see.
 3. **Make the smallest correct change** that resolves it. Don't rewrite unrelated work to scratch an itch.
 4. **Re-verify** against the feedback's criteria — the fix isn't done until the original concern is demonstrably gone.
-5. **Close the loop**: record what you changed and why on `fb-14`, and resolve it.
+5. **Close the loop**: record what you changed and why on `fb-23`, and resolve it.
 
 ## Done when
 
-`fb-14` is resolved with evidence, the artifact is corrected, and nothing else regressed. Then call `darkrun_tick` — if more feedback is open, the manager routes the next item; otherwise the run resumes.
+`fb-23` is resolved with evidence, the artifact is corrected, and nothing else regressed. Then call `darkrun_tick` — if more feedback is open, the manager routes the next item; otherwise the run resumes.

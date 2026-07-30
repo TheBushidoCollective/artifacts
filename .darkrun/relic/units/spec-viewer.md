@@ -1,7 +1,7 @@
 ---
 name: Specify viewer routing, rendering, the sandbox boundary, and every recipient screen
 unit_type: doc
-status: in_progress
+status: completed
 depends_on:
 - spec-relic-format
 worker: ''
@@ -14,6 +14,7 @@ outputs:
 - docs/spec/viewer.sources.txt
 branch: darkrun/relic/units/specify/spec-viewer
 started_at: 2026-07-30T06:45:45.341264+00:00
+completed_at: 2026-07-30T07:20:36.207730+00:00
 iterations:
 - worker: spec_writer
   started_at: 2026-07-30T06:45:45.341264+00:00

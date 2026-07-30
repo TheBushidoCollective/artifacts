@@ -65,7 +65,7 @@ git show darkrun/relic/units/specify/spec-relic-format:docs/spec/format.md
 
 **Scope note:** you own statuses for failures the **app server originates**. Failures on legs the app server is structurally not in (a purely local file error, the client-to-GCS upload leg, a storage-side refusal) have no app-server status and are owned by `spec-publish-contract`. Do not invent statuses for them, and do not let their absence read as an omission.
 
-Enumerate and fix a status for each app-server-originated case: bad ID that never existed; expired past TTL; deleted for abuse; deleted under legal process; blocklist hash match; grant expired with no object; declared size over cap at grant time; publish rate limited; mint rate limited; **per-object download cap exhausted**; egress kill switch engaged; malformed renderer class or client name.
+Enumerate and fix a status for each app-server-originated case: bad ID that never existed; expired past TTL; deleted for abuse; deleted under legal process; blocklist hash match; grant expired with no object; declared size over cap at grant time; publish rate limited; mint rate limited; **per-object download cap exhausted**; egress kill switch engaged; malformed renderer class or client name. **That is twelve cases, and the enumeration is the criterion 6 completeness bar.**
 
 Three must be reasoned, not assigned:
 
@@ -138,11 +138,11 @@ Direct, dry, confident, **contractions used naturally**, brevity, authority thro
 # Completion criteria
 
 1. `test -f docs/spec/service.md` exits 0.
-2. `test "$(wc -w < docs/spec/service.md)" -ge 2200` exits 0. **Calibration:** roughly 28 mandated items at an observed 60 to 85 words per item, plus a 14-case status enumeration, so a compliant document lands well above this. 2200 is a stub guard; if you are near it, check for skipped items before assuming you are short.
+2. `test "$(wc -w < docs/spec/service.md)" -ge 2800` exits 0. **Calibration:** this unit carries roughly 41 mandated items, including the twelve-case status enumeration in section 1, at an observed 60 to 85 words per item, so a compliant document lands between about 2460 and 3485 words. 2800 sits inside that band. **The floor is a stub guard, never a target**, and completeness here is carried by criteria 5 through 15, not by word count. If you are near the floor, check for skipped items before assuming you are short, and never pad to clear it.
 3. Manifest has at least five sources, one per line, trailing newline.
 4. Every source resolves. **Do not invent citations.** Orphan check both directions.
 5. Every item in "What this document must decide" is resolved into a stated rule or routed to `shape` **with what `shape` must choose named. Routing is legitimate only for items named in this unit's own "Route to `shape`" section; routing anything else fails this criterion.**
-6. The status taxonomy is complete for app-server-originated failures, single, and states the cost accepted on cap exhaustion.
+6. The status taxonomy is complete for all twelve app-server-originated cases, single, and states the cost accepted on cap exhaustion.
 7. The expired-versus-never-existed decision explicitly references the ID entropy decision in `docs/spec/format.md` and is consistent with it.
 8. The document states that the mint is never a side effect of serving `/{id}`, and defines the mint response's field set.
 9. The document states that delete tombstones the row rather than removing it, and that the hash is captured before deletion.

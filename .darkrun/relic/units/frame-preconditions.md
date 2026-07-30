@@ -124,11 +124,6 @@ quality_gates:
 - name: every-cited-url-resolves
   command: bash -c 'set -eu; while IFS= read -r u || [ -n "$u" ]; do [ -n "$u" ] || continue; curl -sfL --max-time 25 --retry 2 -A "Mozilla/5.0 (relic-link-check)" -o /dev/null "$u"; done < docs/preconditions.sources.txt'
 gate_results:
-- name: substance-floor
-  status: pass
-  at: 2026-07-30T03:48:17.472742+00:00
-  attempts: 2
-  detail: 'challenger beat: exit 0; wc -w = 4507 (was 3492), floor 1000. Growth is mechanism/limit beats added under criterion 9 plus one binary condition; ~110 words of prose cut in the same pass.'
 - name: sources-manifest-populated
   status: pass
   at: 2026-07-30T03:48:25.043309+00:00
@@ -144,6 +139,11 @@ gate_results:
   at: 2026-07-30T03:58:00.710889+00:00
   attempts: 3
   detail: 'distiller beat (final state): test -f docs/preconditions.md -> exit 0'
+- name: substance-floor
+  status: pass
+  at: 2026-07-30T03:58:10.971491+00:00
+  attempts: 3
+  detail: 'distiller beat (final state): exit 0; wc -w = 4662 (was 4507), floor 1000. Per-section measured independently and reproduced the challenger''s numbers exactly at ad3c612. Growth this beat is +155 words: three criterion-9 limit clauses on conditions still overclaiming, plus one factual correction. Section 3 composition measured: 64 percent of it is mechanism and limit clauses that criterion 9 mandates; the remaining 36 percent is ~55 words per control of condition plus rationale, which matches the contract''s own "a rationale line each" sizing model. No padding found and none added.'
 ---
 
 # Goal

@@ -17,16 +17,16 @@ quality_gates:
 - name: sources-manifest-populated
   command: bash -c 'set -eu; n=$(grep -c . docs/frame.sources.txt); test "$n" -ge 6'
 - name: every-cited-url-resolves
-  command: bash -c 'set -eu; while IFS= read -r u; do [ -n "$u" ] || continue; curl -sfL --max-time 25 --retry 2 -A "Mozilla/5.0 (relic-link-check)" -o /dev/null "$u"; done < docs/frame.sources.txt'
+  command: bash -c 'set -eu; while IFS= read -r u || [ -n "$u" ]; do [ -n "$u" ] || continue; curl -sfL --max-time 25 --retry 2 -A "Mozilla/5.0 (relic-link-check)" -o /dev/null "$u"; done < docs/frame.sources.txt'
 ---
 
 # Goal
 
-Write `docs/frame.md`, the locked artifact of the `frame` station for the Relic run. Every later station inherits it and may not silently redefine it. It states the problem, the user, the value, the success metric, and the non-goals, tightly, in the user's terms, with every external claim carrying a real source.
+Write `docs/frame.md`, the locked artifact of the `frame` station for the Relic run. Every later station inherits it and may not silently redefine it. It states the problem, the user, the value, the success metric, the standing assumption, the wedge boundary, and the non-goals. Tightly, in the user's terms, with every external claim carrying a real source.
 
-Also write `docs/frame.sources.txt`, a citation manifest: one URL per line, no other text, listing every external source `docs/frame.md` relies on. This is what makes the citations checkable.
+Also write `docs/frame.sources.txt`, a citation manifest: one URL per line, no other text, listing every external source `docs/frame.md` relies on. End the file with a trailing newline.
 
-**Read `darkrun_knowledge_list` first, in full.** Ten topics were recorded during discovery and they are your evidence base. You have no other context. Do not restate the research; distill it into a frame.
+**Read `darkrun_knowledge_list` first, in full.** Eleven topics were recorded and they are your evidence base. You have no other context. Do not restate the research; distill it into a frame.
 
 # What Relic is
 
@@ -36,7 +36,7 @@ A zero-knowledge publishing service driven by an MCP tool. A user tells their co
 
 Settled. Record them as constraints; do not relitigate them.
 
-1. **No server-returned executable script.** A local stdio MCP server encrypts in-process. This overrode the original brief. See `mcp-client-architecture-local-binary-not-returned-script`.
+1. **No server-returned executable script.** A local stdio MCP server encrypts in-process. See `mcp-client-architecture-local-binary-not-returned-script`.
 2. **Relic does not run under `thebushido.co`.** Two registrable domains distinct from it are required: one for the service, one for the sandbox origin that renders untrusted HTML. See `domain-strategy-and-safe-browsing-blast-radius`.
 3. **Rendering is the wedge; zero-knowledge is the permission slip.** See `prior-art-zero-knowledge-link-sharing` and `claude-artifacts-capability-boundary`.
 
@@ -57,10 +57,36 @@ One paragraph naming the wedge and why it holds. Rendering is primary because it
 
 Include the honesty constraint: the JavaScript performing decryption is served by the same server the zero-knowledge claim is made against, so it is a claim about operator intent, not a property a recipient can verify. PrivateBin and 0bin say this out loud; Relic must too.
 
-## The success metric
-**Exactly one** observable that tells us we won, stated as a checkable condition, not a vanity count. Choose the one that most directly tests the wedge: that recipients open relics, and that opened relics are predominantly types Relic *renders* rather than download-only binaries. If most relics are binaries, Relic is a worse file.kiwi, and the metric must be capable of revealing that.
+## The success metric, and the telemetry that makes it measurable
 
-Then list at most four supporting conditions, each checkable. One of them must be the service domain staying unflagged by Safe Browsing, VirusTotal consensus, and the major mail-gateway blocklists, because that condition failing means shut it down.
+**This section must state both the metric and how it is computed. A metric with no path to a number is not a metric.**
+
+The primary metric: **a majority of published relics are opened by someone other than the publisher, and a majority of those opened relics are of a type Relic renders rather than download-only binaries.** If that second clause fails, Relic is a worse file.kiwi and the value case is false.
+
+Both halves are unmeasurable by default under the locked architecture, and the frame must say how they are made measurable. The server holds only ciphertext, never receives the key, and `archive-browsing-and-mimetype-detection` puts mimetype sniffing after decryption in the browser. The viewing origin carries no analytics, because any same-origin script can read `location.hash`. So state the minimum telemetry, and state its cost:
+
+1. **A coarse renderer class declared at publish time by the local client**, which has the plaintext: one of `markdown`, `code`, `html`, `image`, `media`, `archive`, `binary`. Stored server-side against the relic ID.
+2. **Open counts taken at signed-URL mint time**, excluding opens originating from the publishing IP.
+3. **Publishing client name**, so the question "does this serve the segments Artifacts cannot" is answerable at all.
+
+State the cost honestly and in the document: this leaks a coarse content category, a client name, and IP-correlated open activity to the operator. It is metadata, not content, and the operator still cannot read a single byte of any relic. But it is a real reduction from "the operator knows nothing" to "the operator knows what kind of thing you published and roughly how often it was fetched." Record it as a deliberate trade, made because a wedge nobody can measure is a wedge nobody can defend. Record also that publishers must be able to see this in a published privacy statement.
+
+Then list at most four supporting conditions, each checkable. One of them must be that the service domain stays unflagged by Safe Browsing, VirusTotal consensus, and the major mail-gateway blocklists, because that condition failing means shut it down.
+
+## The standing assumption that could invalidate this frame
+
+Both user segments derive entirely from a capability gap in a product Anthropic controls. `claude-artifacts-capability-boundary` records that the window is not permanent.
+
+State the assumption plainly, and state the trigger that falsifies it: Artifacts becoming available in Agent SDK and GitHub Action contexts, or accepted source file types widening beyond `.html`/`.htm`/`.md`. Say that hitting either trigger is a change to the problem, which routes back to this station as drift rather than being absorbed downstream. A frame that defines its users by a gap one vendor can close, without recording that it may close, has deferred wrong-thing risk instead of killing it.
+
+## The wedge boundary (which types are first-class)
+
+Rendering is the wedge, so the frame must bound it or the wedge is unbounded. This is a value decision, not a shape decision, and it is urgent: `archive-browsing-and-mimetype-detection` records that in-page archive browsing works only if the crypto framing supports range decryption, and that the choice is irreversible once content is encrypted. `shape` picks the wire format. It needs this signal before it does.
+
+State two things:
+
+1. **First release renders**: Markdown (rendered, with a source toggle), code and plain text (syntax highlighted), HTML (on the sandbox origin), and still images. Everything else is download-only in the first release.
+2. **The value case requires range-decryptable framing regardless.** In-page archive browsing and seekable media are exactly the payloads Artifacts cannot carry, which is the whole reason this product exists. They are not in the first release, but they are in the value case, so `shape` must not choose a wire format that forecloses them. State this as a constraint `shape` inherits, and be explicit that it is a constraint on reversibility, not a request to build the feature now.
 
 ## The non-goals
 Bound the work for every later station. At minimum: no accounts, no dashboard, no "my relics" list, no republish-to-same-URL or versioning (that is Artifacts' strength and needs identity to do safely), no custom domains, no team features, no expiry configuration. State that burn-after-reading is a non-goal for the first release specifically because a Slack unfurl or a Safe Links scanner would burn the relic before a human ever clicks.
@@ -73,11 +99,13 @@ Write as Jason Waldrip would: direct, dry, confident, contractions, brevity, aut
 
 1. `docs/frame.md` exists → `test -f docs/frame.md` exits 0.
 2. It is substantive, not a sketch → `test "$(wc -w < docs/frame.md)" -ge 900` exits 0.
-3. `docs/frame.sources.txt` lists at least six sources, one URL per line, nothing else → `bash -c 'set -eu; n=$(grep -c . docs/frame.sources.txt); test "$n" -ge 6'` exits 0.
-4. Every listed source actually resolves over the network → `bash -c 'set -eu; while IFS= read -r u; do [ -n "$u" ] || continue; curl -sfL --max-time 25 --retry 2 -A "Mozilla/5.0 (relic-link-check)" -o /dev/null "$u"; done < docs/frame.sources.txt'` exits 0.
+3. `docs/frame.sources.txt` lists at least six sources, one URL per line, nothing else, ending with a trailing newline → `bash -c 'set -eu; n=$(grep -c . docs/frame.sources.txt); test "$n" -ge 6'` exits 0.
+4. Every listed source actually resolves over the network → `bash -c 'set -eu; while IFS= read -r u || [ -n "$u" ]; do [ -n "$u" ] || continue; curl -sfL --max-time 25 --retry 2 -A "Mozilla/5.0 (relic-link-check)" -o /dev/null "$u"; done < docs/frame.sources.txt'` exits 0.
    **Do not invent citations.** Every URL must come from the recorded knowledge topics or be one you verified yourself. A fabricated URL fails this gate, which is the point.
-5. The document contains all five required sections: problem, user, value, success metric, non-goals.
-6. The success metric section names exactly one primary metric.
+5. The document contains all seven required sections: problem, user, value, success metric with its telemetry, standing assumption, wedge boundary, non-goals.
+6. The success metric section names exactly one primary metric, states how each half of it is computed, and states the metadata cost of computing it.
+7. The wedge boundary section names the first-release renderer set and states the range-decryptable framing constraint that `shape` inherits.
+8. The standing assumption section names a falsifying trigger, not a vague risk.
 
 # Files touched
 
@@ -87,8 +115,9 @@ Write as Jason Waldrip would: direct, dry, confident, contractions, brevity, aut
 # Out of scope
 
 - Choosing the server language, framework, or hosting topology. That is `shape`.
-- Choosing the encryption wire format. That is `shape`.
+- Choosing the specific encryption wire format. That is `shape`. This unit states only the reversibility constraint `shape` must respect.
 - Endpoint design, schemas, relic ID format.
 - Visual design direction for the PWA.
+- Designing the telemetry storage or the privacy statement's wording. State what must be collected and what it costs, not how it is stored.
 - The operating preconditions and the abuse-operations go/no-go. That is the sibling unit `frame-preconditions`, which depends on this one. Do not write it here.
 - Any code, config, or infrastructure.

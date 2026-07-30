@@ -109,11 +109,6 @@ quality_gates:
 - name: every-cited-url-resolves
   command: bash -c 'set -eu; while IFS= read -r u || [ -n "$u" ]; do [ -n "$u" ] || continue; curl -sfL --max-time 25 --retry 2 -A "Mozilla/5.0 (relic-link-check)" -o /dev/null "$u"; done < docs/frame.sources.txt'
 gate_results:
-- name: every-cited-url-resolves
-  status: pass
-  at: 2026-07-30T03:11:06.202549+00:00
-  attempts: 2
-  detail: Challenger beat re-run. exit=0. All 11 URLs fetched individually with curl -sfL --max-time 25 --retry 2; each printed OK. No URL-shape templates present.
 - name: artifact-exists
   status: pass
   at: 2026-07-30T03:18:27.793212+00:00
@@ -129,6 +124,11 @@ gate_results:
   at: 2026-07-30T03:18:35.788924+00:00
   attempts: 3
   detail: 'Distiller beat, final state. exit=0. 11 non-empty lines against a floor of 6; 0 lines failing ^https://; trailing newline confirmed (last byte 0x0a). Ran the orphan check in BOTH directions: every manifest URL is cited in the body, and every body URL appears in the manifest. The only body URL absent from the manifest is the `https://<relic-domain>/{id}#{secret}` shape template, correctly excluded per the unit contract.'
+- name: every-cited-url-resolves
+  status: pass
+  at: 2026-07-30T03:18:38.192917+00:00
+  attempts: 3
+  detail: 'Distiller beat, final state. Gate loop exit=0. Also fetched each of the 11 URLs individually and captured the status code: all 11 returned HTTP 200. No URL-shape templates in the manifest.'
 ---
 
 # Goal

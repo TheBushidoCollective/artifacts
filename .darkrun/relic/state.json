@@ -20,11 +20,12 @@
     "shape": {
       "station": "shape",
       "status": "in_progress",
-      "phase": "review",
+      "phase": "manufacture",
       "checkpoint": {
         "kind": "auto"
       },
       "branch": "darkrun/relic/shape",
+      "verifier_nonce": "827b652b65f71f4c86c06f5c4311691d9ef55f9408e0f90a2dee35ca6b1f5387",
       "started_at": "2026-07-30T09:40:05.805154+00:00"
     },
     "specify": {

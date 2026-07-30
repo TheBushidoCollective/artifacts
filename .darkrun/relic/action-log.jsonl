@@ -27,3 +27,4 @@
 {"action":"checkpoint","at":"2026-07-30T09:39:08.595940+00:00","station":"specify","track":"run"}
 {"action":"spec","at":"2026-07-30T09:40:07.076861+00:00","station":"shape","track":"run"}
 {"action":"units_invalid","at":"2026-07-30T10:10:54.952125+00:00","station":"shape","track":"run"}
+{"action":"review","at":"2026-07-30T10:11:42.852928+00:00","station":"shape","track":"run"}

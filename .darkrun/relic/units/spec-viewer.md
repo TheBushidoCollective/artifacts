@@ -67,6 +67,66 @@ iterations:
     ## On word count
 
     4752 against a 2580 to 3655 band. Deliberate, per the calibration precedent set when `format.md` landed at 5365. The beat states the overage is concentrated in section 5, where two corrected claims needed their evidence stated. The adversary was asked to test that rather than accept it.
+- worker: adversary
+  started_at: 2026-07-30T07:02:23.313581+00:00
+  completed_at: 2026-07-30T07:02:23.313581+00:00
+  result: advance
+  note: |-
+    **Verdict: criteria 4, 7, 10, and 11 fail; the other twelve pass.** Seventeen findings, no edits, no commits. Every spec pulled as raw text and grepped; WebFetch used on nothing.
+
+    ## F1, critical, the handshake is unimplementable as specified.
+
+    §4 mandates both the `Content-Security-Policy: sandbox` header on the shim's own response **and** an exact `targetOrigin` for the payload message. **The manager verified the mechanism against MDN verbatim: "A sandboxed resource is otherwise treated as being from an opaque origin, which ensures that it will always fail same-origin policy checks... The Origin of sandboxed resources without the `allow-same-origin` keyword is `null`."**
+
+    `postMessage` does not dispatch when `targetOrigin` is not `*` and the target's origin does not match, an opaque origin matches nothing, and `"null"` is not a parseable URL so it throws. **The only value that reaches an opaque-origin shim is `'*'`**, which the same section forbids for the payload and which criterion 11 exists to prevent. Following the document as written yields either a viewer that cannot render or one that broadcasts plaintext to whatever occupies the frame.
+
+    It also collapses §2's "the parent computes `targetOrigin` per render," one of three stated reasons for per-relic subdomains. `MessageChannel` and `opaque` each appear zero times in the document.
+
+    Two resolutions offered, both sound: **(a)** two layers, shim on a real addressable origin with untrusted content in a sandboxed inner iframe, which is what the cited web.dev page actually describes and which preserves §2's argument; or **(b)** transfer a `MessagePort` in the data-free handshake, point-to-point, no `targetOrigin` needed. The tightener was directed to (a) as preserving more of the document, with (b) explicitly permitted.
+
+    ## F2, high, the sandbox-shape decision rests on a cost that does not exist.
+
+    §2 justifies per-relic subdomains by claiming a fixed origin lets "one malicious relic reach another's rendered document." Under §4's own `CSP: sandbox` mandate every rendered document is already in its own opaque origin, so they are already cross-origin on one hostname. **The refuting sentence is on the MDN page §4 cites and on the web.dev page §2 cites.**
+
+    The argument that survives is on §2's own cited page and omitted: "If SpectreJS and renderer compromise attacks are outside of your threat model, then using CSP sandbox is likely a sufficient solution." Per-relic subdomains buy process-level isolation against Spectre and renderer compromise. **The decision stands; the reasoning is wrong.** Also missing: per-relic subdomains mean unbounded auto-generated hostnames under a wildcard, the exact pattern `preconditions.md` names as the Immich trigger, and the answer the document already has material for (the sandbox hostname serves only a static shim that never touches ciphertext or the network).
+
+    ## F3, high, the redirect rule is overbroad and destroys the key. Filed separately as fb-09.
+
+    RFC 9110 §17.11's remedy is scoped to redirects "**to other sites**," and the RFC's own worked example of desired behavior is same-site fragment preservation. §1.7 drops the qualifier, mandates an explicit fragment on **every** redirect, and lists same-origin cases among the bite points. Since the server never receives the fragment, "explicit, possibly empty" means empty in practice, so a recipient hitting `/{id}/#key` is redirected to `/{id}` with inheritance blocked and lands on the missing-key screen.
+
+    **`format.md` §5 carries the same undifferentiated list and that unit is locked**, so this was filed as `fb-09` with a recommendation not to reopen it. Both §1.7 quotes are verbatim and the cross-origin half is the correct non-inverted version; the defect is over-application, not inversion.
+
+    ## F4 and F5, high, dropped obligations from locked artifacts.
+
+    **F4:** `format.md` §3.1 assigns this unit two filename rules and the document carries neither. `filename` appears twice, both as a routing input, while the taskbar is specified six times and never told what to do with the name. §1.3's own mandated copy requires displaying it, so untrusted bytes are guaranteed to reach user-visible text on the origin holding the fragment. **This is the real hole in the "text nodes, never markup" principle: the one attacker-controlled stream the document forgot to route.**
+
+    **F5:** `frame.md`'s locked wedge boundary says "Markdown (rendered, **with a source toggle**)." The string `toggle` appears zero times. With Markdown on the sandbox and plain text on the viewing origin, where each side of the toggle lives is a live question.
+
+    ## F6, F7, F8, high, internal contradictions.
+
+    **F6:** §3.3's "sanitize it like Markdown if a highlighter can't work that way" is a sanitize-then-parse path on the origin holding the fragment, making sanitization the only layer, which is exactly what §3.1 invoked the locked precondition to forbid. Also, §3.3's stated reason for keeping code on the viewing origin is wrong (a highlighter does build structure from attacker bytes); the real distinction is fixed grammar versus attacker-controlled attributes and raw-HTML passthrough.
+
+    **F7:** §1.5 declares SVG download-only while removing every input that could route it there. Follow §1.4 and untyped SVG lands in plain text on the viewing origin instead. Two rules, one input, two answers. §1.4's downgrade mechanism is the fix and is never invoked.
+
+    **F8, criterion 7:** "least privileged path either type would allow" admits two readings that route the same bytes to different origins, and the worked example asserts one of them using a requirement stated nowhere. Separately, when both types map to the same level the rule picks an origin and no renderer.
+
+    ## F9, criterion 4, an unsupported citation.
+
+    §4 attributes to MDN that the header "applies to the whole response and can't be stripped... which makes it strictly stronger." **The manager confirmed: that page has zero occurrences of "whole response," "strip," or "stronger," and makes no header-versus-attribute comparison.** The claim is true and derivable; the citation does not support it. **This is the third citation defect in three units.**
+
+    ## F10 through F17
+
+    The four key-disclosure paths are claimed twice and never enumerated, so the unit's own premise is unverifiable. The streaming tier and the pre-decrypt CRC32C check are incompatible. The ServiceWorker gets seven words despite being an origin-wide persistent first-party script on the origin holding the fragment. The privilege order is a total order on browser-side privilege but not on harm, since forcing download-only puts an attacker-named file on disk outside the sandbox. Three scope leaks (a DOMPurify version pin, a deferral to `shape` outside the permitted categories, and enumerating the mint response's value set). Three places narrate the review process instead of addressing the downstream station. The PWA claim states as absolute what W3C appmanifest calls "purely advisory," and misses that a warm relaunch resumes in-memory with the key still live. Four small ones including a `U+202E` gap in the UTF-8 gate.
+
+    ## The seven flagged calls: five right, two with real holes
+
+    **Right:** the hashed subdomain label (DNS and SNI expose the hostname where the path does not, so a raw ID there is a fetchable bearer token; residual to state is that the deterministic derivation lets a URL-holder confirm from resolver logs that a device opened a specific relic); deterministic derivation (right, but the safety comes from opaque origins, not from "same content, so harmless"); the text-nodes principle (unbreakable from outside; it breaks from inside at F6 and F4); Markdown to the sandbox (right answer, "forced" not established, and the stated reasoning proves too much since it would force the highlighter there too); `PerformanceNavigationTiming` (compat figures exact against compat data, one gap where the navigation entry is absent).
+
+    **Holes:** the downgrade-only asymmetry (F13, an attacker gains something at the bottom of the order) and the PWA claim (F16).
+
+    ## Verified clean
+
+    Zero em-dashes. 94 contractions and 4 authored appositives at one per 1150 words, both matching the writer's report exactly. Manifest: 15 sources, all resolving, orphan-clean both directions, trailing newline at byte level. Not padded by volume, and the adversary measured that the padding the writer attributed to §5 is actually the F15 narration. **Nothing locked is relitigated**, checked one by one. Consistency with `format.md` correct on eight separate points. Third-party rewriters correctly disclaimed to the sibling. Criteria 6, 8, 9, 12, 13, 14, 16 satisfied.
 reviews:
   completeness:
     at: 2026-07-30T05:31:07.501358+00:00

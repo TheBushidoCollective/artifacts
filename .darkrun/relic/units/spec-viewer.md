@@ -127,6 +127,50 @@ iterations:
     ## Verified clean
 
     Zero em-dashes. 94 contractions and 4 authored appositives at one per 1150 words, both matching the writer's report exactly. Manifest: 15 sources, all resolving, orphan-clean both directions, trailing newline at byte level. Not padded by volume, and the adversary measured that the padding the writer attributed to §5 is actually the F15 narration. **Nothing locked is relitigated**, checked one by one. Consistency with `format.md` correct on eight separate points. Third-party rewriters correctly disclaimed to the sibling. Criteria 6, 8, 9, 12, 13, 14, 16 satisfied.
+- worker: tightener
+  started_at: 2026-07-30T07:19:51.344312+00:00
+  completed_at: 2026-07-30T07:19:51.344312+00:00
+  result: advance
+  note: |-
+    Resolve complete at `7121fc2`, worktree clean. All seventeen findings plus three verdict items answered, and four new issues the beat found itself.
+
+    **Gates re-run independently by the manager:** artifact-exists PASS; substance-floor PASS at 7883 against 2600; sources 17 against 6; every URL resolves; zero dashes. Spot-checked the fixes: `targetOrigin: '*'` appears **zero** times, `opaque` now appears six, F9's unsupported strings are gone, `toggle` is present, `filename` went from 2 to 8 mentions, the bidi gate is in, and the GHSA quote now reads `(latest)`.
+
+    ## F1, the architectural contradiction, resolved as option (a) and better than either option offered
+
+    **The shim keeps a real origin with no `sandbox` on its own response; the untrusted document goes in a sandboxed child iframe.** The opaque origin belongs at layer two where nothing needs to address it by origin. The shim's response instead carries `default-src 'none'`, its inline script by hash, `frame-ancestors` limited to the viewing origin, and `nosniff`.
+
+    **The result is stronger than the rule it replaced. `'*'` now appears nowhere in the design at all**, including the data-free `ready`, because §2 already makes the shim's expected parent origin a hardcodable constant. The guarantee stopped being a carve-out.
+
+    §4 states the header mandate as a rule that **moved** rather than one that was dropped, and cross-references §2, so "the parent computes `targetOrigin` per render" survives verbatim. Two consequences fell out and were stated: the layer-two `sandbox` attribute is sufficient **only because the locked never-both rule holds**, making the two load-bearing together; and a render-frame message arrives with `event.origin` of `"null"`, which the pinned parent origin can never equal, giving the shim a free authentication discriminator.
+
+    ## F3, and the beat corrected the manager's framing
+
+    I directed a split on cross-origin versus same-origin. **That axis is wrong and the beat said so.** Apex-to-`www` is cross-origin yet still inside Relic, so filing it under the mandatory-explicit-fragment half would have destroyed the key exactly the way the blanket rule did. **The correct axis is the destination's trust boundary**, which also absorbs HTTP-to-HTTPS instead of leaving it a special case. Leaving the service gets a mandatory explicit fragment; staying inside deliberately omits it so inheritance carries the key, said out loud. Preferred form is no inside-the-service redirect on the relic path at all, with HSTS preload moving the scheme upgrade into the user agent.
+
+    ## F8, the disagreement rule, now unambiguous
+
+    Three clauses operating on privilege levels rather than type names. Levels differ: download-only every time, explicitly not the lower of the two, justified without inventing a requirement (a disagreement proves one input is lying and the viewer cannot tell which, so anything above download-only trusts one of them). Levels match: the sniffed type picks the renderer, since it derives from bytes and the declaration is a publisher assertion. Either way the taskbar says the contents do not match the name.
+
+    ## Quotation audit, and a second fabrication-class defect
+
+    Every quoted string re-pulled as raw text and grepped, no WebFetch. All verbatim except two. F9's MDN claim confirmed falsified (zero occurrences of "whole response", "strip", "stronger"), citation dropped and the claim restated as derived reasoning. **And a defect nobody had flagged: the GHSA quote read "3.0.1 through 3.3.3 (current latest)" where the advisory says "(latest)".** One word inside quotation marks. Smaller blast radius than the service unit's fabrication, identical class, and it is the argument for running the audit past the flagged citation rather than only at it.
+
+    ## Remaining findings
+
+    F2's false cost replaced with the Spectre and renderer-compromise argument from the page §2 already cited, plus the Immich wildcard cost answered by the shim being the only thing on those hostnames. F4 added §1.9 with six filename rules, no numbers so nothing new is routed. F5 states the locked source toggle and both origins, and tears the shim frame down on switch. F6 deleted the sanitize-then-parse escape hatch and replaced the false "never builds structure" claim with the real fixed-grammar versus attacker-controlled-attributes distinction. F7 made `.svg` an explicit downgrade trigger, so no input reaches two answers. F10 enumerated the four paths and mapped every subsection. F11 gave per-tier integrity behavior. F12 gave the ServiceWorker five rules. F13 scoped the privilege claim to browser-side and renamed grammar selection an attacker-selected parser. F14 dropped all three scope leaks. F15 removed all review narration. F16 softened the PWA claim with the appmanifest quote and added the warm-resume case. F17 fixed four, including moving the blob rule onto the normative File API section and neutralizing the bidi range with a Trojan Source citation.
+
+    ## Four new issues the beat found
+
+    The GHSA discrepancy; the F3 axis correction; **the document's own opening framing was falsified by F6 and nobody flagged it** ("any path that turns attacker bytes into markup structure runs on the sandbox origin" is untrue of the highlighter, restated to "never lets attacker bytes choose what markup gets built"); and the free `"null"`-origin discriminator, stated so an implementer does not invent a weaker nonce scheme for the same job.
+
+    ## Word count: 7883, accepted, not cut
+
+    4752 to 7883 after a compression pass worth about 250 words. **The beat offered to cut and asked which rules to lose. Declined.** Its measured words-per-rule runs 51 to 97 across sections against the calibration's observed 60 to 85, so the density is in band; the document is long because resolving the findings added roughly 100 distinct rules where the calibration assumed 43. Cutting costs rules, and trading verified rules for a stub-guard number is the trade already declined twice this station. Precedent: format 5365, service 6551.
+
+    ## Drift re-reported, already filed
+
+    The beat independently re-identified `format.md` §5's undifferentiated redirect list and correctly did not touch the locked unit. Already filed as `fb-09` with a recommendation not to reopen. Its added observation is worth carrying: **`spec-service-surface` is the unit that would implement that list, so this propagates if the audit ignores it.**
 reviews:
   completeness:
     at: 2026-07-30T05:31:07.501358+00:00

@@ -1,47 +1,64 @@
 ---
 topic: renderer-class-is-a-security-boundary-not-a-label
 created_at: 2026-07-30T04:25:59.364721+00:00
-updated_at: 2026-07-30T04:25:59.364721+00:00
+updated_at: 2026-07-30T04:31:01.665153+00:00
 ---
-The frame's seven-value renderer taxonomy (`markdown`, `code`, `html`, `image`, `media`, `archive`, `binary`) was introduced as telemetry. **It is also the input to a security-sensitive routing decision, and nobody wrote down that it is doing two jobs.** Treat every gap in it as a potential key-disclosure path.
+The frame's seven-value renderer taxonomy (`markdown`, `code`, `html`, `image`, `media`, `archive`, `binary`) was introduced as telemetry. **It is a publisher assertion, and it must never route the viewer.** Every gap or misuse here is a potential key-disclosure path.
 
-## The concrete exploit, with no bug in any component
+## CORRECTION to an earlier version of this topic
 
-**SVG has no assigned class.** SVG is active content: inert under `Content-Disposition: attachment` and inside `<img src>`, but "inline, as `<object>`, or via direct navigation to the URL" it **fully executes** (https://digi.ninja/blog/svg_xss.php).
+An earlier version of this entry concluded "the class selects the renderer, the sniff can only downgrade," and argued that was safe if the class lived inside the ciphertext where it is publisher-attested and tamper-evident under the AEAD tag. **That reasoning was wrong and the conclusion was dangerous.**
 
-So: a publishing client reasonably classes an `.svg` as `image`. The viewer reasonably routes `image` through the inactive-content pattern on the **main** origin, per https://web.dev/articles/securely-hosting-user-data. The SVG renders inline, executes, and reads `location.hash`, which is the decryption key.
+Publisher-attested means the *operator* cannot forge it. It does not mean it is *true*. A malicious publisher signs an honest-looking lie. Declaring `image` on an HTML payload wins inline rendering on the viewing origin, which is the origin holding the fragment secret, and the content reads `location.hash`. **That is the fragment-stealing attack in a single step, and it is what "the class selects" permits.**
 
-Every component behaved correctly. The taxonomy boundary was simply never specified. **Either SVG is `html` in the taxonomy, or `image` routing is hardened to `<img>`-from-blob-only with SVG explicitly excluded.** Say which, in writing.
+The tamper-evidence argument answers the wrong threat. The threat is not the operator lying about the class; it is the publisher lying about it.
 
-## The class exists twice, with different trust properties
+## The rule
 
-- **Server-side copy: telemetry.** Feeds the metric's second clause.
-- **Viewer-side copy: routing.** Decides which renderer, and therefore which origin and which protections.
+**The class is telemetry and nothing else. The viewer never routes on it.**
 
-If the class lives **only** server-side, the viewer takes the server's word for what to render, making a server-controlled value the input to a security decision. If it lives **inside the ciphertext**, it is publisher-attested and tamper-evident under the AEAD tag.
+Routing comes from magic-byte sniffing after decryption, treated as a hint that can only reach a *less* privileged path, plus the following disagreement rule:
 
-**Collapsing them into one value means either the telemetry becomes unverifiable or the routing becomes server-controlled.** Specify both copies, or specify explicitly which property is being surrendered.
+**When the declared type and the sniffed type disagree, route to the least privileged path either type would allow, and tell the recipient you did so.** A file declared `.png` that sniffs as HTML is not rendered as an image (it is not one) and not rendered as HTML (HTML gets a separate origin, and the publisher did not declare it). It is download-only with a visible note that the contents do not match the name. One sentence, and it closes the entire polyglot class for the first release.
 
-## "The sniff decides" is unimplementable for the wedge
+Privilege ordering, least to most: download-only, then sandbox origin, then viewing origin.
 
-Magic-byte sniffing is documented as best-effort (https://github.com/sindresorhus/file-type). **Markdown has no magic number. Neither does plain text, source code, CSV, or JSON.** That is `{markdown, code}`, half the first-release renderer set and the flagship of the wedge. For those, the sniff returns nothing and the declared class or the filename extension is doing 100 percent of the work.
+## SVG is download-only in the first release
 
-So any rule written as "sniffing selects the renderer" cannot be implemented for the renderers this product exists to ship. The workable rule is the inverse: **the class selects, the sniff is a safety check that can only downgrade to a less trusted path, never upgrade.** That is safe only if the class is publisher-attested inside the ciphertext, which ties this decision to the container-format decision. Those two will be made by different people unless a spec ties them together.
+SVG has no magic number and sniffs as XML or text, so it cannot be sniff-routed at all. Its execution is context-dependent: inert under `Content-Disposition: attachment` and inside `<img src>`, but inline, as `<object>`, or via direct navigation it **fully executes** (https://digi.ninja/blog/svg_xss.php). Real advisories from exactly this shape: Traccar GHSA-mc2g-mjqh-8x78, 2FAuth GHSA-q5p4-6q4v-gqg3, FileRise GHSA-35pp-ggh6-c59c, Plane GHSA-rcg8-g69v-x23j.
 
-## The download path needs its own rule
+**A spec that says "still images render inline" without carving out SVG ships the CVE.** Sandbox-origin rendering for SVG is available later.
 
-On client-side decrypt the file is materialized from a Blob, so there are no response headers and `X-Content-Type-Options: nosniff` never applies. The effective declared type is the Blob's type. **A `text/html` Blob URL that is navigated to rather than downloaded executes on whichever origin created it.**
+## Blob URLs inherit the creating origin
 
-Rule: **the download path always types the Blob `application/octet-stream`**, regardless of what the container declares.
+`URL.createObjectURL(new Blob([plaintext], {type: sniffedType}))` on the viewing origin creates a same-origin resource with an attacker-controlled MIME type. **Navigating to it executes on the origin that holds the key.**
 
-## The filename is content, not a category
+- Never navigate to, and never open in a new tab, a blob URL built from untrusted plaintext on the viewing origin.
+- Download blobs are always typed `application/octet-stream` and triggered via an `a[download]` attribute.
+- Images render only via `<img src=blob:>`, where parsing is inert.
 
-Putting the filename or mimetype in server-side metadata exceeds what the frame conceded. The frame priced its leakage as "a coarse content category, a client name, and IP-correlated open activity." **`Q3-layoffs-final.xlsx` is not a coarse category, it is content.** Per [[shape-inherited-constraints-from-frame]], exceeding the frame's conceded leakage routes back to `frame` as drift rather than being settled downstream.
+## Markdown is a partial HTML class
 
-This is the most likely *quiet* frame violation in the build, because putting the filename in the grant response is the obvious way to make the branded taskbar show a name before decryption finishes. Placing it inside the encrypted container costs one round trip of latency and keeps the concession where the frame drew it.
+Markdown permits raw inline HTML, so rendering `markdown` on the viewing origin puts sanitizer output next to the fragment secret. DOMPurify has been bypassed at **default configuration** as recently as CVE-2026-41238 (3.0.1 through 3.3.3, https://labs.trace37.com/blog/dompurify-pp-ceh-bypass/). In strength order:
 
-## Related consequences worth carrying
+1. **Strip raw HTML from Markdown entirely in the first release**, or render Markdown on the sandbox origin exactly like HTML. Sanitization is the second layer and must never be the only one.
+2. Pin DOMPurify at or above 3.4.0 regardless.
+3. **Read the fragment once into a variable, then `history.replaceState` it out of the address bar**, so a sanitizer bypass finds no `location.hash` to read. Cheapest insurance in the viewer.
 
-- **Reserved path segments.** With `/{id}` at the root, `/abuse`, the policy URL, and `robots.txt` are reserved words. **The reserved set must be excluded from the id alphabet or an issued id can shadow the abuse page**, which is the one page the preconditions make a go/no-go obligation.
-- **The taskbar and the content are on different origins by construction.** HTML renders on the sandbox origin; the taskbar is service-origin chrome. So the content iframe is never full-viewport, and a relic authored to fill the screen renders letterboxed. Product-visible and worth stating before someone discovers it in review.
-- **Unknown class values must fail to download-only**, not best-effort, so a client newer than the viewer degrades safely.
+Markdown link and image targets are attacker-controlled too (`javascript:`, `data:`, remote images). A remote image is both an exfiltration channel and a beacon revealing that a specific relic was opened.
+
+## Code and plain text: the safe class, two traps
+
+Syntax highlighters take a language hint usually derived from the attacker-controlled extension, and some build HTML by string concatenation. Build highlighted output as DOM text nodes or sanitize it like Markdown, and fall back to plain text on an unrecognized hint. Separately, a "code" file can be many megabytes on one line, which hangs the highlighter and freezes the tab; cap the highlighted region and render the remainder as plain text behind a stated cutoff.
+
+## Where the security headers actually matter
+
+The object fetch goes client-to-GCS on a signed URL, so **the app server cannot set headers on it at all** (a direct consequence of ciphertext never transiting the app server). What GCS serves is ciphertext, indistinguishable from random and unsniffable into anything executable, so `nosniff` and friends guard almost nothing there. **The headers that matter are the viewing origin's own responses and the blob URLs the viewer creates.** Stating this stops a later station spending effort on bucket headers that guard nothing while skipping the viewer-side ones that guard everything.
+
+## Related consequences
+
+- **Reserved path segments.** With `/{id}` at the root, `/abuse`, the policy URL, and `robots.txt` are reserved words that must be excluded from the id alphabet, or an issued id can shadow the abuse page, the one page the preconditions make a go/no-go obligation.
+- **The taskbar and content are on different origins by construction**, so the content iframe is never full-viewport and a relic authored to fill the screen renders letterboxed. Product-visible; state it before someone finds it in review.
+- **Unknown class values fail to download-only**, never best-effort, so a client newer than the viewer degrades safely.
+- **`postMessage` to the sandbox uses an exact target origin, never `"*"`.** A `postMessage` with target `"*"` carrying a decrypted relic hands the whole plaintext to whatever occupies that frame, which is worse than leaking one relic's key.
+- **The filename is content, not a category.** Server-side storage of it exceeds the frame's conceded leakage (`Q3-layoffs-final.xlsx` is not a coarse class) and routes back to `frame` as drift per [[shape-inherited-constraints-from-frame]]. It is also the most likely *quiet* frame violation, because putting the filename in the grant response is the obvious way to show a name in the taskbar before decryption finishes.

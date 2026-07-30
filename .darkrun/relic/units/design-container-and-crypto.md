@@ -57,6 +57,9 @@ iterations:
     ## One cross-document need, stated in sibling form
 
     Refusing bucket padding discharges `format.md` 3.3's minimal-padding qualifier, which is the stated reason `viewer.md` 5 withholds a pre-decryption byte count. That reason no longer applies at version 1. The document states the fact and the behaviour either way and names `design-product-surface` as owner without telling it what to do. This is a third instance of the class in `cross-document-gaps-no-criterion-catches`.
+reviews:
+  reversibility:
+    at: 2026-07-30T11:39:37.092582+00:00
 quality_gates:
 - name: artifact-exists
   command: test -f docs/design/container.md

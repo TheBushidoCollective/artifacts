@@ -16,6 +16,9 @@ inputs:
 outputs:
 - docs/design/storage.md
 - docs/design/storage.sources.txt
+reviews:
+  reversibility:
+    at: 2026-07-30T11:39:37.092582+00:00
 quality_gates:
 - name: artifact-exists
   command: test -f docs/design/storage.md

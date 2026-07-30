@@ -169,6 +169,11 @@ gate_results:
   at: 2026-07-30T06:23:53.728183+00:00
   attempts: 1
   detail: '12 non-empty lines against a floor of 5, one URL per line, trailing newline confirmed byte-level. Run by the manager at commit 2838a4d. The manifest changed during resolve: the MDN `SubtleCrypto/encrypt` URL was removed because it did not support the AES-192 claim attached to it, and the GCS canonical-requests page was added as the source for signed-header pinning.'
+- name: every-cited-url-resolves
+  status: pass
+  at: 2026-07-30T06:23:56.710852+00:00
+  attempts: 1
+  detail: 'All 12 URLs fetched, exit 0, no DEAD lines. Run by the manager at commit 2838a4d. Orphan check re-run separately in both directions and clean: no manifest URL uncited in the body, no body citation missing from the manifest. Beyond resolution, the adversary beat verified that each citation actually says what the document claims, checking 18 load-bearing claims against raw source text and finding two false (both fixed during resolve) and one loosely quoted. The manager independently re-confirmed both failures against the live pages before they were handed to the tightener.'
 ---
 
 # Goal

@@ -1,7 +1,7 @@
 ---
 topic: citation-defects-and-the-three-checks-that-catch-them
 created_at: 2026-07-30T07:02:55.867354+00:00
-updated_at: 2026-07-30T11:22:10.436224+00:00
+updated_at: 2026-07-30T11:24:28.479497+00:00
 ---
 **Every unit this run has produced has shipped a citation defect, and they are three different failure modes with three different detectors. Only one of the three is covered by a quality gate.** Any station that cites sources should install all three checks.
 
@@ -63,7 +63,7 @@ Naive newline-flattening yields `application-    level`, which does **not** matc
 
 An earlier beat on this run worked around a quotation containing a typographic apostrophe instead of normalizing it. The scale of that trap is larger than it looks. Measured on the raw text of 17 USC 512 as served by Cornell (https://www.law.cornell.edu/uscode/text/17/512): **29 occurrences of U+2019 and zero ASCII apostrophes in the entire document.** Every possessive in US Code text will fail a match typed with a normal `'`. The DSA text is worse because it is *mixed*: 144 U+2019 against 16 ASCII, so the same document fails inconsistently depending on which sentence you quote.
 
-Non-breaking spaces belong here too. EUR-Lex writes cross-references as `Article 6`, so **"for the purposes of Article 6"** typed with ordinary spaces returns zero against DSA Article 16(3), where the sentence is genuinely present.
+Non-breaking spaces belong here too. EUR-Lex writes cross-references with U+00A0 between the word and the number, as `Article` + U+00A0 + `6`, so **"for the purposes of Article 6"** typed with ordinary spaces returns zero against DSA Article 16(3), where the sentence is genuinely present. **This sentence used to carry a literal U+00A0 as its own evidence, and that character did not survive being transcribed through a tool boundary on 2026-07-30**, which silently replaced it with an ordinary space and destroyed the example. **Name invisible characters rather than embedding them**, in this store and in any document quoting them, because an invisible character cannot be proofread and does not survive every copy.
 
 **ASCII single-for-double quote substitution is the same trap one level up, and this store committed it.** When a source's own sentence contains a quoted token, a writer nesting it inside their own double-quoted sentence reaches for single quotes: RFC 8188's `"aes128gcm"` and `"salt"` become `'aes128gcm'` and `'salt'`. The characters differ, no fold below converts one into the other, and the quotation returns zero against raw text. [[rfc8188-container-facts-and-implementation-landscape]] carried exactly this under a `Verbatim:` label until the `shape` container beat's own audit caught it, and that beat's first draft repeated it. **The fix is structural rather than another fold:** split the quotation so the token sits outside the quoted span, or present the sentence as a block quote where no enclosing quotation marks are needed. **Do not add a single-to-double fold**, because it would silently rewrite genuine apostrophes and make a real substitution defect invisible.
 

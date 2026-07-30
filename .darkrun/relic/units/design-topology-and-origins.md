@@ -209,6 +209,14 @@ gate_results:
     **The growth is fourteen fixed findings, and none of it is padding.** The two that changed what the document asserts (the mint gate's basis and the dedup interval's justification) are rewrites rather than additions. The bulk is evidence the document previously lacked: a measured headless-browser result with its reproduction condition stated, the corrected edge arithmetic with its per-rule term exposed, a rebuilt availability table with its promotion rule written down, and a second drift routing.
 
     **One section got shorter and more honest rather than longer:** the branch comparison had its brittle cost counts removed and branch B's two framed upsides relabeled as mirrors of branch A's costs, which was the asymmetry finding. Length grew while the thing that made the section misleading was cut.
+- name: sources-manifest-populated
+  status: pass
+  at: 2026-07-30T13:38:52.595910+00:00
+  attempts: 1
+  detail: |-
+    25 non-empty lines against a floor of 6, one URL per line, trailing newline. Run by the manager at `18494dc`. Up from 23 at the make pass.
+
+    The two additions are the Cloud Armor and Certificate Manager pages the edge correction needed. **Both were added rather than cited loosely**, which is the right handling: the challenge pass explicitly warned that using those numbers without adding their sources would break an orphan check that had been clean. It is still clean in both directions at 25 and 25.
 ---
 
 # Goal

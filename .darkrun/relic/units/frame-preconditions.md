@@ -27,6 +27,12 @@ quality_gates:
   command: bash -c 'set -eu; n=$(grep -c . docs/preconditions.sources.txt); test "$n" -ge 5'
 - name: every-cited-url-resolves
   command: bash -c 'set -eu; while IFS= read -r u || [ -n "$u" ]; do [ -n "$u" ] || continue; curl -sfL --max-time 25 --retry 2 -A "Mozilla/5.0 (relic-link-check)" -o /dev/null "$u"; done < docs/preconditions.sources.txt'
+gate_results:
+- name: artifact-exists
+  status: pass
+  at: 2026-07-30T03:33:36.462560+00:00
+  attempts: 1
+  detail: test -f docs/preconditions.md -> exit 0
 ---
 
 # Goal

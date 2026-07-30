@@ -33,7 +33,9 @@ This is the build floor. You run the **Pass loop** — _Plan → Make → Challe
 
 Dispatch the **designer** beat in parallel across these wave-ready Units:
 
-- `design-storage-grant-and-cost`
+- `design-operations-and-abuse`
+
+- `design-product-surface`
 
 
 
@@ -42,134 +44,243 @@ Dispatch the **designer** beat in parallel across these wave-ready Units:
 
 The subagent you dispatch for a Unit gets **no context beyond what you hand it**. Pass the Unit's spec below into its dispatch verbatim — the completion criteria with their verify commands, the declared paths, and the scope boundary are the contract the beat is judged against.
 
-### `design-storage-grant-and-cost` — Decide the grant shape, the storage topology, and the cost controls
+### `design-operations-and-abuse` — Design the abuse pipeline and state what the go/no-go actually costs
 
-- **inputs:** `frame.md`, `spec.md`, `docs/design/container.md`, `docs/design/topology.md`
-
-
-- **outputs:** `docs/design/storage.md`, `docs/design/storage.sources.txt`
+- **inputs:** `frame.md`, `spec.md`, `docs/design/storage.md`, `docs/design/topology.md`, `docs/design/container.md`
 
 
-- **quality gates:** artifact-exists — `test -f docs/design/storage.md` · substance-floor — `test "$(wc -w < docs/design/storage.md)" -ge 2600` · sources-manifest-populated — `bash -c 'set -eu; n=$(grep -c . docs/design/storage.sources.txt); test "$n" -ge 6'` · every-cited-url-resolves — `bash -c 'set -eu; while IFS= read -r u || [ -n "$u" ]; do [ -n "$u" ] || continue; curl -sfL --max-time 25 --retry 2 -A "Mozilla/5.0 (relic-link-check)" -o /dev/null "$u"; done < docs/design/storage.sources.txt'`
+- **outputs:** `docs/design/operations.md`, `docs/design/operations.sources.txt`
+
+
+- **quality gates:** artifact-exists — `test -f docs/design/operations.md` · substance-floor — `test "$(wc -w < docs/design/operations.md)" -ge 2600` · sources-manifest-populated — `bash -c 'set -eu; n=$(grep -c . docs/design/operations.sources.txt); test "$n" -ge 8'` · every-cited-url-resolves — `bash -c 'set -eu; while IFS= read -r u || [ -n "$u" ]; do [ -n "$u" ] || continue; curl -sfL --max-time 25 --retry 2 -A "Mozilla/5.0 (relic-link-check)" -o /dev/null "$u"; done < docs/design/operations.sources.txt'`
 
 
 # Goal
 
-Write `docs/design/storage.md`: the decided grant construction, storage topology, cost controls, and the hard size cap. Plus `docs/design/storage.sources.txt`, one URL per line, trailing newline.
+Write `docs/design/operations.md`: the abuse pipeline, the monitoring surface, and a precise statement of what the operator is being asked to commit to. Plus `docs/design/operations.sources.txt`.
 
-**Read first:** `darkrun_knowledge_list`, especially `gcs-grant-shape-what-is-proven-and-the-open-experiment`, `egress-cost-controls-and-what-a-kill-switch-cannot-stop`, `gcs-soft-delete-and-what-deletion-actually-means`, `gcs-false-impossibility-claims`, `citation-defects-and-the-three-checks-that-catch-them`.
+**This unit exists to make one decision answerable.** `preconditions.md` states the go/no-go: if the team will not commit to ongoing abuse operations, the correct answer is do not build. That has been true and unpriced for the whole run. **Your job is to price it,** so the answer is a decision rather than a hope.
 
-Then read from the repo root: `docs/frame.md`, `docs/preconditions.md`, locked; `docs/spec/publish.md` (§3 the grant hop, §4 completion and retry, §6 routed items, all five of which are yours); `docs/spec/service.md` (**§2.3 the cap arithmetic, which is the binding constraint on the size cap**, §3 lifecycle and soft delete, §7 routed items 2, 3, 4, 5); `docs/spec/format.md` (**§3.11 the referent constraint, §4.4 and §4.6**); `docs/spec/viewer.md` (**§5 the tiering consequence and §7.2**); and your sibling inputs `docs/design/container.md`, which fixes the overhead arithmetic your size math depends on, and `docs/design/topology.md`, which fixes the mint trigger your cap arithmetic depends on.
+**Read first:** `darkrun_knowledge_list`, especially `legal-obligations-of-a-no-accounts-hosting-service`, `safe-browsing-delisting-and-why-a-zero-knowledge-operator-cannot-comply`, `egress-cost-controls-and-what-a-kill-switch-cannot-stop`, `abuse-liability-of-hosting-uninspectable-content`.
 
-**If either sibling input is missing from your worktree, stop and fetch it before writing anything that depends on it.** Fall back to `git show darkrun/relic/units/shape/design-container-and-crypto:docs/design/container.md` and `git show darkrun/relic/units/shape/design-topology-and-origins:docs/design/topology.md`. Report which path you used. Never redefine what either settles.
+Then read `docs/frame.md` and `docs/preconditions.md`, locked; **`docs/spec/service.md` §1 in full**, because you reason about the status taxonomy your tickets arrive as, including 1.2 cap exhaustion and 1.4 takedown disclosure, plus §§4, 4.1, 5, 6, **and §7 item 6, the published SLA, which is the one routed decision that is yours**; and sibling inputs `docs/design/storage.md`, `docs/design/topology.md`, and `docs/design/container.md`. **If any of the three is missing, fetch via `git show darkrun/relic/units/shape/<unit>:<path>` and report which path you used.**
 
-# Source discipline
+**`design-product-surface` runs beside you, not ahead of you, and you do not read its output.** It owns every recipient-facing screen and its copy. Where your pipeline depends on a screen it decides, **state the need and design your side against both branches in one pass**, which is the same discipline every unit in this station follows. Do not wait on it, do not assume an answer, and do not decide a screen.
 
-Five citation defects shipped in `specify`, and **not one would have failed the URL-resolution gate**, because every URL resolved. Pull raw source text and grep it. **Never WebFetch a specification.** Audit every quoted string before you finish; criterion 14 makes it checkable.
+# The boundary you must hold, and it is itself a deliverable
 
-**Two corrections you must carry rather than repeat.** `preconditions.md` and `service.md` both cite a third-party blog for "$0.12/GB for the first TB". Google's own table puts the tier boundary at **10 TiB**, and charges **$0.19/GiB to Australia** and **$0.23/GiB to China**, so a ceiling computed at a flat $0.12 understates badly for a non-US audience. And `preconditions.md` attributes "signed URLs cannot be individually revoked" to a page where the word "revoke" appears **zero times**; the claim is true in effect and the correct source carries an exception the claim omits. Cite the primary pricing and signed-URL pages, and note both corrections as drift routing back to their owners rather than editing locked documents.
+**You are not a lawyer and this document is not legal advice.** Report what the raw statutory and regulatory text says, quote it, cite it, and then **name plainly what needs real counsel**. Two of the load-bearing questions are not answerable by more reading, and no amount of further research closes them. Blurring that line into confident summary is the failure mode. Keeping it sharp is the value.
+
+**Read legal text raw.** Never WebFetch it and never rely on a summarizer; WebFetch was caught on this run flatly inverting a specification's meaning. Note that one EU source blocks scripted fetch and returns a stub, and there is a working alternative host recorded in the knowledge topic.
+
+# What the sources already establish, verified. Build on it, do not re-derive it.
+
+- **The favourable text is stronger than the spec set claims.** Both regimes explicitly impose no general obligation to monitor stored information or to actively seek indications of illegal activity, and the US statute separately says nothing requires a provider to monitor users or to affirmatively search, screen, or scan. The "you cannot require somebody to moderate what they cannot read" posture has real statutory backing, and `preconditions.md` calling it an untested theory understates the text while being right about outcomes.
+- **Takedown by ID works and satisfies both regimes**, which ask a notice to identify the material's location sufficiently to find it. A reporter holding a relic URL supplies exactly that.
+- **The asymmetry that costs you:** a compliant notice creates knowledge from the reporter's assertion, never from inspection. An operator who cannot read the content cannot verify a claim and cannot safely ignore it.
+- **One place the no-accounts non-goal reduces the compliance surface:** the statement-of-reasons duty applies only where contact details are known, and there are none.
+- **Micro-enterprise relief** exempts a whole section and the annual transparency report, while several articles apply regardless of size.
 
 # The decisions
 
-## 1. The grant shape, which cannot be decided from documents
+## 1. The triage policy, which has a forced answer
 
-`publish.md` 3.6 routes three candidates. **All three fail a requirement, and the spec set has not noticed that two of them do.**
+The operator cannot triage on content, so every report is acted on or refused on the reporter's say-so. **The cost asymmetry is stark:** deleting a legitimate relic costs a publisher one republish, given no versioning, no accounts, no dashboard, and a short TTL anyway, while not deleting risks a project-level suspension that takes down the abuse tooling along with the service.
 
-- **Resumable session.** Its size enforcement is **unverified**. The one demo that appears to prove it actually proves the V4 signature pins `x-upload-content-length` at initiation, and never sends more bytes to the session URI than it declared. Separately, the data leg uses **no signed URL** and accepts `X-Goog-Meta-*` on the final request, which **breaks the metadata-pinning argument** `format.md` 4.6 and `publish.md` 6.5 both rely on. Its session URI also lives one week regardless of grant expiry, shortened only by cancellation, which needs possession of the URI.
-- **POST policy document.** The only construction expressing a **cap** rather than an exact value, via `content-length-range`. But "generation" appears **zero times** in its documented field set, so it cannot carry the `ifGenerationMatch: 0` that `publish.md` 3.7 requires on **every** grant.
-- **Signed PUT with a signed `Content-Length`.** Now demonstrated to enforce, by signature pinning plus HTTP framing. But a V4 signature pins a **value**, never a range, so the constraint is necessarily the client's declared size, which contradicts `publish.md` 3.6's "computed against the cap rather than the declared size." The cap still holds transitively through the grant-time refusal; that sentence is not implementable as written on this branch.
+**Decide delete-on-plausible-report with no adjudication, and write it into the published terms as a policy rather than discovering it later as a capitulation.** Then state the two consequences out loud in the same document: it is a griefing vector, bounded by whoever holds the link and unbounded for a publicly posted relic; and it converts the "non-arbitrary and objective" standard from an exposure into a defensible position, because it is one rule applied uniformly with no discretion.
 
-**No single documented candidate satisfies a signed size constraint, the generation precondition, and resume-from-offset together.**
+## 2. The pipeline: what automates, and what cannot
 
-**Your job:** specify the probes that eliminate branches, present them as a runnable procedure, then decide **conditionally on each outcome**. Write the decision as a decision tree whose leaves are branch choices, so whoever runs the probes reads the answer off the result rather than reopening the design.
+Specify the intake-to-resolution path end to end, distinguishing:
 
-**A leaf that names a candidate has not finished.** Each leaf must also name which of the four requirements that branch sacrifices and which locked sentence that contradicts. The four are `publish.md` 3.6's signed size constraint computed against the cap, 3.7's `ifGenerationMatch: 0` on every grant, 3.4's grant expiry the storage leg actually enforces, and 4.4's resume from a byte offset. Those sentences sit in a locked document, so **a leaf that drops one is a drift routing and not a decision this station can take alone.** Name the sacrifice, name the document and the sentence, and route it as drift to its owner. Leaving the sacrifice implicit is the part that gets reopened later, which is the whole reason the tree exists.
+- **Automatable:** receipt acknowledgement, which satisfies the confirmation duty; URL-to-ID extraction; delete-by-ID; ciphertext-hash blocklist add; publishing-IP lookup; bulk delete by publishing IP and time window. Most of these already exist in `service.md` §4.
+- **Not automatable:** the criminal-threat branch, a mandatory-report filing, a law-enforcement request, a reconsideration request, and the judgement of whether a report is credible at all. **That last one is answered by §1, which is what makes one person viable.**
 
-**The probes are specified, not run.** State that plainly and say why: they create buckets and objects, and the only authenticated local credential belongs to an unrelated venture. Each probe gets the request, the assertion, and **what the result eliminates**. At minimum: does the resumable data leg enforce the declared size, both with a known total and with `bytes 0-N/*` followed by a finalize; can client metadata be injected on the unsigned leg; does a POST policy accept a generation precondition at all, as a form field and as a policy condition; and is `ifGenerationMatch: 0` evaluated at initiation or at finalize on a resumable session, which decides whether the anti-substitution guarantee actually holds.
+**Design the handling for a data-subject report, which is the pipeline question and is yours regardless of the form.** A person reporting their own leaked file is owed the same handling whether or not the form offers them a category to say so, so specify the path, the obligations it triggers, and its resolution against the report type rather than against a label. **Whether the form shows a personal-data category, and what it is called, is `design-product-surface`'s decision and it is not in your inputs.** State the need, name surface as the owner, and note what changes for intake in each case: a dedicated category routes these reports directly, and no category means they arrive in `other` and the pipeline has to detect them from free text. Design for both. Do not add a category to the form.
 
-## 2. Cost controls, and what the kill switch cannot stop
+## 3. The reconsideration artifact, which must exist before it is needed
 
-- **Correct the egress arithmetic** against the primary source, including the destination dependence.
-- **State plainly that Cloud Storage is not covered by platform spend caps.** Alerts-only budgets explicitly do not cap, and the enforcing spend-cap product's eligible-service list does not include Cloud Storage. Capping the app server stops **minting**; nothing at the platform level stops GCS egress.
-- **Name the residual the kill switch cannot reach:** already-minted signed URLs do not care that minting stopped. The residual is live minted URLs times remaining validity times object size. **This makes the signed-URL validity window the blast time of the kill switch**, and that should dominate `service.md` 7.4's routed validity decision ahead of the mid-transfer ergonomics currently driving it. Decide the window on that basis, including the minimum viable validity below which a clamped mint is refused, and note the 604800 second upper bound.
-- **Design signing-key rotation as an explicit second-stage kill switch.** It is the one instrument that invalidates outstanding URLs at once. It is indiscriminate and breaks honest in-flight downloads, which is the correct trade in a spend emergency. Specify the signing-identity mechanics so rotation does not lose the identity along with the money, and **mark the propagation timing as unverified** rather than assuming immediacy.
-- **Decide the per-object download cap, computed against the mint-trigger branch `design-topology-and-origins` chose.** `service.md` 2.3 gives the arithmetic and the range: a floor of 40 legitimate mints for a 40-person distribution list, and a ceiling near 80 where scanners detonate with a browser. **Which end of that range binds is topology's decision and not yours to guess.** Gate the mint behind a signal a headless previewer does not produce and the ceiling collapses toward the floor of 40; leave it on load and the cap has to absorb up to 80 mints per relic before a human clicks, which roughly doubles the number and the worst-case egress it feeds. Read `docs/design/topology.md` first, state in your own document which branch it chose and which dedup interval it set, and compute the cap against that branch. Getting this wrong in either direction is a real failure: a cap sized for scanner detonation against a gated mint is slack in exactly the dimension `preconditions.md` calls the go/no-go, and a cap sized for 40 against auto-mint-on-load breaks ordinary email distribution on legitimate traffic alone, which `service.md` 2.3 already warns about.
-- Decide the per-IP publish quota, showing the arithmetic. Note that GCS charges nothing for operations returning 4xx, so refusals at the storage layer are free.
+The listing appeal is not a remedy the operator controls: canonicalization strips the fragment, so the sample URL handed to the operator is the one form of the link that cannot open the content, and the review flow asks the operator to confirm the issue, fix it, and document the outcome. **The only truthful request a zero-knowledge operator can file describes a process and a takedown log rather than a fix.** So specify that document now, name where it lives, and state that it must be publishable before the first listing rather than written under one.
 
-## 3. The hard size cap, which three documents route and only you can decide
+Note the one category the service sits in permanently: every relic is unique ciphertext under a unique key and therefore a file the reputation system has never seen, and the automatic-lift condition can never fire on an encrypted object. **Whether that surfaces as a user-visible browser download warning depends on the download delivery path and is unverified**; put it in the same pre-launch empirical bundle as the mail-gateway test `service.md` already mandates.
 
-The same decision is routed three times: `format.md` 4.4 as whether the cap is on plaintext or ciphertext and its value, `publish.md` 6.3 as the size cap value and its referent, and `viewer.md` 7.2 as the hard size cap value. **One decision, one owner, and it is you.** `design-container-and-crypto` does not decide it and `design-topology-and-origins` does not decide it; both are told so explicitly. Do not read either sibling document as having settled it, and do not defer to a value one of them mentions in passing.
+## 4. The monitoring surface
 
-You hold it because the binding constraint is arithmetic you already own. `service.md` 2.3 is where it lives and it is in your read list. `format.md` 3.11 constrains the referent. `viewer.md` §5 carries the consequence that makes this structural rather than a number in a config file.
+Specify the standing checks, each with what it catches and what its absence loses: the abuse and policy URLs returning success; public listing status; search-console verification **with a second verified owner**, because losing the only owner loses the property in exactly the flagged-and-blind state verification exists to prevent; registrar expiry and auto-renew; the agent-registration renewal clock; and egress against the ceiling from `docs/design/storage.md`.
 
-Decide, and state each consequence:
+## 5. Two leaks and one non-issue, none of which any document owns
 
-- **The referent, plaintext or ciphertext**, against `format.md` 3.11, and the value. `docs/design/container.md` fixes the per-record overhead, so the two referents are convertible only after you read it.
-- **What it does to the viewer, which is the largest structural consequence in this station after the container framing.** `viewer.md` 7.2 states it plainly: the cap determines whether §5's tiering is required at all, because a cap below the in-memory ceiling collapses three tiers into one. A cap arrived at by omission either builds a three-tier streaming viewer that was never needed or forecloses one that was. Say which outcome your value produces. **The in-memory ceiling itself is `design-product-surface`'s decision under `viewer.md` 7.1 and it runs after you**, so state your value against each candidate ceiling and say where the collapse point sits. State the need and name the owner; do not pick the ceiling here.
-- **What it fixes downstream.** From `publish.md` 6.3: `size_limit_bytes`, `size_basis`, the client pre-check in 1.2, and the signed constraint in 3.6, which is §1's decision tree. From `format.md` 4.4: the grant's signed size constraint and the worst-case egress arithmetic in the preconditions, which is §2's.
+**This section is the highest-value gap-closing work in the unit and criterion 11 forces all three items. None of them closes by omission.**
 
-## 4. Three routed items that were assigned to nobody, and are now yours
+- **Cross-relic correlation.** `format.md` concedes per-relic length leakage paired with the stored class. The aggregate is not stated anywhere: the mint log retains requesting IP and the relic row holds class and size, so across many relics from one publishing IP the operator holds a cadence and size profile that fingerprints a pipeline or a person. `frame.md` requires publishers to see all of it before publishing, so **decide where this is disclosed.** The published disclosure statement in `service.md` §5 is yours for legal content, so this is your sentence to write. `design-product-surface` writes the sentence at the publishing moment in the MCP tool result, which is a different surface.
+- **Cap exhaustion and takedown are the same experience for a recipient.** Both return the same status, and the distinct codes are for the operator's log rather than the recipient's screen. Scanners can exhaust a cap before a human opens the link, producing a ticket indistinguishable from "the operator deleted my file." **The screen is `design-product-surface`'s decision and you do not have its answer, so state the need and design your side against both branches:** if the viewer distinguishes the two, say what the ticket volume and the triage path look like; if it does not, say the same for a support queue that cannot tell a deleted relic from an exhausted one without an operator-side log lookup, and specify that lookup. State the support-load consequence of each branch and which one is cheaper for a one-person operation, then say plainly that surface owns the choice. Whether the exhaustion case can arise at all is `design-topology-and-origins`'s mint-trigger decision, which **is** in your inputs; read it and state which branch it took.
+- **Enumeration is settled and should be recorded as settled**, so a later station does not relitigate it as a reason to shorten IDs. At the entropy value `design-container-and-crypto` decided, walking the ID space is arithmetic rather than a threat model. Quote the decided number rather than the floor. **This is forward-looking protection for `build` and nothing else in this station checks that it was written.**
 
-None of these appeared in any unit's prose. Each is a value with a stated consequence in a locked document, so leaving one open ships a hole into `build` against a sentence nobody can edit.
+## 6. The price of yes, stated as a list the operator can answer
 
-- **Whether proof of work is in the flow, and at what difficulty.** `publish.md` 6.2. The wire shape is fixed in 3.1, so this is a value rather than a protocol change. It is the primary anti-abuse control available to a service with no accounts, and the per-IP publish quota you decide in §2 is the alternative instrument, so **decide this one on its merits rather than letting the quota close it by omission.** State the consequence `publish.md` 6.2 states: if difficulty is non-zero, `service.md` gains one grant-time refusal code for an invalid or expired solution. That code is `service.md`'s to define and never yours, so state the need and name the owner.
-- **The retry cap and the backoff bounds.** `publish.md` 6.4, against 4.6. Once picked, this fixes when `upload_retries_exhausted` fires and how much egress a single failing publish can consume. `upload_retries_exhausted` is an error code already fixed in a locked document, so the value is what decides when it fires. The second half is your own arithmetic: without this number, the worst-case egress ceiling and the kill-switch residual in §2 are unbounded from the publish side.
-- **Whether object metadata is set at upload at all.** `format.md` 4.6 and `publish.md` 6.5, the same decision routed twice. Both documents establish that nothing here is a capability question: the app server can set, patch, and delete custom metadata with credentials it already holds, and it can pin client-supplied values by signing `x-goog-meta-*` into the grant. `format.md` 3.2 already bars anything content-descriptive. **What is genuinely open is whether any metadata is needed at all.** Decide that, and state the two consequences both documents name: whether the grant must sign metadata constraints, and whether the blocklist scanner reads metadata or only object bytes. Your §1 holds the evidence nobody else has, since the resumable data leg accepts `X-Goog-Meta-*` on an unsigned request, so a yes here interacts with the grant branch.
+Close with the commitment, itemized and concrete, covering at minimum: the designated agent as a named human at a publicly listed street address with its renewal clock and the narrow waiver condition; the possible EU representative who can be held liable, with geoblocking named as a real alternative; **the published SLA as a number of hours**; the second verified owner; availability for the criminal-threat and mandatory-report branches with the statutory exposure named; and acceptance of delete-on-report with no adjudication.
 
-## 5. The GCP project topology
+**The SLA is `service.md` 7.6 and it is a routed decision, not a line item.** Price it against the inputs in 4.1. No regime anchors it, so whatever number is published becomes the standard the operator is measured against. A list entry reading "the published SLA in hours" satisfies nothing; the number is the decision.
 
-The abuse blast radius is **project-level**, and `frame.md` requires two registrable domains. Nobody has connected these. **Two domains in one project is one failure domain, not two:** a suspension takes down the API, the viewer, both buckets, and the abuse tooling you would use to answer the notice.
-
-Design both branches, since this is an operator decision with a real cost: single project, and separate projects with separate billing. State what each buys and what each costs, and state that moving buckets and signing identities afterward is a migration rather than a config change. State the sharper version too: the migration is cheap when you do not need it and impossible at the moment you do, because a suspended project cannot be migrated out of.
-
-## 6. Lifecycle, retention, and the published byte lifetime
-
-Decide the TTL ceiling and lifecycle regime, the retention window against the publishing-IP filter, and the soft-delete posture. **These are values, not considerations, and they are the run's permanently unfixable items.** `preconditions.md` states the property in its own words: setting the soft-delete policy late leaves a tail nobody can retroactively clear, and it has to match the retention window published below, which is what makes it a precondition rather than an operational detail.
-
-- **Soft delete.** Read `gcs-soft-delete-and-what-deletion-actually-means`, which is the knowledge topic written for exactly this decision. Decide the posture and state what deletion actually means to a recipient, to an abuse reporter, and to a legal-preservation request.
-- **The TTL ceiling and its lifecycle regime.** `service.md` 7.3 notes anything under a day is inexpressible in lifecycle and is enforced only at the application layer, per 3.1. Say which regime your ceiling lands in. **This number also bounds `design-container-and-crypto`'s v2 migration cost**, which is stated as bounded on the strength of a mandatory TTL. An undecided ceiling leaves that bound unproven, so the station's strongest reassurance about the container framing rests on this value.
-- **The retention window, set together with the TTL.** `service.md` 7.5: a retention window shorter than the TTL silently stops the metric's publishing-IP filter firing on older relics, and neither locked document contains a number that would catch it. It also bounds how long the tombstone and the mint log's `code` survive, which the cap-exhaustion cost in `service.md` 1.2 depends on. State the two numbers against each other.
-- Note that a legal-preservation obligation can require retaining ciphertext the operator cannot read for a year, which the published byte-lifetime number must count alongside TTL and lifecycle lag.
+**State plainly that deciding no now is a good outcome for this run, and deciding it after launch with relics in the wild and a suspension notice running is the bad one.**
 
 # Do not assign obligations to siblings
 
-State needs and name the owner; never write that another document "must add" something. Siblings: `design-container-and-crypto`, `design-topology-and-origins`, `design-product-surface`, `design-operations-and-abuse`.
+State needs and name the owner. Siblings: `design-container-and-crypto`, `design-storage-grant-and-cost`, `design-topology-and-origins`, `design-product-surface`.
 
 # Style
 
-Direct, dry, confident, contractions natural, authority through specificity. **Never an em-dash or en-dash.** No emoji, no placeholders, no hedging verbs.
+Direct, dry, confident, contractions natural. **Never an em-dash or en-dash.** No emoji, no placeholders, no hedging verbs. Never soften a number or an obligation to make it read easier.
 
 # Completion criteria
 
-1. `test -f docs/design/storage.md` exits 0.
-2. `test "$(wc -w < docs/design/storage.md)" -ge 2600` exits 0. Stub guard, no ceiling. Never pad; never cut a decided rule to hit a number.
-3. Manifest has at least six sources, one per line, trailing newline.
+1. `test -f docs/design/operations.md` exits 0.
+2. `test "$(wc -w < docs/design/operations.md)" -ge 2600` exits 0.
+3. Manifest has at least eight sources, one per line, trailing newline.
 4. Every source resolves. Orphan check both directions.
-5. **The document names the defect in each of the three grant candidates** and states that no documented candidate satisfies all three requirements together.
-6. **The probes are specified with request, assertion, and what each result eliminates**, and the document states they were not run and why.
-7. **The grant decision is written as a decision tree keyed on probe outcomes**, so no leaf is left undecided, **and every leaf names which of the four requirements that branch sacrifices, which locked sentence that contradicts, and routes that sacrifice as drift to the document's owner.** The four are `publish.md` 3.6, 3.7, 3.4, and 4.4. A leaf that names a candidate and leaves the sacrifice implicit does not satisfy this criterion.
-8. **The document states that Cloud Storage is not covered by platform spend caps**, and names the residual the kill switch cannot reach.
-9. **Signing-key rotation is designed as a second-stage kill switch**, with propagation timing marked unverified.
-10. **The hard size cap is decided as a referent plus a value**, cited to `service.md` 2.3's arithmetic and `format.md` 3.11's constraint, **and the document states whether that value collapses `viewer.md` §5's three tiers into one**, against each candidate in-memory ceiling, naming `design-product-surface` as the owner of the ceiling itself. The document also names the three routings it closes: `format.md` 4.4, `publish.md` 6.3, `viewer.md` 7.2.
-11. **The per-object download cap is a number computed against the mint-trigger branch in `docs/design/topology.md`**, and the document states which branch that was, which dedup interval it set, and how the cap would differ under the other branch.
-12. **The three previously unowned items are each decided as a value with the stated consequence: proof of work and its difficulty, the retry cap and the backoff bounds, and whether object metadata is set at upload.** Each names the locked consequence that follows: the grant-time refusal code, when `upload_retries_exhausted` fires and the per-publish egress bound, and whether the grant signs metadata constraints and what the blocklist scanner reads.
-13. **The soft-delete posture, the TTL ceiling and its lifecycle regime, and the retention window are each decided as a value, not as a consideration.** The document states the retention window against the TTL and names the publishing-IP filter failure a shorter window causes, states which lifecycle regime the ceiling lands in, and states that the TTL ceiling is what bounds `design-container-and-crypto`'s v2 migration claim.
-14. **Every quoted string is verified verbatim against raw source text, and the beat reports the audit as a list.**
-15. **Both project-topology branches are designed**, with cost and blast radius stated for each.
-16. **Every routed decision assigned to this document is decided with its consequence stated, or explicitly eliminated with the reason. The list, by name and with no others implied:** `publish.md` 6.1 the grant shape, 6.2 proof of work and difficulty, 6.3 the size cap value and referent, 6.4 the retry cap and backoff bounds, 6.5 object metadata at upload; `format.md` 4.4 the cap side and value, 4.6 object metadata at upload, which are the same two decisions routed twice; `viewer.md` 7.2 the hard size cap value, the third routing of the same decision; `service.md` 7.2 the per-object download cap, 7.3 the TTL ceiling and lifecycle regime, 7.4 the signed-URL validity window including the minimum viable validity below which a clamped mint is refused, 7.5 the retention window. **Nothing on this list closes by omission, and nothing on it belongs to a sibling.**
-17. `test "$(grep -c '[—–]' docs/design/storage.md)" -eq 0` exits 0.
+5. **The document states explicitly that it is not legal advice and separates what the text says from what needs counsel**, listing the counsel questions by name.
+6. **The triage policy is decided**, written as publishable policy language, with both consequences stated.
+7. **The pipeline separates automatable from non-automatable steps** and names every step in each, **and specifies the data-subject report path against both branches of the form's category question**, naming `design-product-surface` as the owner of the category itself.
+8. **The reconsideration artifact is specified** and stated as required before the first listing.
+9. **The monitoring surface names each standing check with what its absence loses.**
+10. **The price of yes is an itemized list the operator can answer**, with statutory exposure named where it exists, **and every item that routes a number carries the number. The published SLA is stated in hours as a decided value**, not as a line item to be filled in later.
+11. **Section 5's three items are each written and none is left implicit:** where cross-relic correlation is disclosed, decided as a location; the support-load consequence of the cap-exhaustion-versus-takedown screen **designed for both branches**, with the triage path specified for each and `design-product-surface` named as the owner of the choice, plus which mint-trigger branch `docs/design/topology.md` took; and enumeration recorded as settled at the entropy value `design-container-and-crypto` decided, so a later station does not relitigate it as a reason to shorten IDs.
+12. **The one routed decision assigned to this document is decided: `service.md` 7.6, the published SLA in hours.** It is a number, priced against `service.md` 4.1's inputs, and it is the only routed item that is yours.
+13. **Every quoted string is verified verbatim against raw source text, and the beat reports the audit as a list.** Legal text especially: quote it or do not claim it.
+14. `test "$(grep -c '[—–]' docs/design/operations.md)" -eq 0` exits 0.
 
 # Files touched
 
-- `docs/design/storage.md`, `docs/design/storage.sources.txt` (create)
+- `docs/design/operations.md`, `docs/design/operations.sources.txt` (create)
 
 # Out of scope
 
-- The container format and key material. Locked by `docs/design/container.md`.
-- Origins, TLS, edge, which origin serves what, the mint trigger, the mint dedup interval, and the name. Locked by `docs/design/topology.md`.
-- Viewer screens, art direction, platform memory ceilings, the truncated-prefix size, and the highlighted-region cap. Sibling `design-product-surface`.
-- The abuse pipeline, legal posture, and the published SLA. Sibling `design-operations-and-abuse`.
+- The container format, the grant construction, origins, and art direction. Owned by the four siblings.
+- **Recipient-facing screens and their copy, including the cap-exhaustion screen and the abuse form's category labels. Sibling `design-product-surface`, which runs beside you and whose output you do not read.** You own the pipeline behind those screens and the legal content of the published disclosure statement; surface owns the screens and the sentence at the publishing moment in the MCP tool result. Where you need one of its answers, design both branches and name it as the owner.
+- Choosing whether to build. This unit prices the decision; the operator makes it.
 - Product code.
+
+### `design-product-surface` — Decide the art direction, the taskbar hierarchy, and every recipient state
+
+- **inputs:** `frame.md`, `spec.md`, `docs/design/container.md`, `docs/design/topology.md`, `docs/design/storage.md`
+
+
+- **outputs:** `docs/design/surface.md`, `docs/design/surface.sources.txt`
+
+
+- **quality gates:** artifact-exists — `test -f docs/design/surface.md` · substance-floor — `test "$(wc -w < docs/design/surface.md)" -ge 2600` · sources-manifest-populated — `bash -c 'set -eu; n=$(grep -c . docs/design/surface.sources.txt); test "$n" -ge 6'` · every-cited-url-resolves — `bash -c 'set -eu; while IFS= read -r u || [ -n "$u" ]; do [ -n "$u" ] || continue; curl -sfL --max-time 25 --retry 2 -A "Mozilla/5.0 (relic-link-check)" -o /dev/null "$u"; done < docs/design/surface.sources.txt'`
+
+
+# Goal
+
+Write `docs/design/surface.md`: the decided art direction, the taskbar hierarchy, the renderer stack, and every recipient-facing state including the ones nobody has written. Plus `docs/design/surface.sources.txt`.
+
+**Read first:** `darkrun_knowledge_list`, especially `firefox-send-shipped-and-unshipped-viewer-copy`, `viewer-renderer-libraries-measured-costs-and-the-tree-emitting-stack`, `link-preview-and-unfurl-behavior-by-client`, `relic-name-is-crowded-in-its-own-three-categories`, `cross-document-gaps-no-criterion-catches`.
+
+Then read `docs/frame.md`, `docs/preconditions.md`, `docs/spec/viewer.md` in full, **`docs/spec/service.md` §§1, 2, 4.1, 5**, and `docs/spec/publish.md` §§1, 5. **§1 is not optional and it was missing before: it holds the status taxonomy your screens render, including 1.2 cap exhaustion and 1.4 takedown disclosure. You cannot write copy for statuses you never read.**
+
+Sibling inputs: `docs/design/container.md`, `docs/design/topology.md`, and `docs/design/storage.md`. **If any is missing, fetch via `git show darkrun/relic/units/shape/<unit>:<path>` and report which path you used.** **`container.md` changed what your screens may display, so it is not background reading**: take from it the bucket-padding decision, which the pre-decryption bullet in §3 turns on, and the decided ID and fragment lengths, 25 characters and 24 characters for a 71-character relic URL on a twelve-character domain, which bound what your copy-link control and any displayed URL have to carry at a phone width. `topology.md` decides which origin serves the download path, which changes where your download control lives; do not redefine it. **`storage.md` holds every number your copy states**, which is the reason it is an input: the hard size cap, the per-object download cap, the signed-URL validity window, and the TTL, retention, and soft-delete posture that decide whether an object is gone, deleted, or expired. Take those values from it and cite them. Never invent one and never leave one abstract, which your own style section forbids.
+
+# Art direction: the rule is originality, and the constraint is unusual
+
+**Never ship a templated or default look.** Banned outright: warm cream plus serif plus terracotta on rounded cards; near-black with one acid-green or vermilion pop; blueprint hairlines; purple-to-blue gradient hero; Inter or Space Grotesk as the safe default; emoji as icons; everything centred with rounded corners and glassmorphism. Rotating through those is not variants, it is the same canned look in three coats.
+
+**The register is available and it comes from the subject.** The name reads as something kept deliberately and handled once: reliquary, catalogue, label, archive, printed matter. Pull palette, type, and layout from that world, not from a SaaS starter. There is a real tension to resolve rather than ignore: a relic is old and static, and these payloads are new and TTL-bounded. The framing that reconciles them is **an archivist's handling protocol** rather than reverence, and it has the advantage of being honest about the mandatory TTL and the download cap, which are otherwise pure limitations.
+
+**What it must never resemble, in order of damage:** a phishing page; a crypto or web3 product; a generic SaaS starter; a file locker. The receiving page has every phishing tell built into its premise, an unfamiliar domain arriving via a third party holding content it will not describe until you engage. `viewer.md`'s rule that there is **no key-entry field on the viewing origin, not configurable and not conditional**, is the single most important anti-phishing decision in the spec set, and nothing shaped like a credential field may reappear, including decoratively.
+
+**The hard constraint that shapes the whole visual system:** the viewing origin forbids third-party scripts and its CSP blocks external resources, so **no icon kit and no web font can load**. Ship inline SVG icons and a self-hosted or data-URI typeface. This interacts directly with the bundle budget below and it is exactly the thing that gets discovered after a design is approved.
+
+**Imagery is a first-class material where the surface can carry it.** The marketing and disclosure surfaces can; the viewing origin's chrome mostly cannot, for the same CSP reason. Say which surfaces carry imagery and which do not, rather than assuming.
+
+# The decisions
+
+## 1. Trust in the first five seconds, which is not a comprehension problem
+
+Published research on security warnings found that a redesign **failed** at making the warning well understood and still moved adherence substantially, attributing the gain to opinionated design, visual cues that communicate the recommended action without being read. Field adherence rose from 37% to 62%. **So do not spend the pre-decryption window explaining zero-knowledge.** `viewer.md`'s budget of one line of plain-language explanation is correct and this is the evidence for holding it there under review pressure. The trust work is carried by visual specificity, which is the other reason a generic look is disqualifying rather than merely dull.
+
+**The honesty register is settled prior art.** Mozilla's shipped copy for the closest predecessor never claimed the recipient was safe; it named what could not be verified. Match that posture. Their unshipped work is also instructive: the abuse-and-trust layer was the last thing they built and they killed the product before shipping it.
+
+## 2. The taskbar, which is already overloaded and nobody could see it
+
+Collected across four documents, the specs mandate **thirteen** elements on one bar: the bounded filename as a text node; a contents-do-not-match-the-name warning shown even when it renders; the sandbox notice and what it blocks; a blocked-external-resources notice; the Markdown source toggle; copy link, present from load; download; the abuse-report link on every screen including every error screen; the disclosure link; a truncation banner; the highlight cutoff; service name and one line of explanation; and a cap warning. Meanwhile the bar must never let a long filename push the abuse link, the copy control, or the sandbox notice off screen, and content is letterboxed because bar and content sit on different origins.
+
+**Thirteen mandated elements plus letterboxing on a mobile-first surface. None of it is optional, so the work is hierarchy and progressive disclosure, not cutting.** Produce the actual hierarchy: what is always visible, what collapses, what moves behind a control, and what the bar looks like at a phone width.
+
+## 3. The states nobody has written
+
+Five gaps, all real, all yours:
+
+- **No JavaScript.** `viewer.md` enumerates five states and none is "JavaScript unavailable," yet the static shell reaches every reader behind NoScript, a hardened browser mode, an enterprise policy, or a text browser. Today they get nothing, with no explanation and no report link. The project already values this path, since the abuse form is required to work without JavaScript. Mozilla shipped three strings for it.
+- **The failed secure-context check.** `viewer.md` requires the check and a specific named error and notes a TLS-terminating proxy hits it in production. No copy exists, and a recipient cannot resolve it without being told what happened.
+- **A post-mint object-fetch failure.** `service.md` mandates that a fetch failing not-found after a successful mint renders as no-longer-available and **never** as a decrypt failure, because a takedown otherwise reads to the recipient as a bad key and they blame the sender. `viewer.md` has no branch for it, so the nearest screen is the one `service.md` forbids. This arrives from `specify` as a named watch item. Whether the object is gone, soft-deleted, or lifecycle-expired is decided in `docs/design/storage.md`; read it and write the copy against what it decided.
+- **Cap exhaustion versus takedown, which is the same screen twice.** `service.md` §1 returns the same status for both, and the distinct codes are for the operator's log rather than the recipient's screen. A scanner can exhaust a cap before a human ever opens the link, so a recipient on this screen may be looking at a deleted file or at a file still sitting there and out of budget. **You own every recipient-facing screen, so this decision is yours: decide whether the viewer distinguishes them, and state the support-load consequence either way.** `design-operations-and-abuse` states the need from the ticket side and consumes what you decide; it does not decide the screen. It runs after you and reads `docs/design/surface.md`.
+- **The pre-decryption byte count, which went live after this brief was written.** `design-container-and-crypto` has already executed and **refused bucket padding, minimal only**, so `format.md` 3.3's qualifier is discharged and the size derivation is exact at version 1. That qualifier is the stated reason `viewer.md` §5 withholds the number, "because it changes what the viewer may display," and §5 states the rule absolutely: "the viewer never shows a plaintext byte count before decryption starts." **The rule is locked and the reason under it is gone, so decide the display question and write the copy either way.** What turns on it in each direction: a size before the recipient commits to a decrypt is a real signal on exactly the large payloads the wedge exists to carry, and a number on screen is also a disclosure surface rather than a neutral one, though `format.md` 3.8 already concedes per-relic length leakage to anyone holding the link, so displaying it surfaces a conceded leak rather than creating a new one. **If you conclude the number should appear, name that as drift routing back to `specify`**, quoting the sentence whose basis is gone, which is this station's standard form for a finding that pressures a locked decision. Do not edit `viewer.md` and do not treat this as authority to reverse it.
+
+Also decide the **`mints_remaining` consumer**: `service.md` justifies the field by a viewer warning that `viewer.md` never specifies. Either specify the warning and its threshold, or state that the viewer does not warn, which makes that justification false and is worth saying out loud. **A threshold is meaningless without a denominator**, so state it against the per-object download cap in `docs/design/storage.md`, as a number or as a fraction of that cap.
+
+And decide the **user-facing side of the abuse taxonomy**: whether the form shows a **personal-data category** and what it is labelled. A data subject reporting their own leaked file currently lands in `other`, and that is the report most likely to arrive from a non-technical person under stress. **The label and its place on the form are yours. The pipeline behind it, what a report in that category obliges and how it resolves, is `design-operations-and-abuse`'s.** State the need and name the owner rather than designing the handling here.
+
+## 4. The renderer stack and the bundle budget
+
+`viewer.md` requires highlighted output as DOM text nodes with no sanitize-then-parse escape on the viewing origin. **Two libraries satisfy that natively by emitting a tree; the popular defaults emit an HTML string, which is exactly the shape the spec forbids.** Decide the stack and state the foreclosure.
+
+Measured gzipped sizes are in the knowledge topic, with a caveat that must travel with them: the measured entry points externalize their dependencies, so a highlighter's true cost is the entry plus the engine plus the chosen grammars. **The real lever is grammar loading, not library choice**, and the highlighted-region cap routed by `viewer.md` 7.4 is about CPU rather than bytes. Keep those separate and decide both. That cap is yours alone now; `design-topology-and-origins` is told explicitly that it is not its to decide.
+
+## 5. The publishing moment
+
+The tool result's shape is fixed, and the human hears whatever sentence the model composes around it. **MCP content is an array, so there is an unclaimed slot for one short human-readable sentence at the moment the URL appears.** Today the transcript disclosure lives in the tool description, read possibly weeks earlier, and a URL nobody clicks. Neither is a sentence at the moment it matters. Decide whether that slot is used and write the sentence. **The model paraphrases, so short and hard to drop beats complete**, and the honest phrasing names the transcript property without the reassurance the frame forbids.
+
+Note the revision also offers optional display title and icon members on a tool definition as free branding, with the caveat that clients must treat such presentation as untrusted, so it is a hint and never a control.
+
+This sentence is a different surface from the published disclosure statement in `service.md` §5, whose content, including where cross-relic correlation is disclosed, belongs to `design-operations-and-abuse`. Write yours; do not write theirs.
+
+## 6. Three routed viewer decisions, which are yours and were pointed at the wrong unit
+
+`viewer.md` §7 routes five items. **Three are viewer subject matter and they are yours.** The other two are not: 7.2, the hard size cap, is `design-storage-grant-and-cost`'s and arrives in `docs/design/storage.md`; 7.5, PSL registration, is `design-topology-and-origins`'s and arrives in `docs/design/topology.md`. Do not redecide either.
+
+- **7.1, the platform memory ceilings, and whether they are hardcoded or feature-detected.** `viewer.md` §5 already requires feature detection for the streaming tier, so what is open is the in-memory ceiling's value. `viewer.md` 7.1 tells you what each candidate rests on: Apple publishes no per-tab ceiling, hat.sh's 1 GB is an empirical project decision whose stated rationale does not match current compatibility data, and the 500 to 800 MB band is one forum report. **State what your number rests on rather than inheriting one of those silently.** This value and the size cap in `docs/design/storage.md` decide together whether §5's three tiers are three or one, and storage has already stated where the collapse point sits against each candidate ceiling. Read that first, pick the ceiling, and say which outcome the pair produces.
+- **7.3, the truncated-prefix size**, which `viewer.md` 7.3 notes the viewer states in its own copy. That makes it yours twice over, as a number and as a string. Decide the size and write the sentence, in the same voice as the truncation banner already mandated on the taskbar.
+- **7.4, the highlighted-region cap**, decided in §4 above with the renderer stack, where the CPU-versus-bytes distinction lives. It is user-visible, so its copy is yours too.
+
+# Do not assign obligations to siblings
+
+State needs and name the owner. Siblings: `design-container-and-crypto`, `design-storage-grant-and-cost`, `design-topology-and-origins`, `design-operations-and-abuse`.
+
+# Style
+
+Direct, dry, confident, contractions natural. **Never an em-dash or en-dash.** No emoji as icons. No placeholders, no hedging verbs.
+
+# Completion criteria
+
+1. `test -f docs/design/surface.md` exits 0.
+2. `test "$(wc -w < docs/design/surface.md)" -ge 2600` exits 0.
+3. Manifest has at least six sources, one per line, trailing newline.
+4. Every source resolves. Orphan check both directions.
+5. **The document commits to one art direction derived from the subject**, names the banned defaults it is not, and passes its own check: this layout, palette, and type would not work unchanged on a different topic.
+6. **The document states that no icon kit or web font can load on the viewing origin** and decides the substitute.
+7. **All three missing states are specified with copy**: no-JavaScript, failed secure-context, and post-mint fetch failure.
+8. **The `mints_remaining` consumer is decided**, either specified or explicitly declined, **and any threshold is stated against the per-object download cap in `docs/design/storage.md`** as a number or a fraction of it, never as an abstract quantity.
+9. **The taskbar hierarchy is produced for a phone width**, accounting for all thirteen mandated elements plus letterboxing.
+10. **The renderer stack is decided** and the string-emitting alternative is named as foreclosed with the reason.
+11. **The document decides whether the viewer distinguishes cap exhaustion from takedown**, writes the copy for whichever it decided, and states the support-load consequence. This is the screen `design-operations-and-abuse` consumes; it does not decide it.
+12. **The three `viewer.md` §7 items routed to this document are each decided with the consequence stated, or explicitly eliminated with the reason: 7.1 platform memory ceilings and whether they are hardcoded or feature-detected, 7.3 the truncated-prefix size, 7.4 the highlighted-region cap.** Name all three. **`viewer.md` 7.2, the hard size cap, and 7.5, PSL registration, are not decided here**; they belong to `design-storage-grant-and-cost` and `design-topology-and-origins`. The document states which in-memory ceiling it picked and whether the pair of that ceiling and storage's cap collapses `viewer.md` §5's three tiers into one.
+13. **Every number this document states in recipient-facing copy is taken from a sibling document and cited to it**, never invented and never left abstract: the hard size cap, the per-object download cap, the signed-URL validity window, and the deleted-versus-expired distinction all come from `docs/design/storage.md`.
+14. **Every quoted string is verified verbatim against raw source text, and the beat reports the audit as a list.**
+15. **The pre-decryption byte count is decided.** `design-container-and-crypto` refused bucket padding, so `format.md` 3.3's minimal-padding qualifier is discharged and `viewer.md` §5's stated reason for withholding the number no longer holds. The document states whether an exact plaintext byte count appears before decryption, carries the copy for whichever it decided, and if it concludes the number should appear it names that as drift routing back to `specify` rather than reversing `viewer.md` §5 here. **Observing that the qualifier is discharged does not satisfy this criterion, and neither does noting that the size is now exactly derivable. Both are true, and both are the sentence that hides the decision.**
+16. `test "$(grep -c '[—–]' docs/design/surface.md)" -eq 0` exits 0.
+
+# Files touched
+
+- `docs/design/surface.md`, `docs/design/surface.sources.txt` (create)
+
+# Out of scope
+
+- The container format. Locked by `docs/design/container.md`. **Its bucket-padding decision is an input to your §3 pre-decryption call, not a decision you reopen.**
+- Origins, edge, TLS, the mint trigger, the mint dedup interval, PSL registration, and the name. Locked by `docs/design/topology.md`.
+- The grant, cost, storage, **and every number they fix: the hard size cap, the download cap, the TTL, the retention window, the soft-delete posture, and the signed-URL validity window**. Locked by `docs/design/storage.md`. You write the copy that states them; you do not pick them.
+- The abuse pipeline behind the form, the legal posture, and the legal content of the published disclosure statement including where cross-relic correlation is disclosed. Sibling `design-operations-and-abuse`. **The split is: you own every recipient-facing screen and its copy, including the cap-exhaustion-versus-takedown distinction and the personal-data category's label; operations owns the pipeline behind them.**
+- Product code and actual image assets. This unit decides the direction and the rules.
 
 
 
@@ -178,7 +289,9 @@ Direct, dry, confident, contractions natural, authority through specificity. **N
 
 Every wave Unit is isolated on its own branch + worktree, forked off the station branch. Run that Unit's beat **inside its worktree** so its diff never tangles with another Unit's in-flight work; the manager lands each Unit back onto the station branch when it locks. Do **not** commit a Unit's work to the station branch yourself.
 
-- `design-storage-grant-and-cost` → `/Users/jwaldrip/dev/src/github.com/thebushidocollective/artifacts/.darkrun/worktrees/relic/units/shape/design-storage-grant-and-cost` (branch `darkrun/relic/units/shape/design-storage-grant-and-cost`)
+- `design-operations-and-abuse` → `/Users/jwaldrip/dev/src/github.com/thebushidocollective/artifacts/.darkrun/worktrees/relic/units/shape/design-operations-and-abuse` (branch `darkrun/relic/units/shape/design-operations-and-abuse`)
+
+- `design-product-surface` → `/Users/jwaldrip/dev/src/github.com/thebushidocollective/artifacts/.darkrun/worktrees/relic/units/shape/design-product-surface` (branch `darkrun/relic/units/shape/design-product-surface`)
 
 
 

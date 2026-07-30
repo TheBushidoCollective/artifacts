@@ -18,6 +18,7 @@ inputs:
 outputs:
 - docs/design/operations.md
 - docs/design/operations.sources.txt
+branch: darkrun/relic/units/shape/design-operations-and-abuse
 reviews:
   fit:
     at: 2026-07-30T11:40:36.253906+00:00

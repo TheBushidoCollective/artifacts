@@ -18,6 +18,7 @@ inputs:
 outputs:
 - docs/design/surface.md
 - docs/design/surface.sources.txt
+branch: darkrun/relic/units/shape/design-product-surface
 reviews:
   fit:
     at: 2026-07-30T11:40:36.253906+00:00

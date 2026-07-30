@@ -6,3 +6,4 @@
 {"action":"noop","at":"2026-07-30T03:00:49.764067+00:00","event":"darkrun.manager.action","run":"relic","station":null}
 {"action":"noop","at":"2026-07-30T03:23:08.571713+00:00","event":"darkrun.manager.action","run":"relic","station":null}
 {"at":"2026-07-30T03:23:42.298236+00:00","event":"darkrun.unit.completed","run":"relic","station":"frame","unit":"frame-artifact"}
+{"action":"manufacture","at":"2026-07-30T03:23:58.001865+00:00","event":"darkrun.manager.action","run":"relic","station":"frame"}

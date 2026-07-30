@@ -12,6 +12,7 @@ inputs:
 outputs:
 - docs/preconditions.md
 - docs/preconditions.sources.txt
+branch: darkrun/relic/units/frame/frame-preconditions
 reviews:
   feasibility:
     at: 2026-07-30T02:47:23.386041+00:00

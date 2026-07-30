@@ -80,11 +80,6 @@ quality_gates:
 - name: every-cited-url-resolves
   command: bash -c 'set -eu; while IFS= read -r u || [ -n "$u" ]; do [ -n "$u" ] || continue; curl -sfL --max-time 25 --retry 2 -A "Mozilla/5.0 (relic-link-check)" -o /dev/null "$u"; done < docs/preconditions.sources.txt'
 gate_results:
-- name: artifact-exists
-  status: pass
-  at: 2026-07-30T03:33:36.462560+00:00
-  attempts: 1
-  detail: test -f docs/preconditions.md -> exit 0
 - name: substance-floor
   status: pass
   at: 2026-07-30T03:33:38.703971+00:00
@@ -100,6 +95,11 @@ gate_results:
   at: 2026-07-30T03:33:50.079873+00:00
   attempts: 1
   detail: exit 0; all 19 URLs resolved via curl -sfL. Each was pre-screened with the identical command before being cited.
+- name: artifact-exists
+  status: pass
+  at: 2026-07-30T03:48:15.147758+00:00
+  attempts: 2
+  detail: 'challenger beat: test -f docs/preconditions.md -> exit 0'
 ---
 
 # Goal

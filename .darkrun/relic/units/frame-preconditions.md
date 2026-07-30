@@ -38,6 +38,11 @@ gate_results:
   at: 2026-07-30T03:33:38.703971+00:00
   attempts: 1
   detail: exit 0; wc -w = 3492, floor 1000
+- name: sources-manifest-populated
+  status: pass
+  at: 2026-07-30T03:33:47.966499+00:00
+  attempts: 1
+  detail: exit 0; 19 non-empty URL lines, floor 5; trailing newline confirmed via xxd (0a)
 ---
 
 # Goal

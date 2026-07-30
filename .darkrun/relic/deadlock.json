@@ -1,8 +1,9 @@
 {
-  "signature": "review@frame|st=frame;units=2;done=0;pass=0;status=Active;drift=0;fb=[]",
+  "signature": "manufacture@frame|st=frame;units=2;done=0;pass=0;status=Active;drift=0;fb=[fb-01:Addressed,fb-02:Addressed,fb-03:Addressed]",
   "count": 1,
-  "updated_at": 1785378548,
+  "updated_at": 1785379877,
   "recent": [
-    "review@frame|st=frame;units=2;done=0;pass=0;status=Active;drift=0;fb=[]"
+    "review@frame|st=frame;units=2;done=0;pass=0;status=Active;drift=0;fb=[]",
+    "manufacture@frame|st=frame;units=2;done=0;pass=0;status=Active;drift=0;fb=[fb-01:Addressed,fb-02:Addressed,fb-03:Addressed]"
   ]
 }

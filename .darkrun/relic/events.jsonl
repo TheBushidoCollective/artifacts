@@ -2,3 +2,4 @@
 {"at":"2026-07-30T00:05:36.910471+00:00","event":"darkrun.save_wip.blocked","files":1,"run":"relic"}
 {"action":"spec","at":"2026-07-30T00:06:04.614419+00:00","event":"darkrun.manager.action","run":"relic","station":"frame"}
 {"action":"review","at":"2026-07-30T02:29:08.640450+00:00","event":"darkrun.manager.action","run":"relic","station":"frame"}
+{"action":"manufacture","at":"2026-07-30T02:51:17.690339+00:00","event":"darkrun.manager.action","run":"relic","station":"frame"}

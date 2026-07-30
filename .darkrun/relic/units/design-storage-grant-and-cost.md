@@ -1,7 +1,7 @@
 ---
 name: Decide the grant shape, the storage topology, and the cost controls
 unit_type: ''
-status: pending
+status: in_progress
 depends_on:
 - design-container-and-crypto
 - design-topology-and-origins
@@ -17,6 +17,55 @@ outputs:
 - docs/design/storage.md
 - docs/design/storage.sources.txt
 branch: darkrun/relic/units/shape/design-storage-grant-and-cost
+started_at: 2026-07-30T14:04:03.683989+00:00
+iterations:
+- worker: designer
+  started_at: 2026-07-30T14:04:03.683989+00:00
+  completed_at: 2026-07-30T14:04:03.683989+00:00
+  result: advance
+  note: |-
+    `docs/design/storage.md` (8,527 words) and `storage.sources.txt` (17 URLs) committed at `95853da`. Worktree clean.
+
+    **Gates re-run independently by the manager:** 8527 words against 2600; 17 sources against 6; all 17 URLs resolve; zero dashes.
+
+    **Both sibling inputs came via the documented `git show` fallback**, as expected. Neither has landed on the station branch. This is now the third unit to hit it and the condition is stable, not degrading.
+
+    ## The manager found the beat's number-one nominated risk, and it landed the other way
+
+    **The beat's highest-value and highest-risk claim is false as stated. Fix this first.**
+
+    It argued `publish.md` 4.4's restart-at-zero egress claim is wrong because upload traffic is inbound and **"the pricing page puts inbound at Free."** The live page reads: **`Data transfer in $0.0032 / 1 gibibyte`, charged for data written to the bucket.** Inbound is roughly 37 times cheaper than the $0.12 egress tier, so **the conclusion that retries cost far less than 4.4 implies probably survives, and the stated basis does not.**
+
+    That matters because the beat used this to argue leaves 3 and 4 of the grant tree are cheaper than the locked document implies. **The challenge pass must re-derive the retry cost from the correct rate and check whether the leaf ranking still holds at $0.0032 per GiB rather than at zero.** The beat nominated exactly the right claim as its weakest; it just predicted the wrong failure direction, which is the same shape the topology unit hit.
+
+    ## Decisions
+
+    Download cap **64**, computed against **topology's actual branch**, which the beat read rather than guessed: the gesture gate with `wheel` excluded, and a 300-second dedup interval. The ceiling collapses toward the floor of 40, and the counterfactual is stated at 128 under auto-mint-on-load with worst-case per-relic egress doubling.
+
+    Size cap **100 MiB on plaintext content octets**, `size_basis` plaintext, ciphertext bound derived through container's conversion at the shipping record size. **It collapses the viewer's three tiers into one under every candidate in-memory ceiling**, argued at peak memory rather than at the cap, which is the stronger form. Ceiling ownership correctly left to `design-product-surface`.
+
+    Grant tree: five probes with request, assertion, and elimination, stated as not run and why. Four leaves, each naming its sacrificed requirement, the contradicted locked sentence, and a drift routing. Only one leaf is free.
+
+    The three previously unowned items all decided as values: proof of work at difficulty zero at launch **with a specified turn-on trigger and target solve time**, retry cap at five retries with a time budget, and **no custom object metadata** with the scanner reading bytes only. Soft delete at the seven-day minimum, TTL 72 hours inside the expressible lifecycle regime, retention 90 days, with the TTL stated as what bounds container's v2 migration claim.
+
+    ## A real substitution defect in a locked document, manager-confirmed
+
+    The beat found `preconditions.md` §1 rendering the GCP suspension warning as **"if you don't respond... your project might be suspended"** where the source reads **"If you do not respond to the warning in a timely manner your project may be suspended."** Three words differ. **`service.md` §4 quotes the same page correctly**, which is what makes it a defect rather than a house style.
+
+    It also found four sentence-initial case folds across `service.md` and **graded them honestly as lower severity rather than inflating them to mode 3.** Both routed as drift, neither edited.
+
+    ## Quotation discipline
+
+    35 double-quoted runs, all 35 source quotations, 35 verified, zero misses, zero unassigned. **It ran the sweep against two tag-stripping variants** so table-cell concatenation could not produce a false negative, which is the trap the brief warned about and the first beat to defend against it explicitly. Pricing figures stated in prose rather than quoted as cells.
+
+    ## The rest of its ranked attack list
+
+    2. **The in-flight expiry assumption**, asserted from reasoning rather than evidence: that a transfer already streaming completes after its signed URL expires. It flagged this and claims section 4.2 no longer depends on it. **Attack whether the dependency was removed or relabeled.**
+    3. **Whether `publish.md` 3.1 already decided proof of work**, making its §4 decision thinner than presented. It gives the counter-reading itself: leaving the trigger unset would be exactly the close-by-omission the spec warns against.
+    4. **Download cap 64 is a judgment value wearing arithmetic.** The floor of 40 is sourced; the 1.6x headroom is not derived. It says so, and the number still carries weight it may not have earned.
+    5. **TTL 72 hours covers the Friday-to-Monday case by exactly zero margin**, and was chosen partly because it lands in the expressible lifecycle regime, which the beat calls a tidiness argument rather than a product one.
+
+    It names the tier-collapse analysis and the residual-is-time-bounded framing as where it expects to be strongest, and asks for those to be attacked rather than accepted, citing both prior units having a nominated weakness turn out stronger than believed.
 reviews:
   fit:
     at: 2026-07-30T11:40:36.253906+00:00

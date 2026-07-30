@@ -21,7 +21,7 @@ quality_gates:
 - name: artifact-exists
   command: test -f docs/preconditions.md
 - name: substance-floor
-  command: test "$(wc -w < docs/preconditions.md)" -ge 700
+  command: test "$(wc -w < docs/preconditions.md)" -ge 1000
 - name: sources-manifest-populated
   command: bash -c 'set -eu; n=$(grep -c . docs/preconditions.sources.txt); test "$n" -ge 5'
 - name: every-cited-url-resolves
@@ -34,7 +34,21 @@ Write `docs/preconditions.md`: the conditions that must hold for Relic to be bui
 
 Also write `docs/preconditions.sources.txt`, a citation manifest: one URL per line, no other text, listing every external source this document relies on. End the file with a trailing newline.
 
-**Read `darkrun_knowledge_list` first, in full**, and read `docs/frame.md`, which this unit depends on. You have no other context. Write the preconditions against the frame that unit settled; do not redefine the problem, the user, or the wedge.
+**Read `darkrun_knowledge_list` first, in full**, and read `docs/frame.md`, which this unit depends on and which is already locked. You have no other context. Write the preconditions against the frame that unit settled; do not redefine the problem, the user, the wedge, the success metric, or the telemetry decision.
+
+**A warning about the citation manifest.** Some knowledge topics contain illustrative URL-shape examples rather than citations, such as `https://file.kiwi/abcdef12#secretKey` and `https://wormhole.app/{roomId}#{mainSecretKey}`. Those are templates, not sources. They 404 and will fail the gate. Only real, resolvable sources go in the manifest.
+
+# MANDATORY: the unobservable-quantity sweep
+
+**Read `unobservable-quantities-are-this-projects-failure-mode` before you write, and run its sweep on your finished draft before you commit.**
+
+This project's specific, recurring authoring defect is claiming a number the system cannot actually produce. It was caught four times in the sibling unit `frame-artifact`, by four different readers, three of them after an explicit sweep for exactly this. Each instance was subtler than the last. The dangerous ones are *partially* observable: a wholly fabricated metric gets caught, a half-true one does not.
+
+Your document is dense with checkable conditions, so it is more exposed to this defect than any other unit in the run. **For every condition you state as checkable, name the exact mechanism that produces the number, and confirm the locked architecture permits it.** Where a quantity is partly observable and partly not, say which half is not, in the same breath as the claim.
+
+Two live examples from `frame-artifact` to calibrate on. A claim that the client-type split is computable from publishing client name is half-wrong, because a Claude Code run inside a GitHub Action reports the same client name as an interactive one. A claim that mail-gateway blocklisting is checkable on a schedule is half-wrong, because a block inside a single company's tenant is invisible from outside and surfaces as a recipient reporting a dead link. Both were fixed by stating the limit alongside the claim, not by removing the condition.
+
+This applies with particular force to your section 3, where every control is stated as a checkable condition.
 
 # Why this document exists separately
 
@@ -57,7 +71,7 @@ State the Search Console precondition: every domain verified **before** launch, 
 Mark domain acquisition as an **external dependency requiring operator action**. Name it as a blocker on deployment, not on design.
 
 ## 3. The v1 control set
-List the controls that must ship in the first release rather than being deferred. Each stated as a checkable condition, not an aspiration. Drawn from `abuse-liability-of-hosting-uninspectable-content`: mandatory non-configurable TTL, hard size cap, per-IP publish quota, per-object download cap, per-IP download rate limit, global egress spend kill switch, delete-by-ID that works without the decryption secret, ciphertext-hash blocklist, upload IP plus timestamp retention with a published window, abuse reporting reachable from every relic page and a stable `/abuse` URL and a published email alias, and `robots.txt` disallow plus `X-Robots-Tag: noindex`.
+List the controls that must ship in the first release rather than being deferred. Each stated as a checkable condition, not an aspiration, and each subject to the sweep above. Drawn from `abuse-liability-of-hosting-uninspectable-content`: mandatory non-configurable TTL, hard size cap, per-IP publish quota, per-object download cap, per-IP download rate limit, global egress spend kill switch, delete-by-ID that works without the decryption secret, ciphertext-hash blocklist, upload IP plus timestamp retention with a published window, abuse reporting reachable from every relic page and a stable `/abuse` URL and a published email alias, and `robots.txt` disallow plus `X-Robots-Tag: noindex`.
 
 Explain briefly why each is load-bearing rather than listing them bare. Two points worth making explicitly: mandatory short TTL is the single highest-leverage control because it bounds how long abuse circulates, and delete-by-ID works precisely because the relic ID is not secret, only the key is.
 
@@ -77,18 +91,21 @@ Be honest that these are unknown. Do not paper over them.
 
 # Style
 
-Write as Jason Waldrip would: direct, dry, confident, contractions, brevity, authority through specificity. No corporate-speak, no hedging, no stock AI phrasing. **Never use an em-dash or an en-dash.** Rewrite with a comma, a colon, parentheses, or two sentences. No emoji.
+Write as Jason Waldrip would: direct, dry, confident, **contractions**, brevity, authority through specificity. No corporate-speak, no hedging, no stock AI phrasing. **Never use an em-dash or an en-dash.** Rewrite with a comma, a colon, parentheses, or two sentences. No emoji.
+
+On contractions specifically: the sibling unit's first draft contained **zero** contractions across 2542 words, every apostrophe a possessive, and that was flagged as a high-severity voice defect and one of the strongest AI tells there is. Use them naturally. Do not use them mechanically either: keep the flat form where a human would say "is not" for emphasis, particularly on load-bearing claims.
 
 # Completion criteria
 
 1. `docs/preconditions.md` exists → `test -f docs/preconditions.md` exits 0.
-2. It is substantive → `test "$(wc -w < docs/preconditions.md)" -ge 700` exits 0.
+2. It is substantive and complete, not a subset → `test "$(wc -w < docs/preconditions.md)" -ge 1000` exits 0. This floor is a completeness signal, not a target. It sits below the natural length of a compliant document (five sections, one enumerating roughly twelve controls with a rationale line each) so it cannot block correct work, but high enough that a document missing a whole section fails it. Do not pad to reach it, and do not treat clearing it as evidence of completeness; criteria 5 through 9 are what actually check that.
 3. `docs/preconditions.sources.txt` lists at least five sources, one URL per line, nothing else, ending with a trailing newline → `bash -c 'set -eu; n=$(grep -c . docs/preconditions.sources.txt); test "$n" -ge 5'` exits 0.
-4. Every listed source resolves over the network → `bash -c 'set -eu; while IFS= read -r u || [ -n "$u" ]; do [ -n "$u" ] || continue; curl -sfL --max-time 25 --retry 2 -A "Mozilla/5.0 (relic-link-check)" -o /dev/null "$u"; done < docs/preconditions.sources.txt'` exits 0. **Do not invent citations.** Every URL comes from the recorded knowledge topics or is one you verified yourself.
+4. Every listed source resolves over the network → `bash -c 'set -eu; while IFS= read -r u || [ -n "$u" ]; do [ -n "$u" ] || continue; curl -sfL --max-time 25 --retry 2 -A "Mozilla/5.0 (relic-link-check)" -o /dev/null "$u"; done < docs/preconditions.sources.txt'` exits 0. **Do not invent citations.** Every URL comes from the recorded knowledge topics or is one you verified yourself. Run the orphan check in both directions: every manifest URL cited in the body, and every body URL present in the manifest.
 5. The document states the abuse-operations go/no-go as a binary condition with an explicit "do not build" branch.
 6. The document names domain acquisition as an external dependency blocking deployment.
 7. The document contains a section of honestly unresolved questions.
 8. Section 4 states explicitly that the run's telemetry is collected server-side only and does not conflict with the no-script-on-the-viewing-origin rule.
+9. **Every checkable condition in the document names the mechanism that produces its number, and any condition that is only partially observable says so in the same breath.** This is the mandatory sweep above, and it is the criterion most likely to be violated. No gate can check it; it is verified by reading.
 
 # Files touched
 

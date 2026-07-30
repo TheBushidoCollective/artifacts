@@ -108,7 +108,7 @@ Decide, and state the consequences:
 ## 6. Every screen the recipient sees
 
 - **Five states the viewer must handle, of which three are distinguishable and two are not.** Missing or malformed fragment; server refused to mint with a stated reason; decrypt failed. **A wrong key and a corrupted download both throw `OperationError` and are genuinely indistinguishable at the API level**, which is why they collapse into the third screen. Name both plausible causes in the copy, offer a retry because the retry is itself the discriminator, and never blame the recipient.
-- **Separating corruption from a wrong key is possible with a facility that already exists.** GCS records a CRC32C on every object. Rightly rejected as a blocklist hash, it is exactly right as a transport-integrity check. If the mint response carries object length and checksum, transport corruption becomes detectable and a wrong key becomes the clean residual. State it as an integrity check, not an authenticity one.
+- **Separating corruption from a wrong key is possible with a facility that already exists.** GCS records a CRC32C on every object. Rightly rejected as a blocklist hash, it is exactly right as a transport-integrity check. If the mint response carries object length and checksum, transport corruption becomes detectable and a wrong key becomes the clean residual. **State the need and the viewer behavior that follows from it; `spec-service-surface` owns whether those fields exist.** State it as an integrity check, not an authenticity one.
 - **The unfurl card.** The fragment never reaches a server, so no unfurler can describe the content. **A blank card on an unfamiliar domain is the visual shape of a phishing link.** Serve deliberate Open Graph and Twitter Card metadata on `/{id}`, identical for every relic, saying what Relic is without pretending to describe the content. Serving it must not mint. Open Graph tags are not indexing and Slack documents that it ignores `robots.txt`, so there is no conflict with the noindex precondition; say so, or someone later removes the tags in the name of that rule.
 - **Before decryption completes, everything except the content renders**: the branded taskbar, the service name, one line of plain-language explanation, the abuse-report link, and the privacy-statement link (`spec-service-surface` owns that statement's contents).
 - **The honesty constraint applies hardest here.** "Nobody can read this but you" is an overclaim on the exact surface where a recipient is deciding whether to trust the domain.
@@ -120,7 +120,7 @@ Decide, and state the consequences:
 
 # Route to `shape`
 
-Name each with what `shape` must choose: platform memory ceilings and whether they are hardcoded or feature-detected (Apple publishes no per-tab ceiling, hat.sh's 1 GB is an empirical project decision, and the 500 to 800 MB band is a forum report, so say what the numbers rest on); **the hard size cap value**, which determines whether the section 5 tiering is required at all; the truncated-prefix size and the highlighted-region cap, both user-visible cutoffs the viewer states in its own copy; whether the mint response carries object length and CRC32C; **PSL registration for the sandbox parent, with its lead time named**.
+Name each with what `shape` must choose: platform memory ceilings and whether they are hardcoded or feature-detected (Apple publishes no per-tab ceiling, hat.sh's 1 GB is an empirical project decision, and the 500 to 800 MB band is a forum report, so say what the numbers rest on); **the hard size cap value**, which determines whether the section 5 tiering is required at all; the truncated-prefix size and the highlighted-region cap, both user-visible cutoffs the viewer states in its own copy; **PSL registration for the sandbox parent, with its lead time named**.
 
 # Style
 
@@ -129,7 +129,7 @@ Direct, dry, confident, **contractions used naturally**, brevity, authority thro
 # Completion criteria
 
 1. `test -f docs/spec/viewer.md` exits 0.
-2. `test "$(wc -w < docs/spec/viewer.md)" -ge 2600` exits 0. **Calibration:** this unit carries roughly 38 mandated items at an observed 60 to 85 words per item, so a compliant document lands between about 2280 and 3230 words. 2600 sits inside that band, so if you are near the floor, check for skipped items before assuming you are short.
+2. `test "$(wc -w < docs/spec/viewer.md)" -ge 2600` exits 0. **Calibration:** this unit carries roughly 43 mandated items at an observed 60 to 85 words per item, so a compliant document lands between about 2580 and 3655 words. 2600 sits at that band's bottom. **The floor is a stub guard, never a target**, and completeness here is carried by criteria 5 through 16, not by word count. If you are near the floor, check for skipped items before assuming you are short, and never pad to clear it.
 3. Manifest has at least six sources, one per line, trailing newline.
 4. Every source resolves. **Do not invent citations.** Orphan check both directions.
 5. Every item in "What this document must decide" is resolved into a stated rule or routed to `shape`. **Routing is legitimate only for items named in this unit's own "Route to `shape`" section; routing anything else fails this criterion.**

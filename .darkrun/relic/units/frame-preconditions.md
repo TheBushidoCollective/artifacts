@@ -1,7 +1,7 @@
 ---
 name: 'Write preconditions.md: the operating conditions and the go/no-go'
 unit_type: doc
-status: in_progress
+status: completed
 depends_on:
 - frame-artifact
 worker: distiller
@@ -14,6 +14,7 @@ outputs:
 - docs/preconditions.sources.txt
 branch: darkrun/relic/units/frame/frame-preconditions
 started_at: 2026-07-30T03:36:42.096626+00:00
+completed_at: 2026-07-30T04:09:14.345202+00:00
 iterations:
 - worker: framer
   started_at: 2026-07-30T03:36:42.096626+00:00

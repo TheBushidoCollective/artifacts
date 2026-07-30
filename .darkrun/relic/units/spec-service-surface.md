@@ -60,6 +60,48 @@ iterations:
     ## On word count
 
     4808 against a 2460 to 3485 band, treated as guidance rather than a ceiling per the precedent set when `format.md` landed at 5365. The beat attributes the overage to the twelve-case table, the reasoning on each contested status, and 15 inline citations. The adversary was asked to test that rather than accept it.
+- worker: adversary
+  started_at: 2026-07-30T07:01:30.749938+00:00
+  completed_at: 2026-07-30T07:01:30.749938+00:00
+  result: advance
+  note: |-
+    **Verdict: criteria 4 and 14 fail; 5 passes on substance but is incoherent on presentation; the other twelve pass.** Eleven findings, no edits, no commits. The adversary pulled every RFC as raw `.txt` from rfc-editor.org and every page with `curl` plus a tag-stripper, and used WebFetch on nothing.
+
+    ## F1, high, a FABRICATED QUOTATION. New defect class for this run.
+
+    Section 1.2 attributed to RFC 9110 §15.5.11 that `410` means "no longer available at any location."
+
+    **The manager verified this personally against the raw RFC: the string "any location" appears ZERO times in all 10,785 lines.** The actual text is "no longer available at **the origin server**." The second quote in that sentence ("the server owners desire that remote links to that resource be removed") is verbatim and stands.
+
+    This is worse than every citation defect the run has produced so far, because the URL resolves, the section number is correct, and the quoted words were invented. **Neither the `every-cited-url-resolves` gate nor the does-the-source-support-the-claim check catches it.** It is only findable by grepping the source for the quoted string.
+
+    It was also load-bearing backwards: the document's own preceding sentence concedes "the object still exists," which is exactly what "no longer available at any location" would contradict. The sentence that actually supports `410` is the permanence test the writer never reached for, since cap exhaustion is known-permanent and the server does know. The tightener was told to rebuild the argument on that and to **audit every other quoted string in the document**.
+
+    ## F2, high, false dichotomy on the option set.
+
+    Section 1.1 claimed the better-fitting alternative to `413` "is `403`, which the rule below forbids." **The manager verified RFC 9110 §15.5.21 defines 422 Unprocessable Content**, whose wording ("the syntax of the request content is correct, but it was unable to process the contained instructions") fits an over-cap grant request exactly, and which no rule bans. `413` may still win on legibility to humans, proxies, and dashboards, but the comparison must be honest and the loser's reason stated.
+
+    ## F5, medium-high, the real completeness hole, criterion 14.
+
+    Line 11 claims to own all app-server-originated failures, but `format.md` 1.3 and 1.4 mandate four grant-time refusals with no case and no code: bad alphabet, wrong length, reserved word, and **ID collision**. The collision is sharp because `format.md` 1.4 obliges the client to act ("The client draws a new ID and retries"), and **a client cannot key a redraw-and-retry on a code that does not exist**. Case 12 proves grant-time validation is in scope, so these cannot be deferred to the sibling. Also unspecified: a mint against an ID whose grant is live but whose object has not landed, which is a routine publisher race.
+
+    ## Remaining findings
+
+    **F3** two broken cross-references, both pointing at section 5 when they mean section 4, on the security carve-out and on the mechanism criterion 15 rests on. **F4** the operator surface asserts a root path prefix absent from `format.md`'s append-only reserved table. **F6** the Authelia citation is a relay of a relay (it quotes FusionAuth #629, and that quote is itself explicitly a belief), so "observed" overstates by two levels; nothing load-bearing rests on it. **F7** the IP dedup's real cost is NAT collapse undercounting the metric in exactly the 40-person-tenant scenario the document builds its cap arithmetic on, and it is unstated. **F8** the mint log carries the entire cap-exhaustion mitigation, the open counter, the cap, the limits, and the telemetry join, and its record shape is never defined while the tombstone gets ten fields. **F9, F10, F11** minor.
+
+    ## The eight flagged calls: five right, one wrong premise, two with real holes
+
+    - **Right:** widening the 401/403 ban (adds a stricter rule where the lock is silent, removes nothing, and the Claude Code trigger is verified not condition-scoped); case 6 taking `410` (the RFC's decision rule turns on permanence knowledge, which the server has); ten codes over twelve cases (a coverage bar, not an injectivity bar, and collapsing the three deletion cases **is** the criterion 15 decision); dedup on counter but not cap (the preconditions' egress term does become unbounded otherwise); blocklist conditional on reason class (the 3am hole is closed by making it a parameter of the one call).
+    - **Flagged call 1 rests on a false premise.** There was never a conflict: criterion 5 says "resolved **or** routed," criterion 6 requires all twelve resolved, and they are complementary. Nothing outside the licensed seven is routed, so substance is fine, but route item 1 is **titled** "The exact status values" while its body says they are fixed. Section 7 is the list `shape` reads, and a worker scanning titles reopens the table. Retitle and delete the manufactured-conflict narrative.
+    - **A hole under flagged call 8 nobody saw.** Section 4.1's reporter categories (`malware`, `phishing`, `csam`, `copyright`, `legal_process`, `other`) never map to section 4's reason classes (`abuse`, `blocklist_match`, `legal`, `operator_error`). **A CSAM report arriving as legal process plausibly maps to `legal`, which by the document's own rule skips the blocklist**, and that is the payload most worth blocklisting.
+
+    ## Verified clean, and this matters given the run's history
+
+    **Every GCS claim is clean on the recurring impossibility failure**, and in two places the document applies the recorded lesson correctly and by name, including stating the corrected soft-delete fact ("The policy is editable at any time"). The `robots.txt` interaction is right and if anything conservative against Google's own text. **The mint response field set meets all five of `spec-viewer`'s stated needs with two to spare**, verified by reading the sibling directly, and its four deliberate exclusions are each required by `format.md`. Zero em-dashes. Manifest clean, 19 URLs, orphan-clean both directions. All eight locked constraints honored, none relitigated. Not padded: roughly 60 words of filler found in 4808.
+
+    **One scoping fix from the fact-check:** section 6's "**Neither** documents what it does with a fragment" is a claim about the vendors, and the adversary verified only that the two cited pages are silent (zero occurrences of "fragment" or "anchor" in both). Scope it to the cited documentation and it becomes true at a cost of four words.
+
+    Findings handed to the tightener with the F1 and F2 verifications attached as confirmed rather than alleged.
 reviews:
   completeness:
     at: 2026-07-30T05:31:07.501358+00:00

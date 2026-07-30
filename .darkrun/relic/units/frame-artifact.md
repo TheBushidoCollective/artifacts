@@ -65,11 +65,6 @@ quality_gates:
 - name: every-cited-url-resolves
   command: bash -c 'set -eu; while IFS= read -r u || [ -n "$u" ]; do [ -n "$u" ] || continue; curl -sfL --max-time 25 --retry 2 -A "Mozilla/5.0 (relic-link-check)" -o /dev/null "$u"; done < docs/frame.sources.txt'
 gate_results:
-- name: sources-manifest-populated
-  status: pass
-  at: 2026-07-30T02:57:31.400331+00:00
-  attempts: 1
-  detail: exit=0. 13 non-empty lines, all matching ^https://, trailing newline confirmed (last byte 0x0a).
 - name: every-cited-url-resolves
   status: pass
   at: 2026-07-30T02:57:33.811944+00:00
@@ -85,6 +80,11 @@ gate_results:
   at: 2026-07-30T03:10:52.383454+00:00
   attempts: 3
   detail: Challenger beat re-run after cutting. `test "$(wc -w < docs/frame.md)" -ge 1300` exit=0. Word count now 2411, down from 2542. Floor 1300.
+- name: sources-manifest-populated
+  status: pass
+  at: 2026-07-30T03:11:03.386010+00:00
+  attempts: 2
+  detail: 'Challenger beat re-run after pruning two orphaned sources. exit=0. 11 non-empty lines (was 13), all ^https://, trailing newline confirmed (last byte 0x0a). Verified every manifest URL is still cited in the body: zero orphans.'
 ---
 
 # Goal

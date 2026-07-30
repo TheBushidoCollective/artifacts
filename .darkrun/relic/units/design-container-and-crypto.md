@@ -110,6 +110,58 @@ iterations:
     ## One item for drift routing, not this unit's to fix
 
     `format.md` 3.4 quotes RFC 8188 as `keyid` "SHOULD be a UTF-8-encoded string" where the RFC reads "SHOULD be a UTF-8-encoded **[RFC3629]** string." Same elision class as finding 4, in a locked sibling.
+- worker: resolver
+  started_at: 2026-07-30T12:23:38.291765+00:00
+  completed_at: 2026-07-30T12:23:38.291765+00:00
+  result: advance
+  note: |-
+    Resolve complete at `a07dafd`, one file, 5,605 to 8,464 words, worktree clean. **All eleven findings fixed, all five verdicts applied, one drift item routed.**
+
+    **Gates re-run independently by the manager:** artifact-exists PASS; substance-floor 8464 against 2400; sources 13 against 6; all 13 URLs resolve; zero dashes; `AES-128` twice. **Spot-checked every headline fix:** "petabyte" now returns **zero** hits, `17,519,171,600,384` present with "22.7 times tighter than the encryption limit, not looser than it"; §3.2 stated decrypt-only; both `format.md` 4.4 and 4.6 disclaimers intact; "per 100 MB" gone with "100 MiB" in four places; the `[RFC3629]` drift item present.
+
+    ## It re-ran every script rather than trusting either beat
+
+    `repro32.mjs` independently reproduced finding 1: the 7/8 split matches the published body at 73 octets, the minimal-padding 8/7 split gives 72 and does not. `repro31.mjs` re-confirmed the §3.1 vector byte for byte. `arith.mjs` re-derived every cell of the cost table exact.
+
+    **It re-ran the benchmark twice rather than quoting a single run**, and wrote the document to the honest figure across both: 4096 decrypts 64 MiB in 201 and 214 ms, 65536 in 26 and 25 ms. The document says "roughly 0.3 s" against "roughly 0.04 s" extrapolated to 100 MiB, which holds under both runs.
+
+    **New evidence it generated for a claim the challenge pass only asserted.** `nul.mjs` ran the reference implementation's own `pad`/`unpad` over 3,000 NUL octets of content, with and without the envelope block, across one, two, and three records. Exact round trip every time, deepest backward scan one octet. That is now what the `rs - 17` claim rests on rather than reasoning.
+
+    It also derived the full ceiling table: the record ceiling binds first at **every** `rs` in the document, 92.0x tighter at 1024 through 1.41x at 65536, crossover at 92,684.
+
+    ## The quotation audit was worse than either beat reported, and is now mechanically checkable
+
+    **The make pass claimed 35 of 35. The true prior count was 42 audited, 40 verbatim, 2 deviations**, both confirmed against re-fetched raw source. Both fixed.
+
+    **Final state: 50 audited, 50 verbatim, zero deviations**, covering 39 double-quoted runs and 11 backticked source strings. And it did something better than fix the count: **it converted the four remaining scare-quotes to non-quotation form, so every double-quoted run in the document is now a source quotation.** Criterion 9 is mechanically checkable instead of requiring judgment about which quotes count.
+
+    **A fourth false-negative mode, recorded for the next checker:** an apparent third deviation was its own extraction artifact. The GFM punctuation quote fails if `<code>` tags are stripped to bare text and is verbatim once code spans are preserved as backticks.
+
+    ## Two things neither beat listed, both found by the resolver
+
+    - **A units defect in the cost table.** The column read "Records per 100 MB" while every value in it was computed for 100 **MiB** (100e6 gives 24,517 at 4096, not 25,708), and the prose repeated the wrong unit. Both fixed, which also makes the table consistent with the benchmark.
+    - **An overstatement it introduced and removed before committing.** A draft of rule 9 claimed no plausible cap "lands within six orders of magnitude" of the ceiling, which implies a cap at or below 17.5 MB and is wrong for a 1 GB cap at 4.2 orders. Replaced with an unquantified statement that also avoids constraining the sibling's cap choice.
+
+    ## Where the fixes were better than the instruction
+
+    - **Finding 8's tenth nonce rule is written to sit inside what `format.md` 1.4 already prescribes** (draw a new ID and retry) rather than beside it, so it reads as naming a property of a locked rule rather than overriding it.
+    - **Finding 5's fix keeps the rejection and narrows only the false part.** The record-size line moves out of the disqualifying set into its own sub-bullet titled as a line that reads disqualifying and is not, quoting the README's "The default record size is 4096 bytes". Only random padding is now called individually disqualifying.
+    - **The 255-octet fix needed no new citation.** It replaced the false filesystem claim with pure arithmetic: a 255-octet UTF-8 string is never more than 255 characters and never more than 255 UTF-16 code units, so the cap is conservative rather than matching.
+    - **Criterion 7 is now genuinely passable**, which it was not before. §3.1 is the round-trip vector at the shipping `rs`, §3.2 is decrypt-only, and the document explains why an encrypt assertion there tests padding policy rather than conformance.
+
+    ## Tone changes that matter as much as the content
+
+    `rs = 4096` is kept and **reframed as unimportant rather than finely balanced**, with the four-reason ranking cut to two, AEAD invocation count explicitly retired as a cost with the reason, and the measurement table replacing the count. The section now says outright that being wrong about both reasons would be defensible.
+
+    The **125-over-122 self-deprecation is gone**, restated as the dominance argument it always was: identical cost at 25 characters, three more bits, uniformly random first character, nothing traded.
+
+    ## Drift routed, not fixed
+
+    New §10 records that `format.md` 3.4 quotes RFC 8188's `keyid` line eliding `[RFC3629]`, routes it to `specify`, and states explicitly that `format.md` is locked and this document does not edit it. Both strings verified verbatim against their own raw sources. This is the same elision class as the fix in finding 4, one document over.
+
+    ## Scope
+
+    `format.md` 4.4 and 4.6 remain undecided. The resolver re-grepped every `cap` and `object metadata` hit to confirm each is a disclaimer, a conversion function carrying no value, or a need statement naming the owner. Sibling-obligation phrasing returns empty. Two-way orphan check on the manifest is exact.
 reviews:
   fit:
     at: 2026-07-30T11:40:36.253906+00:00

@@ -199,6 +199,11 @@ gate_results:
     `test "$(wc -w < docs/spec/viewer.md)" -ge 2600` exits 0. Actual: 7883 words, up from 4752 at the writer's commit, and the largest artifact in the station.
 
     The tightener offered a further cut and asked which rules to lose. **Declined by the manager.** Its measured density is 51 to 97 words per distinct rule across sections, straddling the calibration's observed 60 to 85, so the document is not diluted. It is long because resolving seventeen findings added roughly 100 distinct rules where the calibration assumed 43: the two-layer sandbox boundary, six filename rules, the three-way redirect split, three per-tier integrity behaviors, five ServiceWorker rules, the source toggle, the bidi gate, the SVG downgrade trigger, the disagreement tiebreak, and the PWA warm-resume case. Cutting costs rules, and trading verified rules for a stub-guard number is the trade already declined twice at this station. Precedent: format 5365, service 6551.
+- name: sources-manifest-populated
+  status: pass
+  at: 2026-07-30T07:20:15.589125+00:00
+  attempts: 1
+  detail: 17 non-empty lines against a floor of 6, one URL per line, trailing newline present. Run by the manager at 7121fc2. Two sources added during resolve (Trojan Source for the bidi-control gate, W3C appmanifest for the corrected PWA claim), none removed. Orphan check clean both directions at 17 and 17.
 ---
 
 # Goal

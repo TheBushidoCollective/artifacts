@@ -159,6 +159,11 @@ gate_results:
   at: 2026-07-30T06:23:45.483783+00:00
   attempts: 1
   detail: '`test -f docs/spec/format.md` exits 0. Run by the manager in the unit worktree at commit 2838a4d, not taken from a beat''s self-report.'
+- name: substance-floor
+  status: pass
+  at: 2026-07-30T06:23:49.737455+00:00
+  attempts: 1
+  detail: '`test "$(wc -w < docs/spec/format.md)" -ge 1600` exits 0. Actual: 5365 words. Run by the manager at commit 2838a4d. Note the document sits well above the calibrated 1620 to 2295 band; the tightener''s net +721 came from five findings that mandated new content (the corrected GCS constraint, the corrected reserved-path guard analysis, and the real cross-origin redirect rule), while all four named padding sources were cut. A deliberate reduction pass was offered and declined, because trading verified-correct reasoning for a lower count is the wrong trade and the floor is a stub guard.'
 ---
 
 # Goal

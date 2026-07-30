@@ -7,7 +7,7 @@
     "frame": {
       "station": "frame",
       "status": "in_progress",
-      "phase": "reflect",
+      "phase": "checkpoint",
       "checkpoint": {
         "kind": "auto"
       },

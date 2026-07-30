@@ -124,11 +124,6 @@ quality_gates:
 - name: every-cited-url-resolves
   command: bash -c 'set -eu; while IFS= read -r u || [ -n "$u" ]; do [ -n "$u" ] || continue; curl -sfL --max-time 25 --retry 2 -A "Mozilla/5.0 (relic-link-check)" -o /dev/null "$u"; done < docs/preconditions.sources.txt'
 gate_results:
-- name: artifact-exists
-  status: pass
-  at: 2026-07-30T03:48:15.147758+00:00
-  attempts: 2
-  detail: 'challenger beat: test -f docs/preconditions.md -> exit 0'
 - name: substance-floor
   status: pass
   at: 2026-07-30T03:48:17.472742+00:00
@@ -144,6 +139,11 @@ gate_results:
   at: 2026-07-30T03:48:34.626161+00:00
   attempts: 2
   detail: 'challenger beat: exit 0; all 22 URLs resolved via curl -sfL. The 3 new ones (soft-delete, data-validation, webmasters/9008080) were pre-screened with the identical command before being cited, and I read each page''s text to confirm it supports the claim. Orphan check clean both directions.'
+- name: artifact-exists
+  status: pass
+  at: 2026-07-30T03:58:00.710889+00:00
+  attempts: 3
+  detail: 'distiller beat (final state): test -f docs/preconditions.md -> exit 0'
 ---
 
 # Goal

@@ -31,3 +31,4 @@
 {"action":"review","at":"2026-07-30T09:26:46.336426+00:00","event":"darkrun.manager.action","run":"relic","station":"specify"}
 {"action":"audit","at":"2026-07-30T09:34:28.378026+00:00","event":"darkrun.manager.action","run":"relic","station":"specify"}
 {"action":"reflect","at":"2026-07-30T09:37:25.182431+00:00","event":"darkrun.manager.action","run":"relic","station":"specify"}
+{"action":"checkpoint","at":"2026-07-30T09:39:08.596025+00:00","event":"darkrun.manager.action","run":"relic","station":"specify"}

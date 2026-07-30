@@ -112,8 +112,6 @@ iterations:
 
     8832 to 11804, roughly 149 words per item across twenty items. Density held. Nothing decided was cut. Voice held or improved: contractions at the incoming rate, the appositive down from 1 per 736 to 1 per 787, zero dashes.
 reviews:
-  completeness:
-    at: 2026-07-30T05:31:07.501358+00:00
   testability:
     at: 2026-07-30T05:14:48.190501+00:00
 quality_gates:

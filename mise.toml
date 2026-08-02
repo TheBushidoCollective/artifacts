@@ -1,0 +1,38 @@
+[settings]
+auto_install = true
+exec_auto_install = true
+experimental = true
+lockfile = true
+not_found_auto_install = true
+task_run_auto_install = true
+use_file_shell_for_executable_tasks = true
+
+[tools]
+bun = "latest"
+biome = "2.3.6"
+node = "lts"
+markdownlint-cli2 = "latest"
+
+[tasks.install]
+description = "Install workspace dependencies"
+run = "bun install"
+
+[tasks.format]
+description = "Format every source file"
+run = "biome format --write ."
+
+[tasks.lint]
+description = "Lint and check formatting without writing"
+run = "biome check ."
+
+[tasks.typecheck]
+description = "Type check every package"
+run = "bun run --filter '*' typecheck"
+
+[tasks.test]
+description = "Run the full test suite"
+run = "bun test"
+
+[tasks.verify]
+description = "The full verification suite: lint, typecheck, test"
+depends = ["lint", "typecheck", "test"]

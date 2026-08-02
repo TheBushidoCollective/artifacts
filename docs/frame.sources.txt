@@ -1,0 +1,11 @@
+https://code.claude.com/docs/en/artifacts
+https://support.claude.com/en/articles/9547008-publish-and-share-artifacts
+https://file.kiwi/
+https://github.com/file-kiwi/filekiwi-mcp-server
+https://github.com/PrivateBin/PrivateBin
+https://github.com/PrivateBin/PrivateBin/wiki/Threat-Model
+https://jfrog.com/blog/2025-6514-critical-mcp-remote-rce-vulnerability/
+https://immich.app/blog/google-flags-immich-as-dangerous
+https://support.google.com/webmasters/answer/6347750
+https://github.com/greggman/unzipit
+https://github.com/SocketDev/wormhole-crypto

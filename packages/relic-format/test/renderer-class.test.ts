@@ -4,9 +4,11 @@ import {
   isRenderable,
   isRendererClass,
   leastPrivileged,
+  privilegeTier,
   RENDERABLE_CLASSES,
   RENDERER_CLASSES,
   type RendererClass,
+  sniffContentClass,
 } from '../src/renderer-class.ts';
 
 const utf8 = (text: string): Uint8Array => new TextEncoder().encode(text);
@@ -119,6 +121,56 @@ describe('the content fallback', () => {
 
   test('an unknown extension falls through to the content check', () => {
     expect(deriveRendererClass(utf8('plain words'), 'thing.wat')).toBe('code');
+  });
+});
+
+describe('sniffContentClass ignores the filename entirely', () => {
+  test('HTML named .png sniffs as html, which deriveRendererClass cannot do', () => {
+    const html = utf8('<!doctype html><script>steal()</script>');
+    // The publish-side classifier trusts the extension, and that is correct
+    // for telemetry.
+    expect(deriveRendererClass(html, 'innocent.png')).toBe('image');
+    // The viewer-side sniff must not, or the disagreement rule compares the
+    // filename against itself and agrees in exactly the attack case.
+    expect(sniffContentClass(html)).toBe('html');
+  });
+
+  test('a real PNG sniffs as an image whatever it is called', () => {
+    const png = new Uint8Array([
+      0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
+    ]);
+    expect(sniffContentClass(png)).toBe('image');
+  });
+
+  test('plain text sniffs as code, and it cannot tell markdown apart', () => {
+    expect(sniffContentClass(utf8('# A heading\n\nSome prose.'))).toBe('code');
+  });
+
+  test('a zero-byte payload sniffs as binary', () => {
+    expect(sniffContentClass(new Uint8Array(0))).toBe('binary');
+  });
+
+  test('bytes with NULs sniff as binary', () => {
+    expect(sniffContentClass(new Uint8Array([0, 1, 2, 0, 255]))).toBe('binary');
+  });
+});
+
+describe('privilegeTier', () => {
+  test('only html executes', () => {
+    expect(privilegeTier('html')).toBe(3);
+    for (const cls of RENDERER_CLASSES) {
+      if (cls !== 'html') expect(privilegeTier(cls)).toBeLessThan(3);
+    }
+  });
+
+  test('markdown and code share a tier, so neither downgrades the other', () => {
+    expect(privilegeTier('markdown')).toBe(privilegeTier('code'));
+  });
+
+  test('nothing download-only carries any render privilege', () => {
+    for (const cls of ['media', 'archive', 'binary'] as const) {
+      expect(privilegeTier(cls)).toBe(0);
+    }
   });
 });
 

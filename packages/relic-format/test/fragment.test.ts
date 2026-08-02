@@ -109,6 +109,27 @@ describe('fragment shape', () => {
     expect(() => parseFragment(`r9${body}`)).toThrow(UnknownVersionError);
   });
 
+  test('reports an unknown version even when its key length differs', () => {
+    // Key length is a property of a specific version, so the marker has to be
+    // checked first. Checking length first would report a future version as a
+    // malformed fragment and send the recipient to ask for a resend of a link
+    // that was never broken.
+    expect(() => parseFragment('r9AAAAAAAAAAAAAAAAAAAA')).toThrow(
+      UnknownVersionError
+    );
+    expect(() => parseFragment('r9AAAA')).toThrow(UnknownVersionError);
+    expect(() => parseFragment(`r9${'A'.repeat(60)}`)).toThrow(
+      UnknownVersionError
+    );
+  });
+
+  test('a wrong-length fragment on a known version is malformed, not unknown', () => {
+    const body = encodeFragment(generateKey()).slice(VERSION_MARKER.length);
+    expect(() =>
+      parseFragment(`${VERSION_MARKER}${body.slice(0, -1)}`)
+    ).toThrow(MalformedFragmentError);
+  });
+
   test('refuses an empty fragment', () => {
     expect(() => parseFragment('#')).toThrow(MalformedFragmentError);
   });

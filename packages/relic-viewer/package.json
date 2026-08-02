@@ -1,0 +1,15 @@
+{
+  "name": "@relic/viewer",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/viewer.ts",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "build": "bun build src/main.ts --outdir dist --minify"
+  },
+  "dependencies": {
+    "@relic/format": "workspace:*",
+    "@relic/server": "workspace:*"
+  }
+}

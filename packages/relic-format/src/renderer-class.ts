@@ -223,6 +223,61 @@ const HTML_PREFIXES = ['<!doctype html', '<html', '<!-- ', '<svg'];
  * Order: the unconditional zero-byte rule, then magic bytes, then the
  * extension, then a textual-content fallback, then `binary`.
  */
+/**
+ * Classify from bytes alone, ignoring the filename entirely.
+ *
+ * This is the input the viewer's declared-versus-sniffed rule needs. Using
+ * `deriveRendererClass` there would be a bug with a security consequence: its
+ * extension fallback means an HTML payload named `innocent.png` sniffs as
+ * `image`, so the comparison would be measuring the filename against itself
+ * and would agree in exactly the case the rule exists to catch.
+ *
+ * It cannot tell Markdown from other plain text, and it does not try. Both
+ * are escaped text at render time, so they carry the same privilege, and
+ * `privilegeTier` is what the comparison actually runs on.
+ */
+export function sniffContentClass(content: Uint8Array): RendererClass {
+  if (content.length === 0) return 'binary';
+
+  for (const signature of MAGIC) {
+    if (matchesMagic(content, signature)) return signature.cls;
+  }
+
+  if (looksTextual(content)) {
+    const head = new TextDecoder('utf-8', { fatal: false })
+      .decode(content.slice(0, 256))
+      .trimStart()
+      .toLowerCase();
+    if (HTML_PREFIXES.some((prefix) => head.startsWith(prefix))) return 'html';
+    return 'code';
+  }
+
+  return 'binary';
+}
+
+/**
+ * How much the viewer has to trust content to render it this way.
+ *
+ * 3 executes script, 2 goes through an image decoder, 1 is escaped text, and
+ * 0 is never rendered at all. The declared-versus-sniffed rule compares
+ * tiers rather than classes, because `markdown` and `code` differ only in how
+ * escaped text is decorated and a spurious disagreement between them would
+ * downgrade every Markdown relic ever published.
+ */
+export function privilegeTier(cls: RendererClass): 0 | 1 | 2 | 3 {
+  switch (cls) {
+    case 'html':
+      return 3;
+    case 'image':
+      return 2;
+    case 'markdown':
+    case 'code':
+      return 1;
+    default:
+      return 0;
+  }
+}
+
 export function deriveRendererClass(
   content: Uint8Array,
   filename: string

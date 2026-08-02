@@ -142,16 +142,27 @@ export function parseFragment(fragment: string): ParsedFragment {
   if (body.length === 0) {
     throw new MalformedFragmentError('fragment is empty');
   }
-  if (body.length !== VERSION_MARKER.length + KEY_CHARS) {
-    throw new MalformedFragmentError(
-      `fragment must be ${VERSION_MARKER.length + KEY_CHARS} characters, ` +
-        `got ${body.length}`
-    );
+
+  // The marker is checked before the length, and the order is load-bearing.
+  // Key length is a property of a specific version, so a future version with
+  // a different key length would otherwise be reported as a malformed
+  // fragment rather than as the unknown version it is. That would send the
+  // recipient to "ask the sender to resend the link" for a link that is
+  // perfectly intact.
+  if (body.length < VERSION_MARKER.length) {
+    throw new MalformedFragmentError('fragment is shorter than its marker');
   }
 
   const marker = body.slice(0, VERSION_MARKER.length);
   if (marker !== VERSION_MARKER) {
     throw new UnknownVersionError(marker);
+  }
+
+  if (body.length !== VERSION_MARKER.length + KEY_CHARS) {
+    throw new MalformedFragmentError(
+      `fragment must be ${VERSION_MARKER.length + KEY_CHARS} characters, ` +
+        `got ${body.length}`
+    );
   }
 
   const key = decodeKey(body.slice(VERSION_MARKER.length));

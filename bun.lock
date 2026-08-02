@@ -13,6 +13,17 @@
       "name": "@relic/format",
       "version": "0.1.0",
     },
+    "packages/relic-mcp": {
+      "name": "@relic/mcp",
+      "version": "0.1.0",
+      "bin": {
+        "relic-mcp": "./src/index.ts",
+      },
+      "dependencies": {
+        "@relic/format": "workspace:*",
+        "@relic/server": "workspace:*",
+      },
+    },
     "packages/relic-server": {
       "name": "@relic/server",
       "version": "0.1.0",
@@ -23,6 +34,8 @@
   },
   "packages": {
     "@relic/format": ["@relic/format@workspace:packages/relic-format"],
+
+    "@relic/mcp": ["@relic/mcp@workspace:packages/relic-mcp"],
 
     "@relic/server": ["@relic/server@workspace:packages/relic-server"],
 

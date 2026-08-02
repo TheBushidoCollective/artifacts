@@ -47,3 +47,4 @@
 {"action":"manufacture","at":"2026-07-30T13:39:22.289215+00:00","event":"darkrun.manager.action","run":"relic","station":"shape"}
 {"at":"2026-07-30T15:08:46.145551+00:00","event":"darkrun.unit.completed","run":"relic","station":"shape","unit":"design-storage-grant-and-cost"}
 {"action":"manufacture","at":"2026-07-30T15:08:58.410453+00:00","event":"darkrun.manager.action","run":"relic","station":"shape"}
+{"at":"2026-08-02T19:56:58.663878+00:00","event":"darkrun.save_wip.blocked","files":1,"run":"relic"}

@@ -9,7 +9,7 @@ use_file_shell_for_executable_tasks = true
 
 [tools]
 bun = "latest"
-biome = "2.3.6"
+biome = "2.2.2"
 node = "lts"
 markdownlint-cli2 = "latest"
 

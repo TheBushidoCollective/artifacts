@@ -2,7 +2,9 @@
   "name": "@relic/workspace",
   "private": true,
   "type": "module",
-  "workspaces": ["packages/*"],
+  "workspaces": [
+    "packages/*"
+  ],
   "scripts": {
     "lint": "biome check .",
     "format": "biome format --write .",

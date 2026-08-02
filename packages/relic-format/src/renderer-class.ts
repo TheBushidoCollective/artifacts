@@ -1,0 +1,285 @@
+/**
+ * The renderer class: the coarse, seven-value taxonomy the frame concedes to
+ * the operator so the success metric is computable at all.
+ *
+ * Two rules travel with it and neither is negotiable:
+ *
+ * 1. **It is derived by the client that holds the plaintext**, never accepted
+ *    as a tool input (`spec/publish.md` 1.2). Exposing it as a parameter
+ *    makes the taxonomy model-attested, and the metric's second clause would
+ *    have an unreliable narrator reporting its only input.
+ * 2. **It never reaches the viewer and never routes rendering**
+ *    (`spec/format.md` 3.6). A publisher declaring `image` on an HTML payload
+ *    would win inline rendering on the origin holding the fragment secret.
+ *    Routing comes from sniffing after decryption, and it can only ever move
+ *    content to a less privileged path.
+ *
+ * The taxonomy cuts exactly on the wedge boundary, so the metric's second
+ * clause is computable with no ambiguity.
+ */
+
+/** The seven values. Stored server-side against the relic ID, nowhere else. */
+export type RendererClass =
+  | 'markdown'
+  | 'code'
+  | 'html'
+  | 'image'
+  | 'media'
+  | 'archive'
+  | 'binary';
+
+export const RENDERER_CLASSES: readonly RendererClass[] = [
+  'markdown',
+  'code',
+  'html',
+  'image',
+  'media',
+  'archive',
+  'binary',
+];
+
+/** The side of the taxonomy the first release actually renders. */
+export const RENDERABLE_CLASSES: readonly RendererClass[] = [
+  'markdown',
+  'code',
+  'html',
+  'image',
+];
+
+export function isRendererClass(value: string): value is RendererClass {
+  return (RENDERER_CLASSES as readonly string[]).includes(value);
+}
+
+export function isRenderable(value: RendererClass): boolean {
+  return (RENDERABLE_CLASSES as readonly RendererClass[]).includes(value);
+}
+
+interface MagicSignature {
+  readonly bytes: readonly number[];
+  readonly offset: number;
+  readonly cls: RendererClass;
+}
+
+/** Checked before any extension is consulted. */
+const MAGIC: readonly MagicSignature[] = [
+  { bytes: [0x89, 0x50, 0x4e, 0x47], offset: 0, cls: 'image' }, // PNG
+  { bytes: [0xff, 0xd8, 0xff], offset: 0, cls: 'image' }, // JPEG
+  { bytes: [0x47, 0x49, 0x46, 0x38], offset: 0, cls: 'image' }, // GIF
+  { bytes: [0x42, 0x4d], offset: 0, cls: 'image' }, // BMP
+  { bytes: [0x50, 0x4b, 0x03, 0x04], offset: 0, cls: 'archive' }, // ZIP
+  { bytes: [0x50, 0x4b, 0x05, 0x06], offset: 0, cls: 'archive' }, // empty ZIP
+  { bytes: [0x1f, 0x8b], offset: 0, cls: 'archive' }, // gzip
+  { bytes: [0x42, 0x5a, 0x68], offset: 0, cls: 'archive' }, // bzip2
+  { bytes: [0xfd, 0x37, 0x7a, 0x58, 0x5a], offset: 0, cls: 'archive' }, // xz
+  { bytes: [0x28, 0xb5, 0x2f, 0xfd], offset: 0, cls: 'archive' }, // zstd
+  { bytes: [0x75, 0x73, 0x74, 0x61, 0x72], offset: 257, cls: 'archive' }, // tar
+  { bytes: [0x25, 0x50, 0x44, 0x46], offset: 0, cls: 'binary' }, // PDF
+  { bytes: [0x49, 0x44, 0x33], offset: 0, cls: 'media' }, // MP3 with ID3
+  { bytes: [0x4f, 0x67, 0x67, 0x53], offset: 0, cls: 'media' }, // Ogg
+  { bytes: [0x66, 0x74, 0x79, 0x70], offset: 4, cls: 'media' }, // MP4 family
+];
+
+const EXTENSIONS: Readonly<Record<string, RendererClass>> = {
+  md: 'markdown',
+  markdown: 'markdown',
+  mdown: 'markdown',
+  mkd: 'markdown',
+
+  html: 'html',
+  htm: 'html',
+  xhtml: 'html',
+
+  svg: 'image',
+  png: 'image',
+  jpg: 'image',
+  jpeg: 'image',
+  gif: 'image',
+  webp: 'image',
+  avif: 'image',
+  bmp: 'image',
+  ico: 'image',
+
+  mp4: 'media',
+  webm: 'media',
+  mov: 'media',
+  mkv: 'media',
+  mp3: 'media',
+  wav: 'media',
+  ogg: 'media',
+  flac: 'media',
+  m4a: 'media',
+
+  zip: 'archive',
+  tar: 'archive',
+  gz: 'archive',
+  tgz: 'archive',
+  bz2: 'archive',
+  xz: 'archive',
+  zst: 'archive',
+  '7z': 'archive',
+  rar: 'archive',
+
+  ts: 'code',
+  tsx: 'code',
+  js: 'code',
+  jsx: 'code',
+  mjs: 'code',
+  cjs: 'code',
+  json: 'code',
+  jsonc: 'code',
+  yaml: 'code',
+  yml: 'code',
+  toml: 'code',
+  ini: 'code',
+  xml: 'code',
+  py: 'code',
+  rb: 'code',
+  go: 'code',
+  rs: 'code',
+  java: 'code',
+  kt: 'code',
+  swift: 'code',
+  c: 'code',
+  h: 'code',
+  cc: 'code',
+  cpp: 'code',
+  hpp: 'code',
+  cs: 'code',
+  php: 'code',
+  ex: 'code',
+  exs: 'code',
+  erl: 'code',
+  scala: 'code',
+  clj: 'code',
+  hs: 'code',
+  lua: 'code',
+  pl: 'code',
+  r: 'code',
+  sql: 'code',
+  sh: 'code',
+  bash: 'code',
+  zsh: 'code',
+  fish: 'code',
+  ps1: 'code',
+  dockerfile: 'code',
+  tf: 'code',
+  hcl: 'code',
+  proto: 'code',
+  graphql: 'code',
+  gql: 'code',
+  css: 'code',
+  scss: 'code',
+  sass: 'code',
+  less: 'code',
+  diff: 'code',
+  patch: 'code',
+  csv: 'code',
+  tsv: 'code',
+  txt: 'code',
+  log: 'code',
+  text: 'code',
+};
+
+function extensionOf(filename: string): string | undefined {
+  const base = filename.slice(filename.lastIndexOf('/') + 1).toLowerCase();
+  if (base === 'dockerfile') return 'dockerfile';
+  const dot = base.lastIndexOf('.');
+  if (dot <= 0 || dot === base.length - 1) return undefined;
+  return base.slice(dot + 1);
+}
+
+function matchesMagic(content: Uint8Array, signature: MagicSignature): boolean {
+  const end = signature.offset + signature.bytes.length;
+  if (content.length < end) return false;
+  for (let index = 0; index < signature.bytes.length; index++) {
+    if (content[signature.offset + index] !== signature.bytes[index]) {
+      return false;
+    }
+  }
+  return true;
+}
+
+/** Cheap UTF-8 text check over a prefix: no NUL bytes, few control bytes. */
+function looksTextual(content: Uint8Array): boolean {
+  const limit = Math.min(content.length, 8192);
+  if (limit === 0) return false;
+
+  let suspicious = 0;
+  for (let index = 0; index < limit; index++) {
+    const byte = content[index] as number;
+    if (byte === 0) return false;
+    const isPlainControl =
+      byte < 0x09 || (byte > 0x0d && byte < 0x20) || byte === 0x7f;
+    if (isPlainControl) suspicious++;
+  }
+  return suspicious / limit < 0.01;
+}
+
+const HTML_PREFIXES = ['<!doctype html', '<html', '<!-- ', '<svg'];
+
+/**
+ * Derive the class from the bytes the publishing client holds.
+ *
+ * Order: the unconditional zero-byte rule, then magic bytes, then the
+ * extension, then a textual-content fallback, then `binary`.
+ */
+export function deriveRendererClass(
+  content: Uint8Array,
+  filename: string
+): RendererClass {
+  // `spec/format.md` 3.9, unconditional: a zero-byte relic is `binary`
+  // regardless of filename, extension, or sniffed type. It renders as
+  // nothing, and calling it `code` because its name ends in `.py` would
+  // inflate the renderable share the metric's second clause measures.
+  if (content.length === 0) return 'binary';
+
+  for (const signature of MAGIC) {
+    if (matchesMagic(content, signature)) return signature.cls;
+  }
+
+  const extension = extensionOf(filename);
+  if (extension !== undefined) {
+    const fromExtension = EXTENSIONS[extension];
+    if (fromExtension !== undefined) return fromExtension;
+  }
+
+  if (looksTextual(content)) {
+    const head = new TextDecoder('utf-8', { fatal: false })
+      .decode(content.slice(0, 256))
+      .trimStart()
+      .toLowerCase();
+    if (HTML_PREFIXES.some((prefix) => head.startsWith(prefix))) return 'html';
+    return 'code';
+  }
+
+  return 'binary';
+}
+
+/**
+ * The declared-versus-sniffed disagreement rule (`spec/format.md` 3.6).
+ *
+ * Runs in the viewer against the envelope header's declared mimetype and
+ * filename, which sit inside the AEAD and are therefore tamper-evident. When
+ * the two disagree, route to the least privileged path either type would
+ * allow and tell the recipient you did so.
+ */
+export function leastPrivileged(
+  first: RendererClass,
+  second: RendererClass
+): RendererClass {
+  // Ordered most privileged to least. `html` is the most dangerous thing the
+  // viewer will render, so a disagreement involving it always loses.
+  const ranking: readonly RendererClass[] = [
+    'html',
+    'image',
+    'markdown',
+    'code',
+    'media',
+    'archive',
+    'binary',
+  ];
+  const firstRank = ranking.indexOf(first);
+  const secondRank = ranking.indexOf(second);
+  return (ranking[Math.max(firstRank, secondRank)] ??
+    'binary') as RendererClass;
+}

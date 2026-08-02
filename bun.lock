@@ -13,9 +13,18 @@
       "name": "@relic/format",
       "version": "0.1.0",
     },
+    "packages/relic-server": {
+      "name": "@relic/server",
+      "version": "0.1.0",
+      "dependencies": {
+        "@relic/format": "workspace:*",
+      },
+    },
   },
   "packages": {
     "@relic/format": ["@relic/format@workspace:packages/relic-format"],
+
+    "@relic/server": ["@relic/server@workspace:packages/relic-server"],
 
     "@types/bun": ["@types/bun@1.3.14", "", { "dependencies": { "bun-types": "1.3.14" } }, "sha512-h1hFqFVcvAvD9j9K7ZW7vd82aSA+rTdznZa+5bwvCwqSB1jmmfLcbIWhOLx1/+boy/xmjgCs/OMUL8hRJSmnPw=="],
 

@@ -1,0 +1,165 @@
+/**
+ * RFC 9457 problem details.
+ *
+ * One taxonomy, one set of codes, for every caller (`spec/service.md` 1.1).
+ * The publishing client and a browser reach the same endpoints, and a
+ * taxonomy that varies by caller is a bug generator.
+ *
+ * `type` is generated from `code` through one table, so the two can never
+ * disagree. Clients branch on `code`; the bare status is what every
+ * status-only surface reads, which is why `413` beats `422` for an oversized
+ * declared object even though `422` fits the letter better.
+ */
+
+/** Every code the app server can emit. */
+export type ProblemCode =
+  // The twelve cases (`spec/service.md` 1.1)
+  | 'relic_not_found'
+  | 'relic_expired'
+  | 'relic_removed'
+  | 'relic_never_published'
+  | 'size_over_cap'
+  | 'publish_rate_limited'
+  | 'mint_rate_limited'
+  | 'download_cap_exhausted'
+  | 'service_paused'
+  | 'invalid_publish_metadata'
+  // The grant-time refusals `format.md` obliges (`spec/service.md` 1.6)
+  | 'invalid_relic_id'
+  | 'relic_id_collision'
+  | 'relic_not_yet_published'
+  | 'invalid_challenge_nonce';
+
+const STATUS: Readonly<Record<ProblemCode, number>> = {
+  relic_not_found: 404,
+  relic_expired: 410,
+  relic_removed: 410,
+  relic_never_published: 410,
+  size_over_cap: 413,
+  publish_rate_limited: 429,
+  mint_rate_limited: 429,
+  download_cap_exhausted: 410,
+  service_paused: 503,
+  invalid_publish_metadata: 400,
+  invalid_relic_id: 400,
+  relic_id_collision: 409,
+  relic_not_yet_published: 409,
+  invalid_challenge_nonce: 409,
+};
+
+/** `title` SHOULD NOT change from occurrence to occurrence, per RFC 9457. */
+const TITLE: Readonly<Record<ProblemCode, string>> = {
+  relic_not_found: 'No such relic',
+  relic_expired: 'Relic expired',
+  relic_removed: 'Relic removed',
+  relic_never_published: 'Relic was never published',
+  size_over_cap: 'Declared size is over the cap',
+  publish_rate_limited: 'Too many publishes',
+  mint_rate_limited: 'Too many requests',
+  download_cap_exhausted: 'Download cap exhausted',
+  service_paused: 'Service paused',
+  invalid_publish_metadata: 'Invalid publish metadata',
+  invalid_relic_id: 'Invalid relic id',
+  relic_id_collision: 'Relic id already exists',
+  relic_not_yet_published: 'Relic is still uploading',
+  invalid_challenge_nonce: 'Challenge nonce is dead',
+};
+
+export interface ProblemExtensions {
+  readonly relic_id?: string;
+  readonly id_validation_failure?: 'alphabet' | 'length' | 'reserved';
+  readonly retry_after_seconds?: number;
+  readonly size_limit_bytes?: number;
+  readonly declared_size_bytes?: number;
+  readonly size_basis?: 'plaintext' | 'ciphertext';
+  readonly download_cap?: number;
+  readonly report_url?: string;
+}
+
+export interface ProblemOptions extends ProblemExtensions {
+  readonly detail?: string;
+}
+
+export class ProblemError extends Error {
+  override readonly name = 'ProblemError';
+  constructor(
+    readonly code: ProblemCode,
+    readonly options: ProblemOptions = {}
+  ) {
+    super(options.detail ?? TITLE[code]);
+  }
+
+  get status(): number {
+    return STATUS[this.code];
+  }
+}
+
+export function statusFor(code: ProblemCode): number {
+  return STATUS[code];
+}
+
+/**
+ * `instance` carries an occurrence id, which is the entire point of the
+ * member. The request path fails on its face: every failure on one relic has
+ * the identical path, so spending `instance` on it throws away the one member
+ * designed to join a support report to a log line.
+ */
+export function newOccurrenceId(): string {
+  const bytes = new Uint8Array(12);
+  crypto.getRandomValues(bytes);
+  return [...bytes].map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+export interface RenderedProblem {
+  readonly body: Record<string, unknown>;
+  readonly status: number;
+  readonly occurrenceId: string;
+}
+
+export function renderProblem(
+  error: ProblemError,
+  serviceOrigin: string,
+  occurrenceId: string = newOccurrenceId()
+): RenderedProblem {
+  const base = serviceOrigin.replace(/\/$/, '');
+  const body: Record<string, unknown> = {
+    type: `${base}/problems/${error.code}`,
+    title: TITLE[error.code],
+    status: error.status,
+    detail: error.options.detail ?? TITLE[error.code],
+    instance: `${base}/problems/occurrences/${occurrenceId}`,
+    code: error.code,
+  };
+
+  for (const [key, value] of Object.entries(error.options)) {
+    if (key === 'detail' || value === undefined) continue;
+    body[key] = value;
+  }
+
+  return { body, status: error.status, occurrenceId };
+}
+
+export function problemResponse(
+  error: ProblemError,
+  serviceOrigin: string,
+  occurrenceId?: string
+): Response {
+  const rendered = renderProblem(error, serviceOrigin, occurrenceId);
+  const headers: Record<string, string> = {
+    'content-type': 'application/problem+json',
+    // The viewing origin sends this on every response (`format.md` section 0):
+    // the relic id appears in the origin's own Referer otherwise.
+    'referrer-policy': 'no-referrer',
+    'x-robots-tag': 'noindex',
+  };
+
+  // `Retry-After` stays authoritative; the extension member mirrors it.
+  if (error.options.retry_after_seconds !== undefined) {
+    headers['retry-after'] = String(error.options.retry_after_seconds);
+  }
+
+  return new Response(JSON.stringify(rendered.body), {
+    status: rendered.status,
+    headers,
+  });
+}

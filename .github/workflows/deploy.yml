@@ -1,0 +1,144 @@
+name: deploy
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+  # Manual runs exist for rollback and for toggling the kill switch, which are
+  # the two things you need at 3am and cannot wait for a commit.
+  workflow_dispatch:
+    inputs:
+      kill_switch:
+        description: 'Engage the egress kill switch (refuses every mint and publish)'
+        type: boolean
+        default: false
+
+# One deploy at a time, and never cancel one in flight: a half-applied
+# Terraform run is worse than a queued one.
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  TF_VERSION: 1.9.8
+
+jobs:
+  verify:
+    uses: ./.github/workflows/verify.yml
+
+  deploy:
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: production
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # No service account key anywhere. The token is minted per run and
+      # scoped to this repository by the provider's attribute condition.
+      - uses: google-github-actions/auth@v2
+        id: auth
+        with:
+          project_id: ${{ vars.GCP_PROJECT_ID }}
+          workload_identity_provider: ${{ vars.WIF_PROVIDER }}
+          service_account: ${{ vars.DEPLOYER_SA }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker ${{ vars.GCP_REGION }}-docker.pkg.dev --quiet
+
+      - name: Build and push
+        id: image
+        run: |
+          set -euo pipefail
+          REPO="${{ vars.GCP_REGION }}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/relic/server"
+          docker build -f deploy/docker/server/Dockerfile -t "$REPO:${{ github.sha }}" .
+          docker push "$REPO:${{ github.sha }}"
+
+          # Deploy by digest, never by tag. A tag can be moved, which makes
+          # "what is running" unanswerable during an incident.
+          DIGEST="$(docker inspect --format='{{index .RepoDigests 0}}' "$REPO:${{ github.sha }}")"
+          echo "digest=$DIGEST" >> "$GITHUB_OUTPUT"
+          echo "Deploying $DIGEST"
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Terraform init
+        working-directory: deploy/terraform
+        run: terraform init -input=false
+
+      - name: Terraform format check
+        working-directory: deploy/terraform
+        run: terraform fmt -check -recursive
+
+      - name: Terraform plan
+        working-directory: deploy/terraform
+        run: terraform plan -input=false -out=tfplan
+        env:
+          TF_VAR_project_id: ${{ vars.GCP_PROJECT_ID }}
+          TF_VAR_region: ${{ vars.GCP_REGION }}
+          TF_VAR_run_url_infix: ${{ vars.RUN_URL_INFIX }}
+          TF_VAR_image: ${{ steps.image.outputs.digest }}
+          TF_VAR_kill_switch_engaged: ${{ inputs.kill_switch || false }}
+          TF_VAR_operator_tokens: ${{ secrets.RELIC_OPERATOR_TOKENS }}
+
+      - name: Terraform apply
+        working-directory: deploy/terraform
+        run: terraform apply -input=false -auto-approve tfplan
+
+      - name: Report the deployed origins
+        id: urls
+        working-directory: deploy/terraform
+        run: |
+          set -euo pipefail
+          SERVICE="$(terraform output -raw service_url)"
+          SANDBOX="$(terraform output -raw sandbox_url)"
+          echo "service=$SERVICE" >> "$GITHUB_OUTPUT"
+          {
+            echo "### Relic is deployed"
+            echo ""
+            echo "| Origin | URL |"
+            echo "|---|---|"
+            echo "| Service | $SERVICE |"
+            echo "| Sandbox | $SANDBOX |"
+            echo "| Bucket | \`$(terraform output -raw bucket_name)\` |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # A green apply says Terraform is satisfied. It does not say the service
+      # answers. These do.
+      - name: Smoke test the deployment
+        run: |
+          set -euo pipefail
+          SERVICE="${{ steps.urls.outputs.service }}"
+
+          echo "health"
+          curl -fsS --retry 10 --retry-all-errors --retry-delay 3 "$SERVICE/health" | tee /dev/stderr | grep -q '"ok"'
+
+          echo "the shell serves and does not leak a referrer"
+          curl -fsS -D/tmp/h -o/dev/null "$SERVICE/aaaaaaaaaaaaaaaaaaaaaaaaaa"
+          grep -qi '^referrer-policy: no-referrer' /tmp/h
+
+          echo "every asset the shell names resolves"
+          for P in /assets/viewer.js /assets/styles.css /assets/register-sw.js /manifest.webmanifest /sw.js /assets/icon.svg; do
+            curl -fsS -o/dev/null "$SERVICE$P" || { echo "MISSING $P"; exit 1; }
+          done
+
+          echo "the published disclosure is readable before anybody publishes"
+          curl -fsS "$SERVICE/policy" | grep -q 'Your browser never sends the'
+
+          echo "the abuse intake answers, because it is a go/no-go obligation"
+          curl -fsS "$SERVICE/abuse" | grep -q '<form method="post"'
+
+          echo "a never-issued id is a problem document, not a stack trace"
+          curl -sS -o/tmp/b -w '%{http_code}' "$SERVICE/api/relics/aaaaaaaaaaaaaaaaaaaaaaaaaa/mint" -X POST | grep -q 404
+          grep -q 'relic_not_found' /tmp/b

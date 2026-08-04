@@ -2,7 +2,7 @@
 
 import { createApp } from './app.ts';
 import { diskAssets } from './assets.ts';
-import { gcsStorage } from './gcs.ts';
+import { gcsStorage, metadataSigner, privateKeySigner } from './gcs.ts';
 import { MemoryStorage, type ObjectStorage } from './storage.ts';
 
 /**
@@ -13,29 +13,33 @@ import { MemoryStorage, type ObjectStorage } from './storage.ts';
  * loses every relic on restart, which is a failure the recipient discovers
  * rather than the operator.
  */
-function resolveStorage(): ObjectStorage {
+async function resolveStorage(): Promise<ObjectStorage> {
   const bucket = process.env['RELIC_GCS_BUCKET'];
-  const clientEmail = process.env['RELIC_GCS_CLIENT_EMAIL'];
-  // Secret managers commonly hand back the PEM with escaped newlines.
-  const privateKey = process.env['RELIC_GCS_PRIVATE_KEY']?.replace(
-    /\\n/g,
-    '\n'
-  );
   const prefix = process.env['RELIC_GCS_PREFIX'];
 
-  if (bucket && clientEmail && privateKey) {
-    return gcsStorage({
-      bucket,
-      clientEmail,
-      privateKey,
-      ...(prefix ? { prefix } : {}),
-    });
+  if (bucket) {
+    // A downloaded key is the development path only. On Cloud Run the
+    // signature comes from the IAM Credentials API using the attached
+    // identity, so no key material exists in the deployment at all.
+    const clientEmail = process.env['RELIC_GCS_CLIENT_EMAIL'];
+    // Secret managers commonly hand back the PEM with escaped newlines.
+    const privateKey = process.env['RELIC_GCS_PRIVATE_KEY']?.replace(
+      /\\n/g,
+      '\n'
+    );
+
+    const signer =
+      clientEmail && privateKey
+        ? privateKeySigner(clientEmail, privateKey)
+        : await metadataSigner();
+
+    return gcsStorage({ bucket, signer, ...(prefix ? { prefix } : {}) });
   }
 
   if (process.env['NODE_ENV'] === 'production') {
     throw new Error(
-      'RELIC_GCS_BUCKET, RELIC_GCS_CLIENT_EMAIL, and RELIC_GCS_PRIVATE_KEY ' +
-        'are required in production. Refusing to start on memory storage.'
+      'RELIC_GCS_BUCKET is required in production. Refusing to start on ' +
+        'memory storage.'
     );
   }
 
@@ -70,7 +74,7 @@ const app = createApp({
       process.env['RELIC_SANDBOX_ORIGIN'] ?? 'http://localhost:8081',
     killSwitchEngaged: process.env['RELIC_KILL_SWITCH'] === 'true',
   },
-  storage: resolveStorage(),
+  storage: await resolveStorage(),
   assets: diskAssets(
     process.env['RELIC_ASSET_ROOT'] ??
       new URL('../../relic-viewer/dist/', import.meta.url).pathname

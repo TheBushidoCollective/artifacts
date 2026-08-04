@@ -197,7 +197,7 @@ describe('the storage adapter', () => {
     expect(upload.headers['content-length']).toBe('4096');
     // Signed, so a client cannot alter it without invalidating the signature.
     expect(upload.url).toContain('content-length%3Bhost');
-    expect(upload.maxBytes).toBe(4096);
+    expect(upload.contentLength).toBe(4096);
     expect(upload.expiresAt).toBe(NOW + 900_000);
   });
 

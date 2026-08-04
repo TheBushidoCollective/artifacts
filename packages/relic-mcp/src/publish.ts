@@ -155,6 +155,16 @@ export async function publish(
     const relicId = generateRelicId();
     const key = generateKey();
 
+    // Encrypt before requesting the grant, so the grant can pin the object's
+    // exact byte length. A fresh salt is drawn per attempt, so this has to sit
+    // inside the retry loop alongside the id and the key.
+    const container = await encryptRelic({
+      content: source.bytes,
+      filename,
+      mimetype: guessMimetype(filename, rendererClass),
+      key,
+    });
+
     let grant: Record<string, unknown>;
     try {
       grant = await postJson(deps, `${deps.serviceOrigin}/api/grant`, {
@@ -163,6 +173,7 @@ export async function publish(
         renderer_class: rendererClass,
         publishing_client: deps.clientName,
         declared_size_bytes: source.bytes.length,
+        declared_ciphertext_bytes: container.length,
       });
     } catch (error) {
       if (
@@ -177,16 +188,12 @@ export async function publish(
       throw error;
     }
 
-    const container = await encryptRelic({
-      content: source.bytes,
-      filename,
-      mimetype: guessMimetype(filename, rendererClass),
-      key,
-    });
-
     // 3. Straight to storage. The ciphertext never transits the app server.
     const upload = await deps.fetch(String(grant['upload_url']), {
       method: 'PUT',
+      // The grant signed this exact length, so it is sent explicitly rather
+      // than left to whatever the runtime infers from the body.
+      headers: { 'content-length': String(container.length) },
       body: container as unknown as BodyInit,
     });
     if (!upload.ok) {

@@ -24,7 +24,14 @@ export interface SignedUpload {
    */
   readonly headers: Readonly<Record<string, string>>;
   readonly expiresAt: number;
-  readonly maxBytes: number;
+  /**
+   * The exact object length the signature pins.
+   *
+   * Not a ceiling. `Content-Length` is ignored on a signed PUT unless it is
+   * one of the signed headers, and once signed it must match exactly, so
+   * there is no such thing as signing an upper bound.
+   */
+  readonly contentLength: number;
 }
 
 export interface ObjectStat {
@@ -43,7 +50,7 @@ export interface ObjectStat {
 export interface ObjectStorage {
   signUpload(
     relicId: string,
-    maxBytes: number,
+    contentLength: number,
     validitySeconds: number,
     now: number
   ): Promise<SignedUpload>;
@@ -67,18 +74,18 @@ export class MemoryStorage implements ObjectStorage {
 
   async signUpload(
     relicId: string,
-    maxBytes: number,
+    contentLength: number,
     validitySeconds: number,
     now: number
   ): Promise<SignedUpload> {
     const token = `${relicId}.${now}`;
-    this.uploads.set(token, { maxBytes });
+    this.uploads.set(token, { maxBytes: contentLength });
     return {
       url: `${this.origin}/upload/${relicId}?token=${token}`,
       method: 'PUT',
-      headers: { 'content-length': String(maxBytes) },
+      headers: { 'content-length': String(contentLength) },
       expiresAt: now + validitySeconds * 1000,
-      maxBytes,
+      contentLength,
     };
   }
 

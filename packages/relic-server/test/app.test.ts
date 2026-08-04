@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, test } from 'bun:test';
 import {
+  encryptedSize,
   encryptRelic,
   generateKey,
   generateRelicId,
@@ -68,6 +69,7 @@ async function publish(
         renderer_class: options.rendererClass ?? 'markdown',
         publishing_client: 'relic-mcp/0.1.0 (test)',
         declared_size_bytes: options.size ?? 12,
+        declared_ciphertext_bytes: encryptedSize(options.size ?? 12),
       }),
     })
   );
@@ -169,6 +171,7 @@ describe('the grant', () => {
           renderer_class: 'markdown',
           publishing_client: 'test',
           declared_size_bytes: 1,
+          declared_ciphertext_bytes: encryptedSize(1),
         }),
       })
     );
@@ -191,6 +194,7 @@ describe('the grant', () => {
           renderer_class: 'markdown',
           publishing_client: 'test',
           declared_size_bytes: 1,
+          declared_ciphertext_bytes: encryptedSize(1),
         }),
       })
     );
@@ -211,6 +215,7 @@ describe('the grant', () => {
           renderer_class: 'markdown',
           publishing_client: 'test',
           declared_size_bytes: 1,
+          declared_ciphertext_bytes: encryptedSize(1),
         }),
       })
     );
@@ -234,6 +239,7 @@ describe('the grant', () => {
           renderer_class: 'markdown',
           publishing_client: 'test',
           declared_size_bytes: 200 * 1024 * 1024,
+          declared_ciphertext_bytes: encryptedSize(200 * 1024 * 1024),
         }),
       })
     );
@@ -259,6 +265,7 @@ describe('the grant', () => {
           renderer_class: 'spreadsheet',
           publishing_client: 'test',
           declared_size_bytes: 1,
+          declared_ciphertext_bytes: encryptedSize(1),
         }),
       })
     );
@@ -282,11 +289,88 @@ describe('the grant', () => {
           renderer_class: 'markdown',
           publishing_client: 'test',
           declared_size_bytes: 1,
+          declared_ciphertext_bytes: encryptedSize(1),
         }),
       })
     );
     expect(response.status).toBe(409);
     expect((await response.json()).code).toBe('relic_id_collision');
+  });
+
+  test("signs the object's exact byte length, not the cap", async () => {
+    const challenge = (await app
+      .fetch(req('/api/challenge', { method: 'POST' }))
+      .then((r) => r.json())) as { challenge_nonce: string };
+    const grant = (await app
+      .fetch(
+        req('/api/grant', {
+          method: 'POST',
+          body: JSON.stringify({
+            challenge_nonce: challenge.challenge_nonce,
+            relic_id: generateRelicId(),
+            renderer_class: 'markdown',
+            publishing_client: 'test',
+            declared_size_bytes: 5000,
+            declared_ciphertext_bytes: encryptedSize(5000),
+          }),
+        })
+      )
+      .then((r) => r.json())) as { upload_headers: Record<string, string> };
+
+    // Signing the cap would mean the upload had to be 100 MiB exactly, which
+    // is the bug that made every real publish fail with a 403.
+    expect(grant.upload_headers['content-length']).toBe(
+      String(encryptedSize(5000))
+    );
+    expect(grant.upload_headers['content-length']).not.toBe(
+      String(100 * 1024 * 1024)
+    );
+  });
+
+  test('refuses a ciphertext length that disagrees with its own arithmetic', async () => {
+    // A disagreement means the two ends have drifted on the format. Caught
+    // here rather than producing an object nobody can open.
+    const challenge = (await app
+      .fetch(req('/api/challenge', { method: 'POST' }))
+      .then((r) => r.json())) as { challenge_nonce: string };
+
+    const response = await app.fetch(
+      req('/api/grant', {
+        method: 'POST',
+        body: JSON.stringify({
+          challenge_nonce: challenge.challenge_nonce,
+          relic_id: generateRelicId(),
+          renderer_class: 'markdown',
+          publishing_client: 'test',
+          declared_size_bytes: 5000,
+          declared_ciphertext_bytes: encryptedSize(5000) + 1,
+        }),
+      })
+    );
+    expect(response.status).toBe(400);
+    expect((await response.json()).code).toBe('invalid_publish_metadata');
+  });
+
+  test('refuses a ciphertext length over the cap', async () => {
+    const challenge = (await app
+      .fetch(req('/api/challenge', { method: 'POST' }))
+      .then((r) => r.json())) as { challenge_nonce: string };
+
+    const response = await app.fetch(
+      req('/api/grant', {
+        method: 'POST',
+        body: JSON.stringify({
+          challenge_nonce: challenge.challenge_nonce,
+          relic_id: generateRelicId(),
+          renderer_class: 'binary',
+          publishing_client: 'test',
+          declared_size_bytes: 1,
+          declared_ciphertext_bytes: 500 * 1024 * 1024,
+        }),
+      })
+    );
+    expect(response.status).toBe(413);
+    expect((await response.json()).code).toBe('size_over_cap');
   });
 
   test('signs no x-goog-meta header, because nothing needs object metadata', async () => {
@@ -303,6 +387,7 @@ describe('the grant', () => {
             renderer_class: 'markdown',
             publishing_client: 'test',
             declared_size_bytes: 1,
+            declared_ciphertext_bytes: encryptedSize(1),
           }),
         })
       )
@@ -397,6 +482,7 @@ describe('the mint', () => {
           renderer_class: 'markdown',
           publishing_client: 'test',
           declared_size_bytes: 1,
+          declared_ciphertext_bytes: encryptedSize(1),
         }),
       })
     );
@@ -423,6 +509,7 @@ describe('the mint', () => {
           renderer_class: 'markdown',
           publishing_client: 'test',
           declared_size_bytes: 1,
+          declared_ciphertext_bytes: encryptedSize(1),
         }),
       })
     );
@@ -595,6 +682,7 @@ describe('the publish completion call', () => {
           renderer_class: 'markdown',
           publishing_client: 'test',
           declared_size_bytes: 1,
+          declared_ciphertext_bytes: encryptedSize(1),
         }),
       })
     );
@@ -895,6 +983,7 @@ describe('delete by id', () => {
           renderer_class: 'markdown',
           publishing_client: 'test',
           declared_size_bytes: 1,
+          declared_ciphertext_bytes: encryptedSize(1),
         }),
       })
     );

@@ -1,0 +1,130 @@
+import { describe, expect, test } from 'bun:test';
+import { createApp } from '../src/app.ts';
+import { contentTypeFor, diskAssets, memoryAssets } from '../src/assets.ts';
+
+const VIEWER_DIST = new URL('../../relic-viewer/dist/', import.meta.url)
+  .pathname;
+
+function app(assets = diskAssets(VIEWER_DIST)) {
+  return createApp({ assets });
+}
+
+function get(path: string): Request {
+  return new Request(`https://relic.example${path}`);
+}
+
+describe('asset serving', () => {
+  const cases = [
+    ['/assets/viewer.js', 'text/javascript'],
+    ['/assets/styles.css', 'text/css'],
+    ['/assets/icon.svg', 'image/svg+xml'],
+    ['/manifest.webmanifest', 'application/manifest+json'],
+    ['/sw.js', 'text/javascript'],
+  ] as const;
+
+  for (const [path, type] of cases) {
+    test(`serves ${path} as ${type}`, async () => {
+      const response = await app().fetch(get(path));
+      expect(response.status).toBe(200);
+      expect(response.headers.get('content-type')).toContain(type);
+    });
+  }
+
+  test('serves the service worker registration without inline script', async () => {
+    // The shell's CSP is script-src 'self'; adding 'unsafe-inline' for three
+    // lines of registration would weaken the directive that matters most on
+    // the origin holding the fragment.
+    const response = await app().fetch(get('/assets/register-sw.js'));
+    expect(response.status).toBe(200);
+    expect(await response.text()).toContain("register('/sw.js')");
+  });
+
+  test('sets nosniff and no-referrer', async () => {
+    const response = await app().fetch(get('/assets/viewer.js'));
+    expect(response.headers.get('x-content-type-options')).toBe('nosniff');
+    expect(response.headers.get('referrer-policy')).toBe('no-referrer');
+  });
+
+  test('404s an unknown asset', async () => {
+    expect((await app().fetch(get('/assets/nope.js'))).status).toBe(404);
+  });
+
+  const traversals = [
+    '/assets/../../../etc/passwd',
+    '/assets/..%2f..%2fetc%2fpasswd',
+    '/assets/....//etc/passwd',
+  ];
+
+  for (const path of traversals) {
+    test(`refuses traversal ${path}`, async () => {
+      const response = await app().fetch(get(path));
+      expect(response.status).toBe(404);
+    });
+  }
+
+  test('diskAssets refuses traversal at the source', async () => {
+    const source = diskAssets(VIEWER_DIST);
+    expect(await source.get('../../../etc/passwd')).toBeUndefined();
+    expect(await source.get('a\\b')).toBeUndefined();
+  });
+
+  test('contentTypeFor falls back rather than guessing', () => {
+    expect(contentTypeFor('x.js')).toContain('javascript');
+    expect(contentTypeFor('x.unknown')).toBe('application/octet-stream');
+    expect(contentTypeFor('noextension')).toBe('application/octet-stream');
+  });
+
+  test('memoryAssets serves what it was given', async () => {
+    const source = memoryAssets({ '/a.css': 'body{}' });
+    const asset = await source.get('a.css');
+    expect(new TextDecoder().decode(asset?.body)).toBe('body{}');
+  });
+});
+
+describe('the shell references what is actually served', () => {
+  test('every asset the shell names resolves', async () => {
+    const server = app();
+    const html = await server
+      .fetch(get('/aaaaaaaaaaaaaaaaaaaaaaaaaa'))
+      .then((r) => r.text());
+
+    const referenced = [...html.matchAll(/(?:href|src)="([^"]+)"/g)]
+      .map((match) => match[1] as string)
+      .filter((href) => href.startsWith('/'));
+
+    expect(referenced.length).toBeGreaterThan(0);
+    for (const href of referenced) {
+      const response = await server.fetch(get(href));
+      expect(`${href} -> ${response.status}`).toBe(`${href} -> 200`);
+    }
+  });
+
+  test('the shell tells the viewer which origin the sandbox is on', async () => {
+    const html = await app()
+      .fetch(get('/aaaaaaaaaaaaaaaaaaaaaaaaaa'))
+      .then((r) => r.text());
+    expect(html).toContain(
+      'data-sandbox-origin="https://relic-sandbox.example"'
+    );
+  });
+});
+
+describe('the sandbox page', () => {
+  test('is served and only the service origin may frame it', async () => {
+    const response = await app().fetch(get('/sandbox.html'));
+    expect(response.status).toBe(200);
+    expect(response.headers.get('content-security-policy')).toContain(
+      'frame-ancestors https://relic.example'
+    );
+  });
+
+  test('is not cached, so a stale renderer cannot outlive a deploy', async () => {
+    const response = await app().fetch(get('/sandbox.html'));
+    expect(response.headers.get('cache-control')).toBe('no-store');
+  });
+
+  test('is reserved, so it can never be shadowed by an issued id', async () => {
+    const { RESERVED_SEGMENTS } = await import('@relic/format');
+    expect(RESERVED_SEGMENTS).toContain('sandbox.html');
+  });
+});

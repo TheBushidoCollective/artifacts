@@ -1,0 +1,13 @@
+https://modelcontextprotocol.io/specification/versioning
+https://modelcontextprotocol.io/specification/2026-07-28/server/tools
+https://modelcontextprotocol.io/specification/2026-07-28/basic/utilities/progress
+https://code.claude.com/docs/en/mcp
+https://www.rfc-editor.org/rfc/rfc9457.html
+https://www.rfc-editor.org/rfc/rfc8188.html
+https://github.com/miscreant/meta/wiki/Nonce-Reuse-Misuse-Resistance
+https://docs.cloud.google.com/storage/docs/access-control/signed-urls
+https://docs.cloud.google.com/storage/docs/resumable-uploads
+https://docs.cloud.google.com/storage/docs/performing-resumable-uploads
+https://docs.cloud.google.com/storage/docs/authentication/signatures
+https://docs.cloud.google.com/storage/docs/request-preconditions
+https://docs.stripe.com/api/idempotent_requests

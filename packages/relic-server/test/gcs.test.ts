@@ -4,6 +4,7 @@ import {
   encodeObjectPath,
   gcsStorage,
   MAX_EXPIRES_SECONDS,
+  privateKeySigner,
   rfc3986,
   type SignRequestInput,
   signUrl,
@@ -135,7 +136,7 @@ describe('signing', () => {
   test('produces a signature that verifies against the public key', async () => {
     // The real assertion: the bytes we sign are the bytes stringToSignFor
     // produces, and the signature over them is valid RSASSA-PKCS1-v1_5.
-    const url = await signUrl(base, privateKey);
+    const url = await signUrl(base, privateKeySigner(EMAIL, privateKeyPem));
     const signature = new URL(url).searchParams.get('X-Goog-Signature');
     expect(signature).not.toBeNull();
 
@@ -152,7 +153,7 @@ describe('signing', () => {
   });
 
   test('a different request does not verify against the first signature', async () => {
-    const url = await signUrl(base, privateKey);
+    const url = await signUrl(base, privateKeySigner(EMAIL, privateKeyPem));
     const signature = new URL(url).searchParams.get(
       'X-Goog-Signature'
     ) as string;
@@ -186,8 +187,7 @@ describe('the storage adapter', () => {
     gcsStorage({
       bucket: 'relic-objects',
       prefix: 'r',
-      clientEmail: EMAIL,
-      privateKey: privateKeyPem,
+      signer: privateKeySigner(EMAIL, privateKeyPem),
     });
 
   test('signs an upload with content-length pinned', async () => {

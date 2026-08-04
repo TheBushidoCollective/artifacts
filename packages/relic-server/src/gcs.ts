@@ -21,15 +21,25 @@
 
 import type { ObjectStat, ObjectStorage, SignedUpload } from './storage.ts';
 
-export interface GcsCredentials {
-  /** Service account email, the `client_email` of the JSON key. */
+/**
+ * What V4 signing needs: an identity to name in the credential scope, and
+ * something that can produce an RSA signature for it.
+ *
+ * Split behind an interface so production never needs a downloaded key. On
+ * Cloud Run the signature is produced by the IAM Credentials API using the
+ * attached service account, so there is no private key anywhere: not on disk,
+ * not in an environment variable, and not in a secret to rotate. A downloaded
+ * key would be a static credential with no expiry, which is exactly what the
+ * house pattern exists to avoid.
+ */
+export interface Signer {
   readonly clientEmail: string;
-  /** PKCS#8 PEM, the `private_key` of the JSON key. */
-  readonly privateKey: string;
+  sign(bytes: Uint8Array): Promise<Uint8Array>;
 }
 
-export interface GcsOptions extends GcsCredentials {
+export interface GcsOptions {
   readonly bucket: string;
+  readonly signer: Signer;
   /** Prefix inside the bucket. Relic ids are appended to it. */
   readonly prefix?: string;
   readonly host?: string;
@@ -200,25 +210,121 @@ export async function stringToSignFor(
 /** Sign a request and return the full URL. */
 export async function signUrl(
   input: SignRequestInput,
-  key: CryptoKey
+  signer: Signer
 ): Promise<string> {
   const parts = buildSignedRequest(input);
-  const signature = await crypto.subtle.sign(
-    'RSASSA-PKCS1-v1_5',
-    key,
+  const signature = await signer.sign(
     new TextEncoder().encode(await stringToSignFor(input))
   );
 
   return (
     `https://${input.host}${input.path}?${parts.query}` +
-    `&X-Goog-Signature=${hex(new Uint8Array(signature))}`
+    `&X-Goog-Signature=${hex(signature)}`
   );
+}
+
+/**
+ * Signs with a downloaded PKCS#8 key.
+ *
+ * For local development and for the tests, which need a signature they can
+ * verify against a known public key. Production uses `iamSigner`.
+ */
+export function privateKeySigner(
+  clientEmail: string,
+  privateKeyPem: string
+): Signer {
+  const keyPromise = importPrivateKey(privateKeyPem);
+  return {
+    clientEmail,
+    async sign(bytes: Uint8Array): Promise<Uint8Array> {
+      const signature = await crypto.subtle.sign(
+        'RSASSA-PKCS1-v1_5',
+        await keyPromise,
+        bytes.buffer.slice(
+          bytes.byteOffset,
+          bytes.byteOffset + bytes.byteLength
+        ) as ArrayBuffer
+      );
+      return new Uint8Array(signature);
+    },
+  };
+}
+
+const METADATA_ROOT = 'http://metadata.google.internal/computeMetadata/v1';
+
+/** Read the attached service account's email and access token on Cloud Run. */
+async function metadata(path: string): Promise<string> {
+  const response = await fetch(`${METADATA_ROOT}/${path}`, {
+    headers: { 'Metadata-Flavor': 'Google' },
+  });
+  if (!response.ok) {
+    throw new Error(`metadata ${path} returned ${response.status}`);
+  }
+  return (await response.text()).trim();
+}
+
+/**
+ * Signs through the IAM Credentials API using the ambient identity.
+ *
+ * No key material exists anywhere in the deployment. The access token comes
+ * from the metadata server and is short-lived, and the signing capability is
+ * an IAM role on the service account rather than a file.
+ *
+ * The cost, stated because it is a real one: every signature is a network
+ * round trip to `iamcredentials.googleapis.com`, so a mint is slower than it
+ * would be with a local key and it fails when that API is unreachable. That
+ * is the correct trade against holding a credential that never expires.
+ */
+export function iamSigner(options: {
+  readonly clientEmail: string;
+  readonly getAccessToken: () => Promise<string>;
+}): Signer {
+  return {
+    clientEmail: options.clientEmail,
+    async sign(bytes: Uint8Array): Promise<Uint8Array> {
+      const token = await options.getAccessToken();
+      const response = await fetch(
+        'https://iamcredentials.googleapis.com/v1/projects/-/serviceAccounts/' +
+          `${encodeURIComponent(options.clientEmail)}:signBlob`,
+        {
+          method: 'POST',
+          headers: {
+            authorization: `Bearer ${token}`,
+            'content-type': 'application/json',
+          },
+          body: JSON.stringify({
+            payload: btoa(String.fromCharCode(...bytes)),
+          }),
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error(
+          `signBlob returned ${response.status}: ${await response.text()}`
+        );
+      }
+
+      const body = (await response.json()) as { signedBlob: string };
+      return Uint8Array.from(atob(body.signedBlob), (ch) => ch.charCodeAt(0));
+    },
+  };
+}
+
+/** The signer a Cloud Run deployment uses: ambient identity, no key. */
+export async function metadataSigner(): Promise<Signer> {
+  const clientEmail = await metadata('instance/service-accounts/default/email');
+  return iamSigner({
+    clientEmail,
+    getAccessToken: async () => {
+      const raw = await metadata('instance/service-accounts/default/token');
+      return (JSON.parse(raw) as { access_token: string }).access_token;
+    },
+  });
 }
 
 export function gcsStorage(options: GcsOptions): ObjectStorage {
   const host = options.host ?? DEFAULT_HOST;
   const prefix = (options.prefix ?? '').replace(/^\/+|\/+$/g, '');
-  const keyPromise = importPrivateKey(options.privateKey);
 
   const pathFor = (relicId: string): string => {
     const object = prefix.length > 0 ? `${prefix}/${relicId}` : relicId;
@@ -237,12 +343,12 @@ export function gcsStorage(options: GcsOptions): ObjectStorage {
         method,
         host,
         path: pathFor(relicId),
-        clientEmail: options.clientEmail,
+        clientEmail: options.signer.clientEmail,
         expiresSeconds,
         now,
         ...(headers === undefined ? {} : { headers }),
       },
-      await keyPromise
+      options.signer
     );
 
   return {

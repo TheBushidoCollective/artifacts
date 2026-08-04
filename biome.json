@@ -15,7 +15,9 @@
       "**/*.json",
       "!**/node_modules",
       "!**/dist",
-      "!**/.darkrun"
+      "!**/.darkrun",
+      "!**/.terraform",
+      "!**/.terraform.lock.hcl"
     ],
     "ignoreUnknown": true
   },

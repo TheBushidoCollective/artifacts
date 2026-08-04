@@ -53,6 +53,36 @@ else
   echo "already exists"
 fi
 
+# The registry has to exist before the pipeline's first image push, and that
+# push happens before Terraform runs. So it is bootstrap substrate, the same
+# category as the state bucket, rather than something Terraform manages.
+say "Artifact Registry: ${REGION}/relic"
+if ! g artifacts repositories describe relic --location="${REGION}" >/dev/null 2>&1; then
+  g artifacts repositories create relic \
+    --repository-format=docker \
+    --location="${REGION}" \
+    --description="Relic server images."
+else
+  echo "already exists"
+fi
+
+# Keep the last ten digests so a rollback has something to roll back to,
+# without paying to store every build ever made.
+POLICY="$(mktemp)"
+cat > "${POLICY}" <<'POLICY_JSON'
+[
+  {
+    "name": "keep-recent",
+    "action": {"type": "Keep"},
+    "mostRecentVersions": {"keepCount": 10}
+  }
+]
+POLICY_JSON
+g artifacts repositories set-cleanup-policies relic \
+  --location="${REGION}" --policy="${POLICY}" --no-dry-run >/dev/null 2>&1 \
+  && echo "  cleanup policy set" || echo "  cleanup policy skipped (older gcloud)"
+rm -f "${POLICY}"
+
 say "Deployer service account: ${DEPLOYER_EMAIL}"
 if ! g iam service-accounts describe "${DEPLOYER_EMAIL}" >/dev/null 2>&1; then
   g iam service-accounts create "${DEPLOYER}" \

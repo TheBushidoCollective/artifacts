@@ -6,10 +6,11 @@
     "packages/*"
   ],
   "scripts": {
+    "build": "bun run --filter '@relic/viewer' build",
     "lint": "biome check .",
     "format": "biome format --write .",
     "typecheck": "bun run --filter '*' typecheck",
-    "test": "bun test",
+    "test": "bun run build && bun test",
     "verify": "bun run lint && bun run typecheck && bun run test"
   },
   "devDependencies": {

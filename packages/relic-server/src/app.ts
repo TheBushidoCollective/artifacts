@@ -21,6 +21,7 @@ import {
   RESERVED_SEGMENTS,
   type RendererClass,
 } from '@relic/format';
+import { type AssetSource, memoryAssets, REGISTER_SW_JS } from './assets.ts';
 import { assertConfig, DEFAULT_CONFIG, type RelicConfig } from './config.ts';
 import { newOccurrenceId, ProblemError, problemResponse } from './problems.ts';
 import { RateLimiter } from './ratelimit.ts';
@@ -46,6 +47,8 @@ export interface AppOptions {
   readonly now?: () => number;
   /** Per-operator credentials for the authenticated surface under `/api`. */
   readonly operatorTokens?: ReadonlyMap<string, string>;
+  /** Where the viewer shell's static files come from. */
+  readonly assets?: AssetSource;
 }
 
 export interface RelicApp {
@@ -63,6 +66,7 @@ export function createApp(options: AppOptions = {}): RelicApp {
   const storage = options.storage ?? new MemoryStorage();
   const clock = options.now ?? (() => Date.now());
   const operators = options.operatorTokens ?? new Map<string, string>();
+  const assets = options.assets ?? memoryAssets({});
   const limiter = new RateLimiter();
 
   async function handle(request: Request): Promise<Response> {
@@ -123,7 +127,65 @@ export function createApp(options: AppOptions = {}): RelicApp {
     if (head === 'api')
       return apiRoute(segments.slice(1), request, url, ip, now);
 
+    if (head === 'assets') return serveAsset(segments.slice(1).join('/'));
+    if (head === 'manifest.webmanifest')
+      return serveAsset('manifest.webmanifest');
+    if (head === 'favicon.ico') return serveAsset('icon.svg');
+    if (head === 'sw.js') return serveAsset('sw.js');
+    // Served on the sandbox origin in production. One binary serves both here,
+    // and the deployment routes by Host.
+    if (head === 'sandbox.html') return serveSandbox();
+
     return new Response('Not found', { status: 404 });
+  }
+
+  async function serveAsset(name: string): Promise<Response> {
+    if (name === 'register-sw.js') {
+      return new Response(REGISTER_SW_JS, {
+        headers: {
+          'content-type': 'text/javascript; charset=utf-8',
+          'cache-control': 'public, max-age=3600',
+        },
+      });
+    }
+
+    const asset = await assets.get(name);
+    if (asset === undefined) return new Response('Not found', { status: 404 });
+
+    return new Response(asset.body as unknown as BodyInit, {
+      headers: {
+        'content-type': asset.contentType,
+        // The shell itself is no-store; its assets are immutable per deploy.
+        'cache-control': 'public, max-age=3600',
+        'referrer-policy': 'no-referrer',
+        'x-content-type-options': 'nosniff',
+      },
+    });
+  }
+
+  /**
+   * The sandbox origin's page.
+   *
+   * `frame-ancestors` is the half of the boundary this response owns: only the
+   * service origin may frame it, so the page cannot be embedded by a third
+   * party to borrow the rendering path.
+   */
+  async function serveSandbox(): Promise<Response> {
+    const asset = await assets.get('sandbox.html');
+    if (asset === undefined) return new Response('Not found', { status: 404 });
+
+    return new Response(asset.body as unknown as BodyInit, {
+      headers: {
+        'content-type': 'text/html; charset=utf-8',
+        'referrer-policy': 'no-referrer',
+        'x-robots-tag': 'noindex',
+        'cache-control': 'no-store',
+        'content-security-policy': [
+          `frame-ancestors ${new URL(config.serviceOrigin).origin}`,
+          "base-uri 'none'",
+        ].join('; '),
+      },
+    });
   }
 
   async function apiRoute(
@@ -784,10 +846,16 @@ function shell(config: RelicConfig, title: string): Response {
   const body = `<!doctype html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#1f6b64">
 <title>Relic</title>
 <link rel="manifest" href="/manifest.webmanifest">
-<div id="relic-root" data-relic-id="${escapeHtml(title)}"></div>
+<link rel="icon" href="/assets/icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/assets/styles.css">
+<div id="relic-root" data-relic-id="${escapeHtml(title)}" data-sandbox-origin="${escapeHtml(
+    new URL(config.sandboxOrigin).origin
+  )}"></div>
 <script type="module" src="/assets/viewer.js"></script>
+<script type="module" src="/assets/register-sw.js"></script>
 `;
   return new Response(body, {
     headers: {

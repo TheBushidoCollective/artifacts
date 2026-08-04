@@ -40,6 +40,7 @@ export const RESERVED_SEGMENTS: readonly string[] = [
   'api',
   'health',
   '.well-known',
+  'sandbox.html',
 ];
 
 const RESERVED_NORMALIZED = new Set(

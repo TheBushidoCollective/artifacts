@@ -354,17 +354,18 @@ export function gcsStorage(options: GcsOptions): ObjectStorage {
   return {
     async signUpload(
       relicId: string,
-      maxBytes: number,
+      contentLength: number,
       validitySeconds: number,
       now: number
     ): Promise<SignedUpload> {
-      // `Content-Length` is signed, so a client cannot alter it without
-      // invalidating the signature. That is the enforcement point: a signed
-      // PUT otherwise ignores the declared length entirely.
+      // `Content-Length` is signed, so the upload must be exactly this many
+      // bytes or the signature fails. That is stronger than a cap: it pins
+      // the object's size rather than bounding it, and a signed PUT would
+      // otherwise ignore the declared length entirely.
       //
       // No `x-goog-meta-*` is signed, because nothing needs custom object
       // metadata and anything content-descriptive is barred from living there.
-      const headers = { 'content-length': String(maxBytes) };
+      const headers = { 'content-length': String(contentLength) };
       const url = await sign('PUT', relicId, validitySeconds, now, headers);
 
       return {
@@ -372,7 +373,7 @@ export function gcsStorage(options: GcsOptions): ObjectStorage {
         method: 'PUT',
         headers,
         expiresAt: now + validitySeconds * 1000,
-        maxBytes,
+        contentLength,
       };
     },
 

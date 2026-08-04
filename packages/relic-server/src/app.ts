@@ -15,8 +15,10 @@
  */
 
 import {
+  encryptedSize,
   InvalidRelicIdError,
   isRendererClass,
+  MAX_HEADER_BYTES,
   parseRelicId,
   RESERVED_SEGMENTS,
   type RendererClass,
@@ -354,9 +356,44 @@ export function createApp(options: AppOptions = {}): RelicApp {
       mintsUsed: 0,
     });
 
+    // The grant signs the object's exact byte length, so the upload has to be
+    // precisely that size or the signature fails. That is stronger than a cap
+    // and it costs nothing extra, because for non-empty content the ciphertext
+    // length is a pure function of the plaintext length: record 0 is always
+    // padded to a full record, so the envelope header's size drops out.
+    //
+    // The client sends what it computed and the server checks it against its
+    // own arithmetic rather than trusting it. A disagreement means the two
+    // ends have drifted on the format, which is caught here loudly instead of
+    // producing an object nobody can open.
+    const declaredCiphertext = Number(body['declared_ciphertext_bytes']);
+    if (!Number.isSafeInteger(declaredCiphertext) || declaredCiphertext <= 0) {
+      return refuse('invalid_publish_metadata', { relic_id: relicId });
+    }
+    if (declaredCiphertext > config.ciphertextCapBytes) {
+      return refuse('size_over_cap', {
+        relic_id: relicId,
+        size_limit_bytes: config.plaintextCapBytes,
+        declared_size_bytes: declared,
+        size_basis: 'plaintext',
+      });
+    }
+    if (declared > 0) {
+      // Exact for non-empty content.
+      if (declaredCiphertext !== encryptedSize(declared)) {
+        return refuse('invalid_publish_metadata', { relic_id: relicId });
+      }
+    } else if (
+      declaredCiphertext > encryptedSize(0, undefined, MAX_HEADER_BYTES)
+    ) {
+      // Zero-byte content is the one case where the envelope header's size is
+      // visible in the object length, so it is bounded rather than pinned.
+      return refuse('invalid_publish_metadata', { relic_id: relicId });
+    }
+
     const upload = await storage.signUpload(
       relicId,
-      config.ciphertextCapBytes,
+      declaredCiphertext,
       config.urlValiditySeconds,
       now
     );

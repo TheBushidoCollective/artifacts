@@ -1,15 +1,18 @@
 name: verify
 
 on:
-  push:
-    branches: [main]
   pull_request:
   workflow_call:
 
-# A second push supersedes the first; there is no value in verifying a commit
-# nobody will merge.
+# Deliberately not `push: branches: [main]`.
+#
+# The deploy workflow calls this one as its gate, so a push to main used to
+# start two runs on the same ref. They shared the concurrency group below and
+# cancelled each other: every merge left a `verify` run marked cancelled, and
+# the race could just as easily have killed the run that gates the deploy
+# rather than the redundant standalone one. On main, deploy owns verification.
 concurrency:
-  group: verify-${{ github.ref }}
+  group: verify-${{ github.ref }}-${{ github.event_name }}
   cancel-in-progress: true
 
 jobs:

@@ -1,16 +1,37 @@
 /**
- * The MCP server: a local stdio binary, never a remote surface.
+ * The MCP server: a local binary, never a remote surface.
  *
  * It holds the key and encrypts in process. It returns no script. That is
  * locked in `docs/frame.md` and it is the single most load-bearing structural
  * decision in the publish path.
  *
- * Protocol revision `2026-07-28` is the pin. The handshake-based revisions
- * (2025-11-25 and earlier) are also answered, because a publishing client that
- * only speaks the newest revision is unusable in the agents this product
- * exists to serve.
+ * **Why this cannot be a hosted MCP server**, stated once because it is the
+ * question everybody asks: a remote server would have to receive the file to
+ * encrypt it, which destroys the product. Zero-knowledge is not a feature
+ * layered on top; it is a consequence of the encryption happening on the
+ * machine that already has the plaintext. The transport can be stdio or HTTP,
+ * but the process runs next to the file either way.
+ *
+ * Protocol revision `2026-07-28`, which is stateless: no handshake, no
+ * session, no `Mcp-Session-Id`. Nothing is retained between calls, so the
+ * server can be restarted or run one-shot without a client noticing. The
+ * legacy `initialize` handshake is answered too, which the spec calls a
+ * dual-era server, because a client that only speaks the newest revision is
+ * unusable in most of the agents this product exists to serve.
  */
 
+import {
+  ERROR_CODES,
+  errorResponse,
+  isSupportedVersion,
+  type JsonRpcRequest,
+  type JsonRpcResponse,
+  LEGACY_PROTOCOL_VERSIONS,
+  PROTOCOL_VERSION,
+  requestedProtocolVersion,
+  SUPPORTED_PROTOCOL_VERSIONS,
+  unsupportedVersionError,
+} from './protocol.ts';
 import {
   type PublishDeps,
   PublishError,
@@ -18,8 +39,12 @@ import {
   ServerRefusal,
 } from './publish.ts';
 
-export const PROTOCOL_VERSION = '2026-07-28';
-export const LEGACY_PROTOCOL_VERSION = '2025-06-18';
+export {
+  LEGACY_PROTOCOL_VERSIONS,
+  PROTOCOL_VERSION,
+  SUPPORTED_PROTOCOL_VERSIONS,
+};
+export type { JsonRpcRequest, JsonRpcResponse };
 
 /**
  * `relic_publish`, prefixed with the product name.
@@ -90,58 +115,61 @@ export const SERVER_INFO = {
   version: '0.1.0',
 } as const;
 
-interface JsonRpcRequest {
-  jsonrpc: '2.0';
-  id?: string | number | null;
-  method: string;
-  params?: Record<string, unknown>;
-}
-
-export interface JsonRpcResponse {
-  jsonrpc: '2.0';
-  id: string | number | null;
-  result?: unknown;
-  error?: { code: number; message: string; data?: unknown };
-}
+export const CAPABILITIES = { tools: {} } as const;
 
 /**
- * Handle one JSON-RPC message. Returns undefined for notifications, which
- * carry no id and take no response.
+ * Handle one JSON-RPC message.
+ *
+ * Returns undefined for notifications, which carry no id and take no
+ * response. Nothing here reads or writes state that outlives the call.
  */
 export async function handleMessage(
   message: JsonRpcRequest,
   deps: PublishDeps
 ): Promise<JsonRpcResponse | undefined> {
+  if (message.id === undefined) return undefined; // notification
   const id = message.id ?? null;
 
-  if (message.id === undefined) return undefined; // notification
+  // `server/discover` and `initialize` are the two probes a client uses to
+  // find out what this server speaks, so neither may be refused for declaring
+  // a version the server does not have.
+  const isProbe =
+    message.method === 'server/discover' || message.method === 'initialize';
+
+  const requested = requestedProtocolVersion(message);
+  if (!isProbe && requested !== undefined && !isSupportedVersion(requested)) {
+    return unsupportedVersionError(id, requested);
+  }
 
   switch (message.method) {
-    case 'initialize':
+    case 'server/discover':
+      // Mandatory in this revision: supported versions, capabilities, and
+      // identity in a single request, with no handshake to precede it.
       return {
         jsonrpc: '2.0',
         id,
         result: {
-          protocolVersion:
-            (message.params?.['protocolVersion'] as string | undefined) ??
-            PROTOCOL_VERSION,
-          capabilities: { tools: {} },
+          protocolVersions: [...SUPPORTED_PROTOCOL_VERSIONS],
+          capabilities: CAPABILITIES,
           serverInfo: SERVER_INFO,
         },
       };
 
-    case 'server/discover':
-      // The pinned revision's single up-front RPC: supported versions,
-      // capabilities, and identity in one request.
+    case 'initialize': {
+      // The legacy era. A modern client never sends this.
+      const asked =
+        (message.params?.['protocolVersion'] as string | undefined) ??
+        PROTOCOL_VERSION;
       return {
         jsonrpc: '2.0',
         id,
         result: {
-          protocolVersions: [PROTOCOL_VERSION, LEGACY_PROTOCOL_VERSION],
-          capabilities: { tools: {} },
+          protocolVersion: isSupportedVersion(asked) ? asked : PROTOCOL_VERSION,
+          capabilities: CAPABILITIES,
           serverInfo: SERVER_INFO,
         },
       };
+    }
 
     case 'ping':
       return { jsonrpc: '2.0', id, result: {} };
@@ -153,11 +181,11 @@ export async function handleMessage(
       return callTool(id, message.params ?? {}, deps);
 
     default:
-      return {
-        jsonrpc: '2.0',
+      return errorResponse(
         id,
-        error: { code: -32601, message: `unknown method: ${message.method}` },
-      };
+        ERROR_CODES.methodNotFound,
+        `unknown method: ${message.method}`
+      );
   }
 }
 
@@ -167,24 +195,21 @@ async function callTool(
   deps: PublishDeps
 ): Promise<JsonRpcResponse> {
   if (params['name'] !== TOOL_NAME) {
-    return {
-      jsonrpc: '2.0',
+    return errorResponse(
       id,
-      error: { code: -32602, message: `unknown tool: ${params['name']}` },
-    };
+      ERROR_CODES.invalidParams,
+      `unknown tool: ${String(params['name'])}`
+    );
   }
 
   const args = (params['arguments'] ?? {}) as Record<string, unknown>;
   const path = args['path'];
   if (typeof path !== 'string' || path.length === 0) {
-    return {
-      jsonrpc: '2.0',
+    return errorResponse(
       id,
-      error: {
-        code: -32602,
-        message: '`path` is required and must be a string',
-      },
-    };
+      ERROR_CODES.invalidParams,
+      '`path` is required and must be a string'
+    );
   }
 
   const filename =
@@ -277,11 +302,9 @@ export async function serveStdio(
         message = JSON.parse(line) as JsonRpcRequest;
       } catch {
         write(
-          JSON.stringify({
-            jsonrpc: '2.0',
-            id: null,
-            error: { code: -32700, message: 'parse error' },
-          })
+          JSON.stringify(
+            errorResponse(null, ERROR_CODES.parseError, 'parse error')
+          )
         );
         continue;
       }

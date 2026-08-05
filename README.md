@@ -63,14 +63,97 @@ restart.
 | `RELIC_OPERATOR_TOKENS` | `name:secret` pairs. Per-operator, because every delete writes an audit record naming one. |
 | `RELIC_KILL_SWITCH` | Refuses every mint and every publish. |
 
-### The publishing client
+## Connecting the MCP server
+
+Relic exposes one tool, `relic_publish`, which takes a filesystem path and
+never inline content.
+
+Build the binary once:
 
 ```bash
-bun run --filter '@relic/mcp' build   # a single binary
+bun run --filter '@relic/mcp' build   # -> packages/relic-mcp/dist/relic-mcp
 ```
 
-Point an MCP client at it with `RELIC_SERVICE_ORIGIN` set. It exposes one
-tool, `relic_publish`, which takes a filesystem path and never inline content.
+### Claude Code
+
+```bash
+claude mcp add relic \
+  --env RELIC_SERVICE_ORIGIN=https://relic-wh2jw5fg2q-uc.a.run.app \
+  -- /absolute/path/to/packages/relic-mcp/dist/relic-mcp
+```
+
+Then ask your agent to publish something: *"publish ./report.md as a relic."*
+
+### Any client that takes a JSON config
+
+Claude Desktop, Cursor, Windsurf, Cline, and most others read a variant of
+this. The key names differ; the shape does not.
+
+```json
+{
+  "mcpServers": {
+    "relic": {
+      "command": "/absolute/path/to/packages/relic-mcp/dist/relic-mcp",
+      "env": {
+        "RELIC_SERVICE_ORIGIN": "https://relic-wh2jw5fg2q-uc.a.run.app"
+      }
+    }
+  }
+}
+```
+
+### Over HTTP instead of stdio
+
+```bash
+RELIC_MCP_HTTP=1 RELIC_SERVICE_ORIGIN=https://... relic-mcp
+# -> http://127.0.0.1:7333/mcp
+```
+
+Useful when several agents on one machine should share a single process, or
+when it runs under a supervisor. Loopback by default: this process can read
+any file its user can, so binding it to a network interface hands that reach
+to the network. `RELIC_MCP_ALLOWED_ORIGINS` is a comma-separated allowlist for
+browser callers, and an origin outside it is refused to defeat DNS rebinding.
+
+### Environment
+
+| Variable | Meaning |
+|---|---|
+| `RELIC_SERVICE_ORIGIN` | The Relic service to publish to. Required in practice. |
+| `RELIC_ORIGIN` | Origin used to build the shareable URL. Defaults to the service origin. |
+| `RELIC_CLIENT_NAME` | Reported to the service as the publishing client. |
+| `RELIC_MCP_HTTP` | `1` to serve Streamable HTTP instead of stdio. |
+| `RELIC_MCP_PORT`, `RELIC_MCP_HOST` | HTTP bind. Defaults to `127.0.0.1:7333`. |
+| `RELIC_MCP_ALLOWED_ORIGINS` | Comma-separated `Origin` allowlist for HTTP. |
+
+## Protocol
+
+Pinned to revision **`2026-07-28`**, the revision that made the MCP core
+stateless. There is no `initialize` handshake, no session, and no
+`Mcp-Session-Id`: every request declares its own version in `_meta`, and the
+server accepts or rejects each one independently.
+
+Relic holds nothing between calls, so the server can be restarted,
+round-robined behind a load balancer, or run one-shot without a client
+noticing. `server/discover` is implemented, as the revision requires.
+
+The handshake-based revisions (`2025-11-25` and earlier) are still answered,
+which the spec calls a dual-era server. A client that only speaks the newest
+revision is unusable in most of the agents this product exists to serve.
+
+On HTTP the mirrored routing headers are enforced rather than merely accepted:
+`MCP-Protocol-Version`, `Mcp-Method`, and `Mcp-Name` must agree with the body,
+and a mismatch is refused with `-32020`. That check exists because a gateway
+routing on the header while the server executes on the body is a split-brain
+with security consequences, not a cosmetic inconsistency.
+
+### Why this is not a hosted MCP server
+
+It is the question everybody asks, so: a remote server would have to receive
+your file in order to encrypt it, which destroys the product. Zero-knowledge
+is not a feature layered on top, it is a consequence of the encryption
+happening on the machine that already holds the plaintext. The transport can
+be stdio or HTTP; the process runs next to the file either way.
 
 ## Where the decisions live
 

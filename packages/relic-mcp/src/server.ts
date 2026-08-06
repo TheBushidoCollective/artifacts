@@ -59,6 +59,20 @@ export type { JsonRpcRequest, JsonRpcResponse };
  */
 export const TOOL_NAME = 'relic_publish';
 
+/**
+ * The inspection tool.
+ *
+ * A local client is opaque to the agent driving it, and "trust the binary" is
+ * a real hand-wave. This closes that gap without reopening the one the frame
+ * locked: the agent can read exactly what the encryption path does, on
+ * demand, without any of it being code that arrives ready to execute.
+ *
+ * Inspection decoupled from execution beats inspect-then-run, because the
+ * reviewer is not under time pressure and the reviewed text cannot also be
+ * the attack.
+ */
+export const DESCRIBE_TOOL_NAME = 'relic_describe_client';
+
 export const TOOL_DEFINITION = {
   name: TOOL_NAME,
   title: 'Publish a relic',
@@ -105,6 +119,20 @@ export const TOOL_DEFINITION = {
       'report_url',
       'disclosure_url',
     ],
+    additionalProperties: false,
+  },
+} as const;
+
+export const DESCRIBE_TOOL_DEFINITION = {
+  name: DESCRIBE_TOOL_NAME,
+  title: 'Describe the Relic client',
+  description:
+    'Return exactly what this client does with your file: the encryption ' +
+    'path, what leaves the machine, and what the service can see. Reads ' +
+    'nothing and sends nothing.',
+  inputSchema: {
+    type: 'object',
+    properties: {},
     additionalProperties: false,
   },
 } as const;
@@ -175,7 +203,11 @@ export async function handleMessage(
       return { jsonrpc: '2.0', id, result: {} };
 
     case 'tools/list':
-      return { jsonrpc: '2.0', id, result: { tools: [TOOL_DEFINITION] } };
+      return {
+        jsonrpc: '2.0',
+        id,
+        result: { tools: [TOOL_DEFINITION, DESCRIBE_TOOL_DEFINITION] },
+      };
 
     case 'tools/call':
       return callTool(id, message.params ?? {}, deps);
@@ -194,6 +226,25 @@ async function callTool(
   params: Record<string, unknown>,
   deps: PublishDeps
 ): Promise<JsonRpcResponse> {
+  if (params['name'] === DESCRIBE_TOOL_NAME) {
+    return {
+      jsonrpc: '2.0',
+      id,
+      result: {
+        content: [{ type: 'text', text: describeClient(deps) }],
+        structuredContent: {
+          encryption: 'AES-128-GCM, RFC 8188 aes128gcm framing',
+          key_origin: 'crypto.getRandomValues on this machine',
+          key_transmitted_to_service: false,
+          plaintext_transmitted_to_service: false,
+          ciphertext_destination: 'object storage, via a signed URL',
+          service_origin: deps.serviceOrigin,
+        },
+        isError: false,
+      },
+    };
+  }
+
   if (params['name'] !== TOOL_NAME) {
     return errorResponse(
       id,
@@ -273,6 +324,45 @@ function toolError(error: unknown): Record<string, unknown> {
     structuredContent: { code: 'unknown' },
     isError: true,
   };
+}
+
+/**
+ * What this client does with a file, in the order it does it.
+ *
+ * Written out rather than pointing at a URL, because a description the agent
+ * has to go fetch is a description nobody reads.
+ */
+export function describeClient(deps: PublishDeps): string {
+  return `Relic publishing client, running locally on this machine.
+
+What happens when you publish a file:
+
+1. The file is read from disk by this process. It is never sent anywhere in
+   plaintext.
+2. A 128-bit key and a 26-character relic id are drawn independently from this
+   machine's CSPRNG (crypto.getRandomValues). Neither derives from the other.
+3. The file is encrypted here, in this process, with AES-128-GCM under RFC 8188
+   aes128gcm framing: an HKDF-derived content key, counter-derived per-record
+   nonces, and a per-record authentication tag.
+4. Only ciphertext is uploaded, straight to object storage under a signed URL.
+   It does not pass through ${deps.serviceOrigin}.
+5. The service is told three things and nothing more: a coarse renderer class
+   from a seven-value list, the name of this client, and the exact byte length
+   of the ciphertext. Not your filename, not the mimetype, not the contents.
+6. You get back a URL whose fragment carries the key. Fragments are never sent
+   to a server by a browser.
+
+What the service operator can see: that a relic exists, roughly how big it is,
+what coarse class it was declared as, the publishing IP, and when it was
+fetched. Never the contents, and never the key.
+
+What this does NOT protect against: the key is returned to your agent in the
+URL, so it enters the model's context and your session transcript. That is
+structural, not a defect. Anyone who can read this conversation can open the
+relic.
+
+The code doing all of this is on disk in this package and can be read. Nothing
+is fetched from the network and executed.`;
 }
 
 /** Read newline-delimited JSON-RPC from a stream and write responses back. */

@@ -36,7 +36,7 @@ that statement being readable before anybody publishes.
 |---|---|
 | `@relic/format` | The wire format. RFC 8188 `aes128gcm` framing around an envelope that lives inside the encrypted stream. Imported by both ends so the encryptor and the decryptor cannot drift apart. |
 | `@relic/server` | The app server. Grants, mints, the abuse surface, delete-by-id, and the published disclosure. Never handles relic bytes on either leg. |
-| `@relic/mcp` | The local stdio MCP server. Holds the key, encrypts in process, returns no script. |
+| `relic-mcp` | The local MCP server, published to npm. Holds the key, encrypts in process, returns no script. |
 | `@relic/viewer` | The PWA. Decrypts in the browser and renders by type under a taskbar. |
 
 ## Running it
@@ -65,13 +65,12 @@ restart.
 
 ## Connecting the MCP server
 
-Relic exposes one tool, `relic_publish`, which takes a filesystem path and
-never inline content.
-
-Build the binary once:
+Relic exposes `relic_publish`, which takes a filesystem path and never inline
+content, and `relic_describe_client`, which explains what the client does with
+your file without reading it or contacting anything.
 
 ```bash
-bun run --filter '@relic/mcp' build   # -> packages/relic-mcp/dist/relic-mcp
+npx -y relic-mcp   # nothing to clone, nothing to build
 ```
 
 ### Claude Code
@@ -79,8 +78,10 @@ bun run --filter '@relic/mcp' build   # -> packages/relic-mcp/dist/relic-mcp
 ```bash
 claude mcp add relic \
   --env RELIC_SERVICE_ORIGIN=https://relic-wh2jw5fg2q-uc.a.run.app \
-  -- /absolute/path/to/packages/relic-mcp/dist/relic-mcp
+  -- npx -y relic-mcp
 ```
+
+No clone and no build step. `npx` fetches on first use and caches.
 
 Then ask your agent to publish something: *"publish ./report.md as a relic."*
 
@@ -93,7 +94,8 @@ this. The key names differ; the shape does not.
 {
   "mcpServers": {
     "relic": {
-      "command": "/absolute/path/to/packages/relic-mcp/dist/relic-mcp",
+      "command": "npx",
+      "args": ["-y", "relic-mcp"],
       "env": {
         "RELIC_SERVICE_ORIGIN": "https://relic-wh2jw5fg2q-uc.a.run.app"
       }
@@ -105,7 +107,7 @@ this. The key names differ; the shape does not.
 ### Over HTTP instead of stdio
 
 ```bash
-RELIC_MCP_HTTP=1 RELIC_SERVICE_ORIGIN=https://... relic-mcp
+RELIC_MCP_HTTP=1 RELIC_SERVICE_ORIGIN=https://... npx -y relic-mcp
 # -> http://127.0.0.1:7333/mcp
 ```
 
@@ -147,6 +149,25 @@ and a mismatch is refused with `-32020`. That check exists because a gateway
 routing on the header while the server executes on the body is a split-brain
 with security consequences, not a cosmetic inconsistency.
 
+### It runs locally, and you can read it
+
+Something has to run on your machine, because encryption has to happen where
+the plaintext is. That is forced by the product, not chosen.
+
+What is chosen is that it arrives as **readable source rather than a compiled
+binary**. `dist/relic-mcp.js` is a single unminified file of about 1,100
+lines, and it is exactly what executes. The TypeScript it was built from ships
+in the same package. Releases carry [npm provenance][provenance], which is a
+cryptographic attestation binding the published tarball to a specific commit
+and workflow in this repository.
+
+There is also a `relic_describe_client` tool. Call it and the client tells you
+what it does with your file, what leaves the machine, and what the service can
+see, without reading a byte or sending a request. Inspection decoupled from
+execution, which is strictly better than inspecting code that is about to run.
+
+[provenance]: https://docs.npmjs.com/generating-provenance-statements
+
 ### Why this is not a hosted MCP server
 
 It is the question everybody asks, so: a remote server would have to receive
@@ -154,6 +175,14 @@ your file in order to encrypt it, which destroys the product. Zero-knowledge
 is not a feature layered on top, it is a consequence of the encryption
 happening on the machine that already holds the plaintext. The transport can
 be stdio or HTTP; the process runs next to the file either way.
+
+The tempting variant is a remote server that returns a script for the agent to
+run, so the plaintext still never leaves. That trades a confidentiality
+property for remote code execution: whoever controls the server, or one
+response, runs arbitrary code on every user's machine on every publish.
+CVE-2025-6514 scored 9.6 for the accidental version of that shape. The claim
+would also degrade from "we never receive your bytes" to "trust the script we
+sent this time", re-decided per call and unauditable in practice.
 
 ## Where the decisions live
 

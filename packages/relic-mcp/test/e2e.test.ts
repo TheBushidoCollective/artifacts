@@ -341,15 +341,68 @@ describe('the recipient experience on a dead relic', () => {
 });
 
 describe('the MCP surface', () => {
-  test('advertises exactly one tool, prefixed with the product name', async () => {
+  test('advertises publish and describe, both prefixed with the product name', async () => {
     const response = await handleMessage(
       { jsonrpc: '2.0', id: 1, method: 'tools/list' },
       deps
     );
     const tools = (response?.result as { tools: { name: string }[] }).tools;
-    expect(tools).toHaveLength(1);
-    expect(tools[0]?.name).toBe('relic_publish');
+    expect(tools.map((t) => t.name)).toEqual([
+      'relic_publish',
+      'relic_describe_client',
+    ]);
+    // The spec's own remedy for cross-server collisions is a name prefix.
+    for (const tool of tools) {
+      expect(tool.name.startsWith('relic')).toBe(true);
+    }
     expect(TOOL_NAME.startsWith('relic')).toBe(true);
+  });
+
+  test('describe_client reads nothing and sends nothing', async () => {
+    // The inspection tool exists so a local client is not opaque to the agent
+    // driving it. It must not be a second way to touch the disk or network.
+    const before = disk.size;
+    const response = await handleMessage(
+      {
+        jsonrpc: '2.0',
+        id: 9,
+        method: 'tools/call',
+        params: { name: 'relic_describe_client', arguments: {} },
+      },
+      deps
+    );
+
+    const result = response?.result as {
+      isError: boolean;
+      content: { text: string }[];
+      structuredContent: Record<string, unknown>;
+    };
+
+    expect(result.isError).toBe(false);
+    expect(disk.size).toBe(before);
+    expect(result.structuredContent['key_transmitted_to_service']).toBe(false);
+    expect(result.structuredContent['plaintext_transmitted_to_service']).toBe(
+      false
+    );
+  });
+
+  test('describe_client states the transcript leak, not just the good news', async () => {
+    const response = await handleMessage(
+      {
+        jsonrpc: '2.0',
+        id: 10,
+        method: 'tools/call',
+        params: { name: 'relic_describe_client', arguments: {} },
+      },
+      deps
+    );
+    const text = (response?.result as { content: { text: string }[] })
+      .content[0]?.text as string;
+
+    expect(text).toContain('AES-128-GCM');
+    expect(text).toContain('RFC 8188');
+    expect(text).toContain('transcript');
+    expect(text).toContain('never sent anywhere in');
   });
 
   test('accepts a path and refuses inline content by schema', () => {

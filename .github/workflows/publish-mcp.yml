@@ -1,0 +1,116 @@
+name: publish-mcp
+
+# Publishing is manual and versioned, never on every merge. The package is
+# code that runs on other people's machines with access to their files, so a
+# release is a decision somebody makes, not a side effect of a commit.
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to publish, e.g. 0.1.0'
+        required: true
+        type: string
+      dry_run:
+        description: 'Pack and inspect without publishing'
+        type: boolean
+        default: true
+
+concurrency:
+  group: publish-mcp
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  # Required for npm provenance: npm exchanges this OIDC token for an
+  # attestation binding the published tarball to this workflow and commit.
+  id-token: write
+
+jobs:
+  verify:
+    uses: ./.github/workflows/verify.yml
+
+  publish:
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: jdx/mise-action@v2
+        with:
+          install: true
+          cache: true
+
+      # npm, not bun, does the publishing: provenance attestation is an npm
+      # CLI feature and this is the path that produces a verifiable link
+      # between the tarball and this commit.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Build the readable bundle
+        run: bun run --filter 'relic-mcp' build
+
+      - name: Set the version
+        working-directory: packages/relic-mcp
+        run: npm version "${{ inputs.version }}" --no-git-tag-version --allow-same-version
+
+      # The workspace protocol is meaningless outside this repo. Consumers
+      # never install devDependencies, but leaving `workspace:*` in a
+      # published manifest is a trap for anyone reading it.
+      - name: Strip workspace-only dependencies from the manifest
+        working-directory: packages/relic-mcp
+        run: |
+          node -e '
+            const fs = require("node:fs");
+            const pkg = JSON.parse(fs.readFileSync("package.json", "utf8"));
+            delete pkg.devDependencies;
+            fs.writeFileSync("package.json", JSON.stringify(pkg, null, 2) + "\n");
+          '
+
+      # The bundle is what runs on a user machine. Assert the properties that
+      # make it inspectable and runnable before it goes anywhere.
+      - name: Check the artifact
+        working-directory: packages/relic-mcp
+        run: |
+          set -euo pipefail
+          BUNDLE=dist/relic-mcp.js
+
+          head -1 "$BUNDLE" | grep -q '^#!/usr/bin/env node'
+          test -x "$BUNDLE"
+
+          # Not minified: the whole reason this ships as source rather than a
+          # compiled binary is that somebody can read it.
+          LINES=$(wc -l < "$BUNDLE")
+          echo "bundle is $LINES lines"
+          test "$LINES" -gt 200
+
+          # It has to run under plain Node, which is what npx will have.
+          echo '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28"}}}' \
+            | node "$BUNDLE" | grep -q relic_publish
+
+      - name: Pack and list contents
+        working-directory: packages/relic-mcp
+        run: |
+          npm pack --dry-run
+          echo "### relic-mcp ${{ inputs.version }}" >> "$GITHUB_STEP_SUMMARY"
+          npm pack --dry-run --json | node -e '
+            let raw = "";
+            process.stdin.on("data", (d) => (raw += d));
+            process.stdin.on("end", () => {
+              const [meta] = JSON.parse(raw);
+              console.log(`files: ${meta.entryCount}, unpacked: ${meta.unpackedSize} bytes`);
+            });
+          ' >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Publish
+        if: ${{ !inputs.dry_run }}
+        working-directory: packages/relic-mcp
+        run: npm publish --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

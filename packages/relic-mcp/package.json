@@ -1,17 +1,46 @@
 {
-  "name": "@relic/mcp",
+  "name": "relic-mcp",
   "version": "0.1.0",
-  "private": true,
+  "description": "Publish a file as an encrypted relic. The key is generated on your machine and never sent to the service.",
+  "license": "MIT",
   "type": "module",
-  "main": "./src/index.ts",
+  "main": "./dist/relic-mcp.js",
   "bin": {
-    "relic-mcp": "./src/index.ts"
+    "relic-mcp": "./dist/relic-mcp.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "encryption",
+    "zero-knowledge",
+    "file-sharing"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/TheBushidoCollective/artifacts.git",
+    "directory": "packages/relic-mcp"
+  },
+  "homepage": "https://github.com/TheBushidoCollective/artifacts#readme",
+  "bugs": {
+    "url": "https://github.com/TheBushidoCollective/artifacts/issues"
+  },
+  "files": [
+    "dist",
+    "src",
+    "README.md"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "build": "bun build --compile --outfile dist/relic-mcp src/index.ts"
+    "build": "bun run build.ts"
   },
-  "dependencies": {
+  "devDependencies": {
     "@relic/format": "workspace:*",
     "@relic/server": "workspace:*"
   }

@@ -1,10 +1,10 @@
-/** Filesystem access through Bun, kept behind the FileReader interface. */
+/** Filesystem access through Node, kept behind the FileReader interface. */
 
 import { lstat, readFile } from 'node:fs/promises';
 import { basename as pathBasename, resolve as pathResolve } from 'node:path';
 import type { FileReader } from './publish.ts';
 
-export const bunFiles: FileReader = {
+export const nodeFiles: FileReader = {
   resolve(path) {
     // A relative path resolves against the server process's working
     // directory, and the result is echoed so a publish that picked up the

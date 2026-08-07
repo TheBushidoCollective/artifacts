@@ -74,26 +74,29 @@ jobs:
       - name: Build the readable bundle
         run: bun run --filter 'relic-mcp' build
 
-      # Runs BEFORE `npm version`, which resolves the dependency tree and dies
-      # with EUNSUPPORTEDPROTOCOL on `workspace:*`. Ordering here is
-      # correctness, not tidiness.
+      # Set the version and drop the workspace protocol in one pass, with
+      # node rather than `npm version`.
       #
-      # The workspace protocol is meaningless outside this repo. Consumers
-      # never install devDependencies, but leaving `workspace:*` in a
-      # published manifest is a trap for anyone reading it.
-      - name: Strip workspace-only dependencies from the manifest
+      # `npm version` resolves the dependency tree, and any npm command run
+      # inside this directory walks up to the workspace root and resolves the
+      # sibling packages too. Those still carry bun's `workspace:*`, which npm
+      # rejects with EUNSUPPORTEDPROTOCOL. Stripping this package's own
+      # manifest does not help, because the manifests npm chokes on belong to
+      # its siblings.
+      #
+      # Editing the JSON directly sidesteps resolution entirely. Every later
+      # npm invocation carries --no-workspaces for the same reason.
+      - name: Set the version and strip the workspace protocol
         working-directory: packages/relic-mcp
         run: |
           node -e '
             const fs = require("node:fs");
             const pkg = JSON.parse(fs.readFileSync("package.json", "utf8"));
+            pkg.version = process.argv[1];
             delete pkg.devDependencies;
             fs.writeFileSync("package.json", JSON.stringify(pkg, null, 2) + "\n");
-          '
-
-      - name: Set the version
-        working-directory: packages/relic-mcp
-        run: npm version "${{ inputs.version }}" --no-git-tag-version --allow-same-version
+            console.log(`${pkg.name}@${pkg.version}`);
+          ' "${{ inputs.version }}"
 
       # The bundle is what runs on a user machine. Assert the properties that
       # make it inspectable and runnable before it goes anywhere.
@@ -124,7 +127,7 @@ jobs:
         working-directory: packages/relic-mcp
         run: |
           set -euo pipefail
-          TARBALL="$(npm pack --pack-destination "$RUNNER_TEMP" --silent | tail -1)"
+          TARBALL="$(npm pack --pack-destination "$RUNNER_TEMP" --silent --no-workspaces | tail -1)"
           PROBE="$RUNNER_TEMP/installprobe"
           rm -rf "$PROBE" && mkdir -p "$PROBE"
           cd "$PROBE"
@@ -140,9 +143,9 @@ jobs:
       - name: Pack and list contents
         working-directory: packages/relic-mcp
         run: |
-          npm pack --dry-run
+          npm pack --dry-run --no-workspaces
           echo "### relic-mcp ${{ inputs.version }}" >> "$GITHUB_STEP_SUMMARY"
-          npm pack --dry-run --json | node -e '
+          npm pack --dry-run --json --no-workspaces | node -e '
             let raw = "";
             process.stdin.on("data", (d) => (raw += d));
             process.stdin.on("end", () => {
@@ -161,4 +164,4 @@ jobs:
       - name: Publish
         if: ${{ !inputs.dry_run }}
         working-directory: packages/relic-mcp
-        run: npm publish --access public
+        run: npm publish --access public --no-workspaces

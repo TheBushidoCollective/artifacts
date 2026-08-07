@@ -47,17 +47,26 @@ jobs:
       # npm, not bun, does the publishing: provenance attestation is an npm
       # CLI feature and this is the path that produces a verifiable link
       # between the tarball and this commit.
+      # Node 24, not a pin at the documented minimum. Trusted publishing needs
+      # Node >= 22.14.0, but that is a floor rather than a target: pinning
+      # 22.14.0 exactly makes `npm@latest` uninstallable, because current npm
+      # requires ^22.22.2 || ^24.15.0 || >=26.
+      #
+      # No `registry-url`. That option writes an .npmrc containing
+      # `_authToken=${NODE_AUTH_TOKEN}`, and with no token in the environment
+      # setup-node substitutes a placeholder. npm then presents a garbage
+      # credential instead of falling through to OIDC, and the failure looks
+      # like a bad secret rather than a misconfiguration. registry.npmjs.org
+      # is the default anyway.
       - uses: actions/setup-node@v4
         with:
-          # Trusted publishing requires Node >= 22.14.0 and npm >= 11.5.1.
-          node-version: '22.14'
-          registry-url: 'https://registry.npmjs.org'
+          node-version: '24'
 
-      # Trusted publishing needs a recent npm CLI. The one bundled with Node
-      # 22 predates it, and the failure mode is an auth error that reads like
-      # a misconfigured secret rather than an old client.
       - name: Use an npm that supports trusted publishing
-        run: npm install -g npm@latest
+        run: |
+          npm install -g npm@latest
+          node --version
+          npm --version
 
       - name: Install dependencies
         run: bun install --frozen-lockfile

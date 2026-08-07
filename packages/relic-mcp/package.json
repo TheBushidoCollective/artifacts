@@ -4,9 +4,9 @@
   "description": "Publish a file as an encrypted relic. The key is generated on your machine and never sent to the service.",
   "license": "MIT",
   "type": "module",
-  "main": "./dist/relic-mcp.js",
+  "main": "dist/relic-mcp.js",
   "bin": {
-    "relic-mcp": "./dist/relic-mcp.js"
+    "relic-mcp": "dist/relic-mcp.js"
   },
   "engines": {
     "node": ">=18"

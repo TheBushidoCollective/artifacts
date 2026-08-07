@@ -21,8 +21,10 @@ concurrency:
 
 permissions:
   contents: read
-  # Required for npm provenance: npm exchanges this OIDC token for an
-  # attestation binding the published tarball to this workflow and commit.
+  # Trusted publishing: npm exchanges this OIDC token for both publish
+  # authorization and a provenance attestation. There is no NPM_TOKEN, and
+  # there should never be one. A long-lived token is a credential that can
+  # leak; this one is minted per run and scoped to this workflow.
   id-token: write
 
 jobs:
@@ -47,8 +49,15 @@ jobs:
       # between the tarball and this commit.
       - uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          # Trusted publishing requires Node >= 22.14.0 and npm >= 11.5.1.
+          node-version: '22.14'
           registry-url: 'https://registry.npmjs.org'
+
+      # Trusted publishing needs a recent npm CLI. The one bundled with Node
+      # 22 predates it, and the failure mode is an auth error that reads like
+      # a misconfigured secret rather than an old client.
+      - name: Use an npm that supports trusted publishing
+        run: npm install -g npm@latest
 
       - name: Install dependencies
         run: bun install --frozen-lockfile
@@ -94,6 +103,27 @@ jobs:
           echo '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28"}}}' \
             | node "$BUNDLE" | grep -q relic_publish
 
+      # The manifest is not the tarball. npm normalizes `bin` on publish and
+      # will silently drop an entry it dislikes, which produces a package that
+      # installs fine and whose `npx relic-mcp` resolves to nothing. The only
+      # honest check is to install the real tarball and run the real bin.
+      - name: Install the tarball and run its bin, as npx would
+        working-directory: packages/relic-mcp
+        run: |
+          set -euo pipefail
+          TARBALL="$(npm pack --pack-destination "$RUNNER_TEMP" --silent | tail -1)"
+          PROBE="$RUNNER_TEMP/installprobe"
+          rm -rf "$PROBE" && mkdir -p "$PROBE"
+          cd "$PROBE"
+          npm init -y >/dev/null
+          npm install "$RUNNER_TEMP/$TARBALL" >/dev/null
+
+          test -L node_modules/.bin/relic-mcp \
+            || { echo "bin was dropped: npx relic-mcp would not work"; exit 1; }
+
+          echo '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28"}}}' \
+            | ./node_modules/.bin/relic-mcp | grep -q relic_describe_client
+
       - name: Pack and list contents
         working-directory: packages/relic-mcp
         run: |
@@ -108,9 +138,14 @@ jobs:
             });
           ' >> "$GITHUB_STEP_SUMMARY"
 
+      # No NODE_AUTH_TOKEN. Authorization comes from the OIDC token above,
+      # and npm attaches provenance automatically under trusted publishing.
+      #
+      # This requires the package to already exist on npm with this repository
+      # and workflow configured as its trusted publisher. The very first
+      # publish of a new package cannot use it, which is why 0.1.0 was pushed
+      # by hand.
       - name: Publish
         if: ${{ !inputs.dry_run }}
         working-directory: packages/relic-mcp
-        run: npm publish --provenance --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm publish --access public

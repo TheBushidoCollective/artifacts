@@ -144,15 +144,22 @@ jobs:
         working-directory: packages/relic-mcp
         run: |
           npm pack --dry-run --no-workspaces
-          echo "### relic-mcp ${{ inputs.version }}" >> "$GITHUB_STEP_SUMMARY"
-          npm pack --dry-run --json --no-workspaces | node -e '
-            let raw = "";
-            process.stdin.on("data", (d) => (raw += d));
-            process.stdin.on("end", () => {
-              const [meta] = JSON.parse(raw);
-              console.log(`files: ${meta.entryCount}, unpacked: ${meta.unpackedSize} bytes`);
-            });
-          ' >> "$GITHUB_STEP_SUMMARY"
+          {
+            echo "### relic-mcp ${{ inputs.version }}"
+            npm pack --dry-run --json --no-workspaces | node -e '
+              let raw = "";
+              process.stdin.on("data", (d) => (raw += d));
+              process.stdin.on("end", () => {
+                // npm returns an array normally and a bare object under
+                // --no-workspaces. Accept either rather than guessing.
+                const parsed = JSON.parse(raw);
+                const meta = Array.isArray(parsed) ? parsed[0] : parsed;
+                console.log(
+                  `files: ${meta.entryCount}, unpacked: ${meta.unpackedSize} bytes`
+                );
+              });
+            '
+          } >> "$GITHUB_STEP_SUMMARY"
 
       # No NODE_AUTH_TOKEN. Authorization comes from the OIDC token above,
       # and npm attaches provenance automatically under trusted publishing.

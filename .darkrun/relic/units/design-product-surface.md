@@ -186,6 +186,11 @@ gate_results:
   at: 2026-08-02T20:30:40.219051+00:00
   attempts: 1
   detail: '`wc -w` returns 10,480 against a floor of 2,600. Grew from 9,511 at the designer beat, +969 words across 18 insertions and 10 deletions, all of it the two decision-changing fixes: the pre-gesture plate correction with the newly specified interstitial state, and the 320 CSS pixel viewport floor with the fluid prose measure. No ceiling on this gate.'
+- name: sources-manifest-populated
+  status: pass
+  at: 2026-08-02T20:30:41.985348+00:00
+  attempts: 1
+  detail: 14 non-empty lines against a floor of 6, one URL per line, trailing newline confirmed present by `tail -c1 | xxd` returning `0a`. Unchanged from the designer beat; the resolve pass introduced no new source, which is consistent with its diff touching only `surface.md`.
 ---
 
 # Goal

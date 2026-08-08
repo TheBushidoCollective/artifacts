@@ -6,7 +6,7 @@ depends_on:
 - design-container-and-crypto
 - design-topology-and-origins
 - design-storage-grant-and-cost
-worker: ''
+worker: resolver
 model: opus
 station: shape
 inputs:
@@ -71,6 +71,94 @@ iterations:
     **Number four it labels itself**: a 71-character URL wrapping claim derived from 71 being greater than 62 rather than from rendering anything, and it names the shape, "a decorative rationale under a sound rule, which is the shape this run keeps catching." **Applying the run's own lesson to itself.**
 
     **Base rate for the challenge: four units in a row have had their number-one nomination come back sound. Do not let this list steer the sweep.** The unstated minimum viewport width at nomination 2 is a criterion-9 deliverable with an unstated bound and is the one I would look at hardest.
+- worker: pressure_tester
+  started_at: 2026-08-02T20:19:38.193881+00:00
+  completed_at: 2026-08-02T20:19:38.193881+00:00
+  result: advance
+  note: |-
+    **6 defects, ordered by severity. Two change a decision. Nothing edited, nothing committed; worktree verified clean at `01c88af`.**
+
+    ## Manager verification, run independently rather than taken from the report
+
+    I re-derived both decision-changing defects from the raw files before recording this beat. Both hold, and the first is sharper than the pass reported.
+
+    **Defect 1 confirmed, and the document convicts itself twice.** `viewer.md` 6.3 enumerates exactly what renders before decryption: "the branded taskbar, the service name, one line of plain-language explanation of what Relic is and what's about to happen, the abuse-report link, and the privacy-statement link." No filename, no size, no expiry. `service.md` 2.1 puts `object_length` and `relic_expires_at` on the mint response, and `topology.md` 5.1 fires the mint on the first trusted user input event and never on load. So the pre-gesture plate cannot hold either number.
+
+    `surface.md:200` states the contradiction in a single sentence: it **quotes `topology.md` 5.1's trigger** and then concludes "the pre-decryption plate carries the service name, the custody line, the one line of explanation, the transfer size, and the expiry." It read the rule and wrote past it. `surface.md:348` then gets the identical reasoning right for `mints_remaining`: "It arrives on the mint response, so it appears after the gesture and never on the pre-decryption plate." **Same field class, same source, opposite answer, 148 lines apart.** That is not a missing fact, it is an unreconciled contradiction inside one document, which is why it ranks first.
+
+    **Defect 2 confirmed arithmetically and it is load-bearing in two places, not one.** `surface.md:69` sets "Mono at 15px, 1.6 leading, and a 62-character measure" and calls the measure "enforced rather than incidental." At the 0.6em advance every monospace face uses, that is 62 x 15 x 0.6 = **558px** of column before any padding, against 375px on an iPhone SE and 393px on an iPhone 15. The section titled for "a phone width" specifies a measure wider than the whole device. **The second place matters more than the first:** `surface.md:434` derives the 71-character URL wrap, and with it the copy-link control's whole rationale, from that same 62-character measure. A measure that cannot exist on the target viewport cannot support a derivation.
+
+    ## The two defects that change a decision
+
+    ### 1. The pre-gesture plate shows data the mint has not returned yet
+
+    The recipient's filename lives in record 0 of the encrypted object (`container.md` 3.2) and is unreadable until the object is fetched and decrypted, which cannot happen before the mint. `service.md` 2.1 lists the mint-response fields and `service.md` §2 confirms the static shell at `/{id}` mints nothing.
+
+    `surface.md` asserts otherwise in four places: line 87 ("Before the recipient does anything, the page already shows: the service name, the custody line naming the file, the transfer size, the four margin controls, and the expiry"), section 7.1, section 6 Zone C (line 184), and section 7.2's worked example at line 222 (`TRANSFER 105.3 MB`).
+
+    **Failing scenario:** a recipient loads `/{id}`. Nothing beyond the static shell has run. The design specifies the plate reads `TRANSFER 105.3 MB` and the header rail shows the real filename at a moment when the client has not sent the request that would produce either.
+
+    **Fix:** revise line 87, section 6 Zone A and Zone C, and sections 7.1 through 7.2 so the pre-gesture plate carries only what `viewer.md` 6.3 licenses, the service name and the one line of explanation. Move custody line, transfer size, and expiry to arrive with the mint response, rendering at the start of the Fetching phase `viewer.md` 6.4 already defines. **Zone A's custody-line content for the interstitial state between click and mint response is currently undefined and must be specified;** "the state name once a state mark applies" does not cover it, because no state mark has fired. The "five true things" framing in section 3 drops to what actually precedes the click.
+
+    ### 2. The 62-character measure cannot fit the phone width the section is titled for
+
+    **Failing scenario:** the failed secure-context error copy in section 7.4 is two sentences, exactly the prose class section 2 assigns the 62-character measure. On a 375px phone at 15px it cannot be honored. Either it silently narrows, contradicting "enforced rather than incidental," or it overflows the viewport. Neither is written down.
+
+    **Fix:** state the design's minimum supported viewport width once, then either state a narrower measure for the viewing origin specifically and reserve 62 characters for desk width (section 6 already says nothing about the hierarchy changes there), or state the reflow rule at narrow widths explicitly. **Whichever you pick, revisit line 434:** the 71-character URL wrap is derived from the 62-character measure, so if the measure changes on phones, that derivation needs restating or dropping.
+
+    ## The remaining defects
+
+    ### 3. The icon-URI-as-callback claim in section 9 has no source, independently confirmed
+
+    Section 9 states as fact that "every client that renders the tool list fetches it, which tells Relic's origin that a given address has the publishing client installed, before any publish," citing the MCP base protocol page only for the adjacent untrusted-metadata sentence. The pass curled `basic/index` (447,502 raw bytes) and `server/tools` (840,621 bytes) and found no statement about when or whether a client fetches an icon URI. The security-precautions list ("fetch without credentials," "verify same-origin," "validate MIME types before rendering") presupposes some clients fetch icons and says nothing about universality or timing.
+
+    **This does not reverse the decision.** The asymmetric-cost argument, zero cost to omitting against nonzero cost if the claim holds, favors declining `icons` either way. What is wrong is an unverified behavioral inference presented as protocol fact beside a citation that does not cover it.
+
+    **Fix:** rephrase as an inference from ordinary client UI convention, analogous to browsers fetching favicons on tab render, or drop the timing claim and rest the refusal on the same-origin-verification requirement the spec does state.
+
+    ### 4. Cap-exhaustion copy gives one remedy to two populations and recreates the failure for one of them
+
+    `storage.md` 4.4 sets the download cap at 64 against a sourced floor of 40. Section 7.6's copy reads "Ask the sender to publish it again. A new relic gets a new link and a fresh count." For a distribution list materially larger than 40, republishing produces another 64-cap relic that the same oversized list exhausts again. The copy does not separate "a scanner caught you" from "your list is bigger than the cap," and the advice fails silently for the second.
+
+    **Fix:** one conditional clause naming that a large list may need multiple relics. This is surface's copy to write even though the cap value is not, and it costs nothing against `storage.md`.
+
+    ### 5. `report_url`'s distinctness is argued but never wired to a distinct control
+
+    Section 7.6 makes `report_url`'s presence on `relic_removed` and absence on `download_cap_exhausted` the second of three reasons the screens must differ: a merged screen "either shows an appeal link that is wrong half the time or drops the field `service.md` 1.4 calls the thing that makes the appeal path real." But the removed screen's copy, "the report link below reaches a person," points at the generic Zone D report control present on every screen. The argument's evidentiary weight is not reflected in a differentiated control.
+
+    **Fix:** one sentence stating whether the margin's report control routes through `report_url` on this screen, or is generic with the field's use left to `design-operations-and-abuse`.
+
+    ### 6. `3 more notices` reads as a literal string
+
+    Section 6 Zone B backtick-formats it like every other literal UI string, but the count is dynamic, 0 to 3, since 5 notices minus 2 always-expanded leaves at most 3. An implementer copying backtick strings literally ships a permanently wrong count.
+
+    **Fix:** format as `N more notices`, or state that 3 is the worst case rather than the string.
+
+    ## Quotation audit
+
+    **35 double-quoted runs of 8 or more characters swept. 1 markup-parsing artifact, 6 non-source, 28 source quotations, 28 of 28 verified, zero deviations.** The designer self-reported 36; the one-off is a threshold difference in the regex, not a missed defect. The 6 non-source runs are classified rather than dropped: the document's own rhetorical and UI-copy uses, including the explicitly rejected overclaim "Nobody but the recipient can read your file," and "A new relic gets a new link," which the document itself discloses as paraphrase.
+
+    **Three false negatives resolved by the exact normalizations the citation-defects topic prescribes, none surviving as real defects.** MDN Secure Contexts wraps `https://` in a code tag mid-sentence and matches tag-stripped. ogp.me carries a raw newline inside "The four required properties for every page are" and matches whitespace-normalized. The Felt et al. adherence quotation failed only because `pdftotext -layout` interleaves the paper's two columns and spliced a citation line into the middle of the sentence; read in single-column order it is exact. **That third one is a new false-negative mode for this run: two-column PDF extraction, not markup.** Worth carrying into the remaining sweeps.
+
+    **Block quotes: 40 lines, matching the designer's count. 2 are source, both verified verbatim against `viewer.md` in the worktree. The other 38 are the document's own authored recipient-facing copy, which is the deliverable itself.**
+
+    **The double-rendered MCP page reproduces, and on both pages rather than one.** `server/tools` carries "Optional array of icons for display in user interfaces" at offsets 181,991, 593,302 and 740,333, three occurrences rather than two; `basic/index` carries the untrusted-metadata string at 212,526 and 443,126. In both files the first offset sits inside genuine rendered article HTML, confirmed by pulling the surrounding markup and finding real `h3`, `ul` and `li` tags, while every later offset sits inside an escaped JSX/RSC hydration payload. **Unlike the storage.md wrong-table trap this duplication carries no scope risk, because every copy says the same thing.** The citations point at the canonical occurrence in both files, as claimed.
+
+    **Arithmetic re-derived independently, not trusted.** `105,298,736 + 104,857,600 + 104,857,600 + 4,194,304 = 319,208,240` exact. Factors 1.57, 2.51 and 3.13 confirmed against the three candidate ceilings. `104,857,600 / 2,097,152 = 50`, `2,097,152 / 8 = 262,144`, `64 / 8 = 8`, and both decimal MB conversions round correctly. **`storage.md` was pulled at both `95853da` and `a9cea77` and diffed: the four-copy break case at 524,729,136 octets that section 4.4 sizes the 2 MiB truncation against exists only at `a9cea77`,** confirming the designer built its load-bearing arithmetic on the resolved tip rather than the stale base.
+
+    ## Adjudication of the designer's nominations
+
+    **Nomination 1, the unsourced icon-URI-as-callback claim: real, confirmed on independent fetch rather than on trust.** Both spec pages were curled and contain zero text on fetch timing or universality. It is a citation-integrity defect, an inference dressed as fact, not a reason to reverse the decision to omit `icons`. **Ranked 3 rather than 1 here precisely because it does not change what the document decides**, which is the distinction the designer's own ranking blurred.
+
+    **Nomination 2, the unstated minimum viewport width: sound, and sharper than flagged.** The designer named it as the item to look at hardest and was right. It is not an absence, it is an arithmetic conflict between two numbers the document commits to. Promoted to a decision-changing defect.
+
+    **Nomination 4, the 71-character URL wrapping claim: decorative as self-labeled, and harmless on its own terms.** The decision it attaches to, that the copy-link control copies rather than displays, is independently justified by section 1's no-credential-field-lookalike rule and holds regardless of wrapping. **It stops being harmless only through defect 2**, since it is derived from the measure that cannot exist on a phone. Fix it there, not here.
+
+    **That makes five units in a row where the number-one self-nomination came back sound or real. The base-rate warning is now well evidenced and the challenge should keep ignoring the ranking, which is exactly what happened: the two defects that change a decision were found by sweep, and one of them the designer never nominated at all.**
+
+    ## What a verbatim sweep structurally cannot catch
+
+    Whether real MCP clients fetch icon URIs at tool-list-render time; no spec text answers it either way and only testing clients resolves it. Whether the taskbar's fixed-width zones and flexible custody line lay out at true phone widths, and what the measure does when it cannot fit, which needs a browser rather than a text audit. Whether the IBM Plex Mono byte measurements of 10,052, 10,120 and 20,172 octets are current: **no URL is cited for the measurement itself**, unlike the renderer costs which trace to a dated knowledge-topic table, so it could not be reproduced. **Add a source for those three numbers or mark them as measured-here with a date.** Whether the `report_url` distinction matters depends on operations' not-yet-written pipeline. Whether the cap-exhaustion copy gap is a real support cost depends on list-size distribution nobody has.
 reviews:
   fit:
     at: 2026-07-30T11:40:36.253906+00:00

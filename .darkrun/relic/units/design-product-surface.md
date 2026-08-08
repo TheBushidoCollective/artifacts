@@ -191,6 +191,11 @@ gate_results:
   at: 2026-08-02T20:30:41.985348+00:00
   attempts: 1
   detail: 14 non-empty lines against a floor of 6, one URL per line, trailing newline confirmed present by `tail -c1 | xxd` returning `0a`. Unchanged from the designer beat; the resolve pass introduced no new source, which is consistent with its diff touching only `surface.md`.
+- name: every-cited-url-resolves
+  status: pass
+  at: 2026-08-02T20:30:43.818656+00:00
+  attempts: 1
+  detail: 'All 14 URLs return success under the gate''s own curl invocation, manager-run at `5e7685a`. Orphan check run in the manifest-to-prose direction as well: every manifest URL appears cited in the document body, zero orphans. Carrying forward the standing caveat that this is the weakest gate in the set, since resolution proves a URL answers and nothing about whether the quoted text is on the page or under the right heading. What caught defects this pass was the verbatim sweep plus scope resolution, and criterion 16''s dash check independently returns 0.'
 ---
 
 # Goal

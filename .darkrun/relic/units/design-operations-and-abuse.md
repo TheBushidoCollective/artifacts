@@ -90,6 +90,11 @@ gate_results:
   at: 2026-08-02T20:41:40.414565+00:00
   attempts: 1
   detail: '`wc -w` returns 10,933 against a floor of 2,600. Grew from 9,164 at the designer beat, +1,769 words, the largest resolve growth in the station. The bulk is the two decision-changing fixes: naming the screening step and rebuilding section 2.2 and the section 6.3 SLA justification on it, and adopting the two-project topology with its consequences carried through section 1, the monitoring surface, and the price-of-yes list. No ceiling on this gate.'
+- name: sources-manifest-populated
+  status: pass
+  at: 2026-08-02T20:41:43.733664+00:00
+  attempts: 1
+  detail: 12 non-empty lines against a floor of 8, one URL per line, trailing newline confirmed by `tail -c1 | xxd` returning `0a`. Unchanged from the designer beat, consistent with the resolve diff touching only `operations.md`. The Google Cloud project-suspension support page the two-project topology fix quotes was already in the manifest and cited, so the fix added evidence weight without adding a source.
 ---
 
 # Goal

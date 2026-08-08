@@ -1,6 +1,6 @@
 {
   "factory": "software",
-  "active_station": "specify",
+  "active_station": "shape",
   "mode": "dark",
   "base_branch": "main",
   "stations": {
@@ -17,16 +17,29 @@
       "started_at": "2026-07-30T00:06:02.578480+00:00",
       "completed_at": "2026-07-30T04:11:15.930415+00:00"
     },
-    "specify": {
-      "station": "specify",
+    "shape": {
+      "station": "shape",
       "status": "in_progress",
       "phase": "manufacture",
       "checkpoint": {
         "kind": "auto"
       },
+      "branch": "darkrun/relic/shape",
+      "verifier_nonce": "827b652b65f71f4c86c06f5c4311691d9ef55f9408e0f90a2dee35ca6b1f5387",
+      "started_at": "2026-07-30T09:40:05.805154+00:00"
+    },
+    "specify": {
+      "station": "specify",
+      "status": "completed",
+      "phase": "checkpoint",
+      "checkpoint": {
+        "kind": "auto",
+        "entered_at": "2026-07-30T09:39:07.287914+00:00",
+        "outcome": "advanced"
+      },
       "branch": "darkrun/relic/specify",
-      "verifier_nonce": "518580860040ff121ff6e2dc68aab8099f600f96a271d7cfcf05d405b499a951",
-      "started_at": "2026-07-30T04:12:58.155047+00:00"
+      "started_at": "2026-07-30T04:12:58.155047+00:00",
+      "completed_at": "2026-07-30T09:39:07.287914+00:00"
     }
   },
   "created_with_version": "0.12.1",

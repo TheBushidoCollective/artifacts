@@ -1,7 +1,7 @@
 ---
 name: Specify the status taxonomy, expiry semantics, mint rules, and the abuse surface
 unit_type: doc
-status: pending
+status: completed
 depends_on:
 - spec-relic-format
 worker: ''
@@ -12,9 +12,147 @@ inputs:
 outputs:
 - docs/spec/service.md
 - docs/spec/service.sources.txt
+branch: darkrun/relic/units/specify/spec-service-surface
+started_at: 2026-07-30T06:46:17.115603+00:00
+completed_at: 2026-07-30T07:13:43.326472+00:00
+iterations:
+- worker: spec_writer
+  started_at: 2026-07-30T06:46:17.115603+00:00
+  completed_at: 2026-07-30T06:46:17.115603+00:00
+  result: advance
+  note: |-
+    `docs/spec/service.md` (4808 words) and `docs/spec/service.sources.txt` (19 URLs) committed at `6e74350` on the unit branch. Worktree clean.
+
+    **Gates reported by the beat:** exists 0; floor 0 at 4808 against 2800; 19 sources against a floor of 5; urls exit 0; zero em-dashes or en-dashes; trailing newline present. The beat ran the orphan check itself with `comm`, found two orphaned manifest entries (GCP AUP and RFC 6585), and **fixed them by adding real cited claims rather than deleting the sources**, which is the right direction. Remaining regex hits are the placeholder `https://<relic-domain>/problems/` and Microsoft's own verbatim `https://<DataCenterLocation>.safelinks.protection.outlook.com`, both quoted format text rather than citations.
+
+    **Sibling input read via `git show darkrun/relic/units/specify/spec-relic-format:docs/spec/format.md`**, the fallback rung the manager verified in advance. The station ref still does not resolve. The ID entropy dependency checks out: it quotes `format.md` 1.2's "The ID carries full bearer-token entropy... it is unguessable, not merely unique" and the clause naming the consequence for this unit directly, and cites the section rather than re-deciding it.
+
+    ## The three reasoned status decisions
+
+    - **Cap exhaustion: `410 download_cap_exhausted`.** The cap has no reset window, so the relic is terminal for its remaining life, making RFC 9110's "no longer available at any location" literally true. **Cost accepted and stated:** cap exhaustion, expiry, and all three deletion flavors share one status, so no status-grouped view separates them and no later query undoes it. Paid for with a hard rule that the mint log records `code` and not only status, and that every dashboard, alert, and abuse metric keys on `code`.
+    - **Expired versus never-existed: distinguished.** `410 relic_expired` against `404 relic_not_found`, resting on the full-entropy ID. Stated limit: the informative `410` is served to scanners too, which costs nothing because a scanner holding the ID already had the URL.
+    - **Takedown disclosure: the fact is disclosed, the reason is not.** Abuse, legal process, and blocklist match all return `410 relic_removed`, with the reason class recorded privately on the tombstone. Decided here, not routed, per criterion 15.
+
+    ## The mint response field set, for `spec-viewer`
+
+    `url`, `url_expires_at`, `relic_expires_at`, `object_length`, `object_crc32c`, `mints_remaining`. Two expiry fields because either can outlive the other. **Explicitly excluded:** filename, declared mimetype, renderer class (barred by `format.md` 3.2 and 3.6), and the format version (lives in the fragment, so a second copy could only disagree).
+
+    **This independently reconciles with `spec-viewer`**, which was written in parallel and asked for the URL, its absolute expiry, object length, CRC32C, and a machine-readable refusal reason. This set is a superset of that ask. The two units converged without coordination, which is the decomposition working.
+
+    ## The error shape, for `spec-publish-contract`
+
+    RFC 9457 `application/problem+json`, standard members plus **every field a client extracts:** `code`, `retry_after_seconds`, `size_limit_bytes`, `declared_size_bytes`, `size_basis`, `relic_id`, `download_cap`, `report_url`. `code` is the bare token and `type` is the problems URL plus `code`, generated from one table so they cannot disagree. `size_basis` is `plaintext` or `ciphertext`, and it exists because `format.md` 3.11 requires the published number be a plaintext number while `shape` picks the enforced side. Ten codes over twelve cases, since the three deletion cases share `relic_removed`. Edge degradation specified: a bare `429` reads as the endpoint's rate-limit code, a bare `503` as `service_paused`.
+
+    ## Where the adversary should push
+
+    Eight judgment calls, surfaced rather than buried. Two are potentially serious and the adversary was pointed at both first.
+
+    1. **It fixed every status value AND routed "the exact status values" to `shape`.** It reports its two instructions genuinely conflicted, resolved in favor of fixing them, and narrowed the route item to edge fidelity. This is either a criterion 5 violation, a criterion 6 satisfaction, or an incoherence that must resolve one way. Most consequential item.
+    2. **It widened the 401/403 ban from rate limiting to every public endpoint**, scoping an exception for the operator admin prefix. The preconditions lock it **only** for rate limiting. The beat calls this a tightening rather than a loosening, which is fair, but **a tightening of a locked constraint is still a modification of locked material**, and that is drift unless it survives scrutiny.
+    3. **`413` for size-over-cap is admitted as a stretch.** RFC 9110 defines `413` in terms of request content, and the grant request's content is small; what is oversized is the declared object. `403` fits better and is banned. The beat took `413` and said so plainly.
+    4. **Case 6, grant expired with no object, got `410` rather than `404`**, justified by the server never overwriting so the ID is permanently spent.
+    5. **Dedup applies to the open counter but not the download cap.** Neither locked document says. Reasoning: the preconditions' worst-case egress arithmetic collapses if a successful mint returns a usable URL without consuming cap.
+    6. **Delete blocklists automatically only for `abuse` and `blocklist_match`**, not legal process, so a legal takedown of lawful content does not poison the blocklist.
+    7. **Retention published per sink rather than as one number**, on the judgment that a single figure is the claim that goes false first.
+    8. **A new sourced observation, stated as a caveat and not a change:** a URL disallowed in `robots.txt` never has its indexing rules read, so the locked `X-Robots-Tag: noindex` does its work on fetchers that ignore the disallow rather than on Googlebot. Both controls ship exactly as locked; only the interaction is named.
+
+    **Two claims the beat correctly attributed rather than overstated.** The `Go-http-client/1.1` HEAD observation rests on an Authelia issue, a practitioner report, attributed as observed rather than documented. And it reports reading the Safe Links and Proofpoint pages itself to confirm the **negative** claim that neither documents fragment handling. Negative claims resting on a single reader are exactly what the adversary beat exists to double-check, and it was told so.
+
+    ## On word count
+
+    4808 against a 2460 to 3485 band, treated as guidance rather than a ceiling per the precedent set when `format.md` landed at 5365. The beat attributes the overage to the twelve-case table, the reasoning on each contested status, and 15 inline citations. The adversary was asked to test that rather than accept it.
+- worker: adversary
+  started_at: 2026-07-30T07:01:30.749938+00:00
+  completed_at: 2026-07-30T07:01:30.749938+00:00
+  result: advance
+  note: |-
+    **Verdict: criteria 4 and 14 fail; 5 passes on substance but is incoherent on presentation; the other twelve pass.** Eleven findings, no edits, no commits. The adversary pulled every RFC as raw `.txt` from rfc-editor.org and every page with `curl` plus a tag-stripper, and used WebFetch on nothing.
+
+    ## F1, high, a FABRICATED QUOTATION. New defect class for this run.
+
+    Section 1.2 attributed to RFC 9110 §15.5.11 that `410` means "no longer available at any location."
+
+    **The manager verified this personally against the raw RFC: the string "any location" appears ZERO times in all 10,785 lines.** The actual text is "no longer available at **the origin server**." The second quote in that sentence ("the server owners desire that remote links to that resource be removed") is verbatim and stands.
+
+    This is worse than every citation defect the run has produced so far, because the URL resolves, the section number is correct, and the quoted words were invented. **Neither the `every-cited-url-resolves` gate nor the does-the-source-support-the-claim check catches it.** It is only findable by grepping the source for the quoted string.
+
+    It was also load-bearing backwards: the document's own preceding sentence concedes "the object still exists," which is exactly what "no longer available at any location" would contradict. The sentence that actually supports `410` is the permanence test the writer never reached for, since cap exhaustion is known-permanent and the server does know. The tightener was told to rebuild the argument on that and to **audit every other quoted string in the document**.
+
+    ## F2, high, false dichotomy on the option set.
+
+    Section 1.1 claimed the better-fitting alternative to `413` "is `403`, which the rule below forbids." **The manager verified RFC 9110 §15.5.21 defines 422 Unprocessable Content**, whose wording ("the syntax of the request content is correct, but it was unable to process the contained instructions") fits an over-cap grant request exactly, and which no rule bans. `413` may still win on legibility to humans, proxies, and dashboards, but the comparison must be honest and the loser's reason stated.
+
+    ## F5, medium-high, the real completeness hole, criterion 14.
+
+    Line 11 claims to own all app-server-originated failures, but `format.md` 1.3 and 1.4 mandate four grant-time refusals with no case and no code: bad alphabet, wrong length, reserved word, and **ID collision**. The collision is sharp because `format.md` 1.4 obliges the client to act ("The client draws a new ID and retries"), and **a client cannot key a redraw-and-retry on a code that does not exist**. Case 12 proves grant-time validation is in scope, so these cannot be deferred to the sibling. Also unspecified: a mint against an ID whose grant is live but whose object has not landed, which is a routine publisher race.
+
+    ## Remaining findings
+
+    **F3** two broken cross-references, both pointing at section 5 when they mean section 4, on the security carve-out and on the mechanism criterion 15 rests on. **F4** the operator surface asserts a root path prefix absent from `format.md`'s append-only reserved table. **F6** the Authelia citation is a relay of a relay (it quotes FusionAuth #629, and that quote is itself explicitly a belief), so "observed" overstates by two levels; nothing load-bearing rests on it. **F7** the IP dedup's real cost is NAT collapse undercounting the metric in exactly the 40-person-tenant scenario the document builds its cap arithmetic on, and it is unstated. **F8** the mint log carries the entire cap-exhaustion mitigation, the open counter, the cap, the limits, and the telemetry join, and its record shape is never defined while the tombstone gets ten fields. **F9, F10, F11** minor.
+
+    ## The eight flagged calls: five right, one wrong premise, two with real holes
+
+    - **Right:** widening the 401/403 ban (adds a stricter rule where the lock is silent, removes nothing, and the Claude Code trigger is verified not condition-scoped); case 6 taking `410` (the RFC's decision rule turns on permanence knowledge, which the server has); ten codes over twelve cases (a coverage bar, not an injectivity bar, and collapsing the three deletion cases **is** the criterion 15 decision); dedup on counter but not cap (the preconditions' egress term does become unbounded otherwise); blocklist conditional on reason class (the 3am hole is closed by making it a parameter of the one call).
+    - **Flagged call 1 rests on a false premise.** There was never a conflict: criterion 5 says "resolved **or** routed," criterion 6 requires all twelve resolved, and they are complementary. Nothing outside the licensed seven is routed, so substance is fine, but route item 1 is **titled** "The exact status values" while its body says they are fixed. Section 7 is the list `shape` reads, and a worker scanning titles reopens the table. Retitle and delete the manufactured-conflict narrative.
+    - **A hole under flagged call 8 nobody saw.** Section 4.1's reporter categories (`malware`, `phishing`, `csam`, `copyright`, `legal_process`, `other`) never map to section 4's reason classes (`abuse`, `blocklist_match`, `legal`, `operator_error`). **A CSAM report arriving as legal process plausibly maps to `legal`, which by the document's own rule skips the blocklist**, and that is the payload most worth blocklisting.
+
+    ## Verified clean, and this matters given the run's history
+
+    **Every GCS claim is clean on the recurring impossibility failure**, and in two places the document applies the recorded lesson correctly and by name, including stating the corrected soft-delete fact ("The policy is editable at any time"). The `robots.txt` interaction is right and if anything conservative against Google's own text. **The mint response field set meets all five of `spec-viewer`'s stated needs with two to spare**, verified by reading the sibling directly, and its four deliberate exclusions are each required by `format.md`. Zero em-dashes. Manifest clean, 19 URLs, orphan-clean both directions. All eight locked constraints honored, none relitigated. Not padded: roughly 60 words of filler found in 4808.
+
+    **One scoping fix from the fact-check:** section 6's "**Neither** documents what it does with a fragment" is a claim about the vendors, and the adversary verified only that the two cited pages are silent (zero occurrences of "fragment" or "anchor" in both). Scope it to the cited documentation and it becomes true at a cost of four words.
+
+    Findings handed to the tightener with the F1 and F2 verifications attached as confirmed rather than alleged.
+- worker: tightener
+  started_at: 2026-07-30T07:13:04.183300+00:00
+  completed_at: 2026-07-30T07:13:04.183300+00:00
+  result: advance
+  note: |-
+    Resolve complete at `ed51b43`, worktree clean. All eleven findings plus three verdict items answered, and five new issues the beat found itself.
+
+    **Gates re-run independently by the manager:** artifact-exists PASS; substance-floor PASS at 6551 against 2800; sources 20 against 5; every URL resolves; zero dashes. Spot-checked the specific fixes: `"any location"` now appears **zero** times and the real origin-server text appears once; all four new codes present; route item 1 retitled; the `csam` carve-out lands in three places.
+
+    ## F1, the fabricated quotation, fixed and independently re-verified twice
+
+    The beat re-ran the grep itself before trusting my report. Deleted the invented string, quoted the origin-server text verbatim, and **rebuilt the argument on the permanence test**, which is what should have carried it all along: Relic knows the condition is permanent because it reads permanence off its own counter, so `410` is correct and `404` is not. The section no longer contradicts its own preceding concession that the object still exists.
+
+    **The full quotation audit ran and is the most valuable artifact of this beat.** Roughly 30 quoted strings fetched, normalized, and substring-matched against source. **All verbatim except the one fabrication.** Two mechanical notes recorded: several quotes are lowercased from sentence-start into mid-sentence position, a pre-existing convention kept deliberately; and the RFC 9110 §17.11 quote had silently dropped "(Section 10.2.2)" from its middle, now marked with a visible elision.
+
+    ## F2, the 413 versus 422 decision
+
+    **`413` wins, on legibility rather than on the letter, and the document says so rather than pretending 413 fits.** The old ecosystem fallback is deleted outright, because 1.5 fixes publishing clients on `code` so the status is never what a client branches on. Two reasons stated: the status is what everything *without* the problem document reads, and 1.2 already establishes that load balancer access logs are often status-only, so `413` says "too big" to a proxy, an uptime check, and a dashboard where `422` says "something was wrong"; and `422` would equally be the natural status for case 12's malformed metadata, so taking it here would reintroduce the exact conflation 1.2 pays a real price to accept only once.
+
+    ## F5, the criterion 14 hole, resolved by adding codes
+
+    New **section 1.6**, deliberately separate so criterion 6's twelve-case bar is untouched, and 1.1's scope claim now points at it. Three cases added: `400 invalid_relic_id` for `format.md` 1.3's alphabet, length, and reserved-table checks, with a new `id_validation_failure` extension member naming which check failed; `409 relic_id_collision`; and `409 relic_not_yet_published` for a mint on a live grant whose object has not landed, carrying `retry_after_seconds`.
+
+    **The code a client keys redraw-and-retry on is `relic_id_collision`, status `409`**, chosen because RFC 9110 defines `409` for "situations where the user might be able to resolve the conflict and resubmit the request," a literal description of drawing a fresh ID, and not `400` because the ID was well formed and the client did nothing wrong.
+
+    ## Remaining findings
+
+    F3 fixed and **swept**: 29 internal references plus 13 `format.md` references checked against the live heading list. F4 fixed in both places, operator surface under the already-reserved `api` prefix so no table append is needed. F6 now cites FusionAuth #629 as primary with Authelia as the relay, hedge intact, and states the rule rests on Slack alone. F7 names the NAT undercount beside the mechanism, quoting preconditions verbatim and tying it to the 40-person tenant. F8 gives the mint log the same treatment the tombstone got, nine fields. F9, F10, F11 fixed; a deduped mint returns the already-issued URL, with a stated exception below minimum viable validity. Route item 1 retitled "Edge fidelity for the statuses section 1 fixes" with the manufactured-conflict narrative deleted. The category mapping is now explicit, and `csam` blocklists regardless of arrival channel with the exception carried in **both** sections so they cannot drift.
+
+    ## Five new issues the beat found, two of them the same defect class it was fixing
+
+    1. `format.md` 2.2 versus this document's own 2.2, an ambiguous cross-reference on a load-bearing exclusion.
+    2. The `problems/` URI prefix had the same reserved-table exposure as F4 and nobody had checked it. The beat ran the check rather than assuming, found no append needed since every problem URI carries a second path segment, and wrote the reasoning down instead of leaving it unexamined.
+    3. **An unsupported vendor claim:** the document said Proofpoint "rewrites to `urldefense.com`" and the cited page contains zero occurrences of that string. Same failure mode as the ones it was sent to fix.
+    4. **The beat caught itself introducing the defect class mid-draft.** Its first F6 fix said the HEAD behavior is something "Microsoft documents nowhere," which is a claim about a vendor that one page cannot establish. It rewrote it scoped to the cited documentation before shipping.
+    5. The `csam` carve-out would have lived only in 4.1 while section 4 states the blocklist condition independently, so the two would have drifted.
+
+    ## Word count
+
+    4808 to 6551, floor 2800. Fourteen findings answered plus a new subsection, against roughly 100 words of tightening returned. Nothing padded, nothing decided was cut. Consistent with the precedent that the band is guidance and correctness wins over the count.
 reviews:
+  completeness:
+    at: 2026-07-30T09:30:39.382518+00:00
   testability:
-    at: 2026-07-30T05:14:48.190501+00:00
+    at: 2026-07-30T09:30:18.432248+00:00
+approvals:
+  completeness:
+    at: 2026-07-30T09:36:28.303444+00:00
+  testability:
+    at: 2026-07-30T09:36:02.428787+00:00
 quality_gates:
 - name: artifact-exists
   command: test -f docs/spec/service.md
@@ -24,6 +162,32 @@ quality_gates:
   command: bash -c 'set -eu; n=$(grep -c . docs/spec/service.sources.txt); test "$n" -ge 5'
 - name: every-cited-url-resolves
   command: bash -c 'set -eu; while IFS= read -r u || [ -n "$u" ]; do [ -n "$u" ] || continue; curl -sfL --max-time 25 --retry 2 -A "Mozilla/5.0 (relic-link-check)" -o /dev/null "$u"; done < docs/spec/service.sources.txt'
+gate_results:
+- name: artifact-exists
+  status: pass
+  at: 2026-07-30T07:13:21.083628+00:00
+  attempts: 1
+  detail: '`test -f docs/spec/service.md` exits 0. Run by the manager in the unit worktree at commit ed51b43, not taken from a beat''s self-report.'
+- name: substance-floor
+  status: pass
+  at: 2026-07-30T07:13:24.828395+00:00
+  attempts: 1
+  detail: '`test "$(wc -w < docs/spec/service.md)" -ge 2800` exits 0. Actual: 6551 words, up from 4808 at the writer''s commit. Run by the manager at ed51b43. The growth is fourteen adversary findings answered plus a new section 1.6 carrying three grant-time refusal codes that `format.md` mandates, against roughly 100 words of tightening returned. Consistent with the precedent set on `format.md`: the band is guidance, the floor is a stub guard, and correctness wins over the count.'
+- name: sources-manifest-populated
+  status: pass
+  at: 2026-07-30T07:13:28.147636+00:00
+  attempts: 1
+  detail: 20 non-empty lines against a floor of 5, one URL per line, trailing newline present. Run by the manager at ed51b43. The manifest gained FusionAuth/fusionauth-issues#629 during resolve, added as the primary source for the Safe Links HEAD observation after the adversary showed the existing Authelia citation was relaying it and that the relayed claim carried its own hedge.
+- name: every-cited-url-resolves
+  status: pass
+  at: 2026-07-30T07:13:34.399941+00:00
+  attempts: 1
+  detail: |-
+    All 20 URLs fetched, exit 0, no DEAD lines. Run by the manager at ed51b43. Orphan check clean both directions after the manifest addition.
+
+    Beyond resolution, this unit carried the run's first **fabricated quotation**: a string attributed to RFC 9110 §15.5.11 that appears zero times in all 10,785 lines of the RFC, sitting in a sentence whose other quote was verbatim. The manager confirmed it against the raw RFC before it reached the tightener, and the tightener re-ran the grep independently rather than trusting that. It then ran a **full quotation audit**, fetching every cited page and substring-matching roughly 30 quoted strings: all verbatim except the one fabrication. It also found and fixed a second unsupported claim nobody had flagged (Proofpoint cited for "urldefense.com", a string absent from the page), and caught itself introducing the same defect class mid-draft.
+
+    Note for later stations: this gate cannot detect modes 2 and 3 of the defect, per `citation-defects-and-the-three-checks-that-catch-them`. A resolving URL proves only that the source exists.
 ---
 
 # Goal

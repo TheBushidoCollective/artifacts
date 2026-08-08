@@ -1,7 +1,7 @@
 ---
 name: Design the abuse pipeline and state what the go/no-go actually costs
 unit_type: ''
-status: in_progress
+status: completed
 depends_on:
 - design-storage-grant-and-cost
 - design-topology-and-origins
@@ -20,6 +20,7 @@ outputs:
 - docs/design/operations.sources.txt
 branch: darkrun/relic/units/shape/design-operations-and-abuse
 started_at: 2026-07-30T15:34:52.492520+00:00
+completed_at: 2026-08-02T20:43:14.776677+00:00
 iterations:
 - worker: designer
   started_at: 2026-07-30T15:34:52.492520+00:00

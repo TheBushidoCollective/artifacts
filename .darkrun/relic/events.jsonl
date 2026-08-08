@@ -53,3 +53,4 @@
 {"action":"merge_conflict","at":"2026-08-02T20:24:42.283426+00:00","event":"darkrun.manager.action","run":"relic","station":"shape"}
 {"action":"noop","at":"2026-08-02T20:26:49.104623+00:00","event":"darkrun.manager.action","run":"relic","station":null}
 {"at":"2026-08-02T20:31:55.442437+00:00","event":"darkrun.unit.completed","run":"relic","station":"shape","unit":"design-product-surface"}
+{"at":"2026-08-02T20:43:14.790202+00:00","event":"darkrun.unit.completed","run":"relic","station":"shape","unit":"design-operations-and-abuse"}

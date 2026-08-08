@@ -222,6 +222,8 @@ reviews:
 approvals:
   fit:
     at: 2026-08-02T20:49:17.865667+00:00
+  reversibility:
+    at: 2026-08-02T21:08:30.142205+00:00
 quality_gates:
 - name: artifact-exists
   command: test -f docs/design/surface.md

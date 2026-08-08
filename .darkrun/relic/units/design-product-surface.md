@@ -159,6 +159,58 @@ iterations:
     ## What a verbatim sweep structurally cannot catch
 
     Whether real MCP clients fetch icon URIs at tool-list-render time; no spec text answers it either way and only testing clients resolves it. Whether the taskbar's fixed-width zones and flexible custody line lay out at true phone widths, and what the measure does when it cannot fit, which needs a browser rather than a text audit. Whether the IBM Plex Mono byte measurements of 10,052, 10,120 and 20,172 octets are current: **no URL is cited for the measurement itself**, unlike the renderer costs which trace to a dated knowledge-topic table, so it could not be reproduced. **Add a source for those three numbers or mark them as measured-here with a date.** Whether the `report_url` distinction matters depends on operations' not-yet-written pipeline. Whether the cap-exhaustion copy gap is a real support cost depends on list-size distribution nobody has.
+- worker: resolver
+  started_at: 2026-08-02T20:31:47.604217+00:00
+  completed_at: 2026-08-02T20:31:47.604217+00:00
+  result: advance
+  note: |-
+    `docs/design/surface.md` resolved and committed at `5e7685a`. **All six defects fixed, none accepted as residual risk.** Worktree clean.
+
+    **Gates re-run independently by the manager, not taken from the report:** 10,480 words against 2,600; 14 sources against 6; all 14 resolve under the gate's own curl; zero dashes; trailing newline confirmed by `tail -c1 | xxd`. `git diff --name-only HEAD~1 HEAD` returns `docs/design/surface.md` alone, so no locked file and no sibling's document was touched. Orphan check run manager-side in the manifest-to-prose direction, zero orphans.
+
+    **Every fix verified in the file by the manager, not on the note's word:** the thirteen-element accounting at line 196, the `N more notices` template at 179, the `report_url` control resolution at 306, both custody-line tokens, the 320px floor and clamp at 71, and the re-grounded copy-link paragraph at 442.
+
+    ## Defect 1's fix is the right kind, because it repaired the argument rather than deleting it
+
+    The lazy fix was to strike the false claims. **It kept the "five true things" rhetorical structure and changed what the five things are**, sourced from `viewer.md` 6.3's own enumeration: "five things about Relic rather than about the item," closing on "a page that has already told you five true things about itself, and volunteered nothing about a file it has not been handed." The anti-phishing argument survives intact and is now true.
+
+    **It specified the interstitial state that was undefined, and went past what was asked.** The custody line now has content for every phase: `Unopened` before the gesture, `Opening…` from the gesture through mint, fetch and the start of decryption, the real filename at the moment record 0 decrypts, and the state name in short form on any terminal screen. **It also decided the stamp rule**, that `Unopened` and `Opening…` are never stamped because nothing has been invalidated, which nobody asked for and which prevents a wrong stamp on a working state.
+
+    Section 7.1 now states the trade rather than hiding it: "Attaching a size or an expiry to the button would mean showing a number the mint has not yet returned, which is worse than showing none." The worked example's `TRANSFER 105.3 MB` moved to "on the mint response, once `object_length` exists and before the fetch begins."
+
+    ## Defect 2 is fixed as a rule rather than a breakpoint, and the derivation was re-grounded
+
+    **Minimum viewport 320 CSS pixels, stated once and held.** The measure became `clamp(32ch, 90vw, 62ch)`: 32 characters at the 320px floor with 16px padding each side, 288px usable at 9px per character, growing to 62 at desk width. The document names the failure it is fixing in its own words, "a measure that cannot exist on the device it is meant to fit is not enforced, it is fictional." One rule covers every width between, so nothing narrows silently and nothing overflows.
+
+    **Line 442 is the better half of this fix.** The copy-link decision no longer derives from the wrap: it now rests on section 1's no-credential-lookalike rule, "nothing shaped like a credential-adjacent string belongs on the viewing origin, and a bare URL sitting in a text field reads as exactly that," with the measure demoted to corroboration that holds from the 32-character floor up. **That is exactly what the challenge's adjudication of nomination 4 prescribed**, fixing the decorative rationale at its source rather than where it surfaced.
+
+    ## The remaining four
+
+    **Defect 3:** the icon-URI claim is now an explicit inference by favicon analogy, and it says plainly that the document "has verified only that the inference matches ordinary UI practice, not that it describes MCP clients' behaviour." The refusal rests independently on the spec language that does exist, the untrusted-inputs requirement. The decision to decline `icons` is unchanged, matching the challenge's finding that this reverses nothing.
+
+    **Defect 4:** the cap-exhausted remedy gained the conditional, "If the list this was sent to is bigger than 64 people, one relic will not cover it, and it may need to go out as more than one link." It states the cap value from `storage.md` rather than an abstraction.
+
+    **Defect 5:** `report_url` is now wired rather than argued. On the removed screen the margin control resolves to `report_url`; on cap-exhausted, where the field never arrives, to the generic `/abuse` intake. It holds the boundary, saying the pipeline behind either path is `design-operations-and-abuse`'s and "this document decides only which URL the control points at."
+
+    **Defect 6:** `N more notices`, with the bound stated and the zero case named.
+
+    ## Criterion 9 was actively preserved, and the manager confirmed it independently
+
+    Section 6's four zones and thirteen elements did not change; only Zone A's and Zone C's dynamic content across states did, rewritten against `viewer.md` 6.4's three named phases. **The manager re-read line 196's accounting against the revised prose rather than trusting the note:** service name and explanation in A and C, bounded filename in A, copy, download, report and disclosure in D, sandbox notice and source toggle in C, and the five notices in B. All thirteen present, same zones.
+
+    ## Two disclosures the beat made against its own interest
+
+    **It flagged criterion 13 itself rather than letting it pass.** The 320px minimum and the 32-character floor are not sibling-sourced, and it says so plainly instead of dressing them as derived, putting them on the same footing as the 256 KiB highlight cap the document already calls a judgment. **The manager's reading agrees and the criterion is satisfied:** criterion 13 scopes to numbers in *recipient-facing copy*, naming the size cap, the download cap, the validity window and the deleted-versus-expired distinction, all of which remain sibling-sourced and cited. A viewport floor is a design-system value, not copy a recipient reads.
+
+    **It declined to quote when it condensed.** Restating `viewer.md` 6.3's enumeration, it dropped "of what Relic is and what's about to happen" and therefore left the restatement unquoted rather than presenting a shortened string inside quotation marks. **That is the correct handling of the exact failure mode this station has been hunting all run**, and it is the first beat to avoid the defect by refusing to quote rather than by fixing a quotation after the fact. No new external quotation was introduced, and no new source was needed.
+
+    ## Residual risk Build inherits
+
+    Three tokens are this beat's invention rather than derived from a locked source: `Unopened`, `Opening…`, and the 320px floor. Each carries its reasoning inline.
+
+    **One simplification is a real design choice and is named as one:** `Opening…` is a single label persisting across three sub-phases, the click-to-mint interstitial, Fetching, and Decrypting, rather than three distinct labels. The reason is that Zone C's plate already carries the phase-specific detail, bytes against total and then record-boundary progress, so the header rail would only duplicate it. Nothing in the spec set forces three labels. **If Build's layout gives the header rail more visual weight than the plate at some breakpoint, that call is worth revisiting.**
+
+    Carried forward to the station audit, unchanged from the challenge because the resolve did not close them: the icon-fetch question needs real clients rather than spec text; the taskbar at true phone widths needs a browser; and the three IBM Plex Mono byte measurements still carry no source URL and should either gain one or be marked as measured-here with a date.
 reviews:
   fit:
     at: 2026-07-30T11:40:36.253906+00:00

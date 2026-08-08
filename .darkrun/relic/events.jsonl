@@ -59,3 +59,4 @@
 {"action":"fix_feedback","at":"2026-08-02T20:59:55.489628+00:00","event":"darkrun.manager.action","run":"relic","station":"shape"}
 {"action":"audit","at":"2026-08-02T21:06:16.935596+00:00","event":"darkrun.manager.action","run":"relic","station":"shape"}
 {"action":"reflect","at":"2026-08-02T21:10:03.710787+00:00","event":"darkrun.manager.action","run":"relic","station":"shape"}
+{"action":"checkpoint","at":"2026-08-02T21:14:00.033489+00:00","event":"darkrun.manager.action","run":"relic","station":"shape"}

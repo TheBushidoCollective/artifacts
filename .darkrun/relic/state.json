@@ -1,9 +1,17 @@
 {
   "factory": "software",
-  "active_station": "shape",
+  "active_station": "build",
   "mode": "dark",
   "base_branch": "main",
   "stations": {
+    "build": {
+      "station": "build",
+      "status": "pending",
+      "phase": "spec",
+      "checkpoint": {
+        "kind": "auto"
+      }
+    },
     "frame": {
       "station": "frame",
       "status": "completed",
@@ -19,14 +27,16 @@
     },
     "shape": {
       "station": "shape",
-      "status": "in_progress",
+      "status": "completed",
       "phase": "checkpoint",
       "checkpoint": {
-        "kind": "auto"
+        "kind": "auto",
+        "entered_at": "2026-08-02T21:13:59.937755+00:00",
+        "outcome": "advanced"
       },
       "branch": "darkrun/relic/shape",
-      "verifier_nonce": "827b652b65f71f4c86c06f5c4311691d9ef55f9408e0f90a2dee35ca6b1f5387",
-      "started_at": "2026-07-30T09:40:05.805154+00:00"
+      "started_at": "2026-07-30T09:40:05.805154+00:00",
+      "completed_at": "2026-08-02T21:13:59.937755+00:00"
     },
     "specify": {
       "station": "specify",

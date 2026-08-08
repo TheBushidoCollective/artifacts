@@ -1,7 +1,7 @@
 ---
 name: Decide the art direction, the taskbar hierarchy, and every recipient state
 unit_type: ''
-status: in_progress
+status: completed
 depends_on:
 - design-container-and-crypto
 - design-topology-and-origins
@@ -20,6 +20,7 @@ outputs:
 - docs/design/surface.sources.txt
 branch: darkrun/relic/units/shape/design-product-surface
 started_at: 2026-07-30T15:42:37.067275+00:00
+completed_at: 2026-08-02T20:31:55.431038+00:00
 iterations:
 - worker: designer
   started_at: 2026-07-30T15:42:37.067275+00:00

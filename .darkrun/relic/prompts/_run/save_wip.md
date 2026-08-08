@@ -21,7 +21,7 @@ The engine commits its own `.darkrun/` bookkeeping on every tick — but it neve
 
 ## Uncommitted paths
 
-- `.claude/settings.json`
+- `.claude/worktrees/soft-weaving-pebble`
 
 
 ## What to do

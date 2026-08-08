@@ -181,6 +181,11 @@ gate_results:
   at: 2026-08-02T20:30:37.034586+00:00
   attempts: 1
   detail: '`test -f docs/design/surface.md` exits 0 at `5e7685a`. Companion manifest `docs/design/surface.sources.txt` present. Manager-run in the unit worktree, not taken from the worker''s report. `git diff --name-only HEAD~1 HEAD` returns `docs/design/surface.md` alone, so the resolve pass touched no locked file and no sibling''s document.'
+- name: substance-floor
+  status: pass
+  at: 2026-08-02T20:30:40.219051+00:00
+  attempts: 1
+  detail: '`wc -w` returns 10,480 against a floor of 2,600. Grew from 9,511 at the designer beat, +969 words across 18 insertions and 10 deletions, all of it the two decision-changing fixes: the pre-gesture plate correction with the newly specified interstitial state, and the 320 CSS pixel viewport floor with the fluid prose measure. No ceiling on this gate.'
 ---
 
 # Goal

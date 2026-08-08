@@ -85,6 +85,11 @@ gate_results:
   at: 2026-08-02T20:41:36.734226+00:00
   attempts: 1
   detail: '`test -f docs/design/operations.md` exits 0 at `19f4c58`. Companion manifest `docs/design/operations.sources.txt` present. Manager-run in the unit worktree, not taken from the worker''s report. `git diff --name-only HEAD~1 HEAD` returns `docs/design/operations.md` alone, so the resolve pass touched no locked file and no sibling''s document.'
+- name: substance-floor
+  status: pass
+  at: 2026-08-02T20:41:40.414565+00:00
+  attempts: 1
+  detail: '`wc -w` returns 10,933 against a floor of 2,600. Grew from 9,164 at the designer beat, +1,769 words, the largest resolve growth in the station. The bulk is the two decision-changing fixes: naming the screening step and rebuilding section 2.2 and the section 6.3 SLA justification on it, and adopting the two-project topology with its consequences carried through section 1, the monitoring surface, and the price-of-yes list. No ceiling on this gate.'
 ---
 
 # Goal

@@ -79,6 +79,12 @@ quality_gates:
   command: bash -c 'set -eu; n=$(grep -c . docs/design/operations.sources.txt); test "$n" -ge 8'
 - name: every-cited-url-resolves
   command: bash -c 'set -eu; while IFS= read -r u || [ -n "$u" ]; do [ -n "$u" ] || continue; curl -sfL --max-time 25 --retry 2 -A "Mozilla/5.0 (relic-link-check)" -o /dev/null "$u"; done < docs/design/operations.sources.txt'
+gate_results:
+- name: artifact-exists
+  status: pass
+  at: 2026-08-02T20:41:36.734226+00:00
+  attempts: 1
+  detail: '`test -f docs/design/operations.md` exits 0 at `19f4c58`. Companion manifest `docs/design/operations.sources.txt` present. Manager-run in the unit worktree, not taken from the worker''s report. `git diff --name-only HEAD~1 HEAD` returns `docs/design/operations.md` alone, so the resolve pass touched no locked file and no sibling''s document.'
 ---
 
 # Goal

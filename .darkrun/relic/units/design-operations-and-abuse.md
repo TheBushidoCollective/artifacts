@@ -95,6 +95,11 @@ gate_results:
   at: 2026-08-02T20:41:43.733664+00:00
   attempts: 1
   detail: 12 non-empty lines against a floor of 8, one URL per line, trailing newline confirmed by `tail -c1 | xxd` returning `0a`. Unchanged from the designer beat, consistent with the resolve diff touching only `operations.md`. The Google Cloud project-suspension support page the two-project topology fix quotes was already in the manifest and cited, so the fix added evidence weight without adding a source.
+- name: every-cited-url-resolves
+  status: pass
+  at: 2026-08-02T20:41:48.577354+00:00
+  attempts: 1
+  detail: 'All 12 URLs return success under the gate''s own curl invocation, manager-run at `19f4c58`. Orphan check run manager-side in the manifest-to-prose direction, every manifest URL appears cited in the body, zero orphans. Criterion 14''s dash check independently returns 0. Recording the standing caveat with extra force on this unit: the challenge beat established that three of these 12 sources return a bot-block page, an RDF stub, or a content-negotiation error under a naive request, and this gate passes on all three regardless because it only proves the URL answers. Resolution is not verification. What actually protects the legal quotations here is the raw fetch with correct headers plus scope resolution to the governing heading, both of which the challenge ran and reported.'
 ---
 
 # Goal

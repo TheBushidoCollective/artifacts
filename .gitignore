@@ -1,3 +1,19 @@
+node_modules/
+dist/
+*.tsbuildinfo
+.env
+.env.*
+!.env.example
+.DS_Store
+
+# Terraform init output and plan artifacts. The .terraform.lock.hcl
+# file is deliberately NOT ignored: it pins provider versions.
+.terraform/
+*.tfplan
+*.tfstate
+*.tfstate.*
+
+# Agent scratch space: worktrees and per-machine settings.
 .darkrun/worktrees/
-.claude/settings.local.json
 .claude/worktrees/
+.claude/settings.local.json

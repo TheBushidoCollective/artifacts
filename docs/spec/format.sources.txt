@@ -1,0 +1,12 @@
+https://www.crockford.com/base32.html
+https://www.rfc-editor.org/rfc/rfc4648.html
+https://www.rfc-editor.org/rfc/rfc9110.html
+https://modelcontextprotocol.io/specification/2026-07-28/server/tools
+https://www.rfc-editor.org/rfc/rfc8188.html
+https://github.github.com/gfm/
+https://developer.mozilla.org/en-US/docs/Web/API/History/replaceState
+https://github.com/SocketDev/wormhole-crypto
+https://github.com/greggman/unzipit
+https://security.snyk.io/research/zip-slip-vulnerability
+https://docs.cloud.google.com/storage/docs/metadata
+https://docs.cloud.google.com/storage/docs/authentication/canonical-requests

@@ -1,0 +1,95 @@
+/**
+ * Every refusal the format can produce, as a distinguishable type.
+ *
+ * `spec/format.md` 3.5 forbids one conflation in particular: a decrypt
+ * failure must never be reported as "wrong key". Tampering, truncation, and
+ * a genuinely wrong key produce the identical symptom, so `DecryptFailed`
+ * carries no cause and callers must not invent one.
+ */
+
+export class RelicFormatError extends Error {
+  override readonly name: string = 'RelicFormatError';
+}
+
+/** The fragment's version marker names a version this build does not know. */
+export class UnknownVersionError extends RelicFormatError {
+  override readonly name = 'UnknownVersionError';
+  constructor(readonly marker: string) {
+    super(`unknown relic format version: ${JSON.stringify(marker)}`);
+  }
+}
+
+/** The fragment is absent, too short, or not the shape 2.1 fixes. */
+export class MalformedFragmentError extends RelicFormatError {
+  override readonly name = 'MalformedFragmentError';
+}
+
+/** The RFC 8188 header is unreadable, or violates a rule the format adds. */
+export class MalformedContainerError extends RelicFormatError {
+  // Widened rather than a literal, because three subclasses narrow it.
+  override readonly name: string = 'MalformedContainerError';
+}
+
+/**
+ * `keyid` is present. `spec/format.md` 3.4 makes `idlen == 0` a hard
+ * invariant and requires refusal after the fetch, because the header sits in
+ * the object's first bytes and nothing can be checked before they arrive.
+ */
+export class KeyIdPresentError extends MalformedContainerError {
+  override readonly name = 'KeyIdPresentError';
+  constructor(readonly idlen: number) {
+    super(`container sets keyid (idlen=${idlen}); it must be 0`);
+  }
+}
+
+/**
+ * The envelope header inside the AEAD names a different version than the
+ * fragment marker did. `spec/format.md` 3.7 requires refusal: it means a
+ * mangled fragment prefix or a substituted object.
+ */
+export class VersionMismatchError extends MalformedContainerError {
+  override readonly name = 'VersionMismatchError';
+  constructor(
+    readonly fragmentVersion: number,
+    readonly envelopeVersion: number
+  ) {
+    super(
+      `envelope version ${envelopeVersion} disagrees with fragment ` +
+        `version ${fragmentVersion}`
+    );
+  }
+}
+
+/**
+ * The envelope header did not parse exactly. `spec/format.md` 3.1 requires a
+ * strict parser: unknown fields are refused rather than ignored, which here
+ * means any byte left over after the declared structure is a refusal.
+ */
+export class StrictParseError extends MalformedContainerError {
+  override readonly name = 'StrictParseError';
+}
+
+/**
+ * An AEAD tag did not verify.
+ *
+ * Deliberately carries no cause. Per `spec/format.md` 3.5 a wrong key, a
+ * truncated transfer, and a tampered `salt` or `rs` are indistinguishable
+ * from this side, and the viewer must not claim otherwise.
+ */
+export class DecryptFailedError extends RelicFormatError {
+  override readonly name = 'DecryptFailedError';
+  constructor(readonly recordSeq: number) {
+    super(`record ${recordSeq} failed authentication`);
+  }
+}
+
+/** The content exceeds the published cap. */
+export class ContentTooLargeError extends RelicFormatError {
+  override readonly name = 'ContentTooLargeError';
+  constructor(
+    readonly declaredBytes: number,
+    readonly limitBytes: number
+  ) {
+    super(`content is ${declaredBytes} bytes, over the ${limitBytes} cap`);
+  }
+}

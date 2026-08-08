@@ -1,0 +1,44 @@
+name: verify
+
+on:
+  pull_request:
+  workflow_call:
+
+# Deliberately not `push: branches: [main]`.
+#
+# The deploy workflow calls this one as its gate, so a push to main used to
+# start two runs on the same ref. They shared the concurrency group below and
+# cancelled each other: every merge left a `verify` run marked cancelled, and
+# the race could just as easily have killed the run that gates the deploy
+# rather than the redundant standalone one. On main, deploy owns verification.
+concurrency:
+  group: verify-${{ github.ref }}-${{ github.event_name }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: jdx/mise-action@v2
+        with:
+          # The versions in mise.toml, not whatever the runner ships.
+          install: true
+          cache: true
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Lint
+        run: bun run lint
+
+      - name: Typecheck
+        run: bun run typecheck
+
+      # Builds the viewer first, because the asset tests serve real files out
+      # of its dist.
+      - name: Test
+        run: bun run test

@@ -1,0 +1,505 @@
+/*
+ * Relic viewer.
+ *
+ * The art direction comes from the subject rather than a template. A relic is
+ * a catalogued object with a fixed lifespan, so the chrome is an accession
+ * label: a hairline-ruled band carrying a catalog number in monospace, over a
+ * reading surface. Nothing is rounded, nothing glows, and the only saturated
+ * colour in the system is a patina teal used for interaction.
+ *
+ * No webfonts, by necessity and by preference: the CSP blocks external
+ * requests and the viewer has to work offline once installed.
+ */
+
+:root {
+  color-scheme: light dark;
+
+  --ground: #f1f2f0;
+  --surface: #fbfbfa;
+  --ink: #16191a;
+  --ink-soft: #5a6163;
+  --rule: #d2d5d2;
+  --rule-strong: #b3b8b4;
+  --patina: #1f6b64;
+  --patina-ink: #0f3b37;
+  --oxide: #8c4a2f;
+
+  --serif: Charter, "Iowan Old Style", "Source Serif Pro", Palatino,
+    "Palatino Linotype", Georgia, serif;
+  --mono: ui-monospace, "SF Mono", SFMono-Regular, "JetBrains Mono", Menlo,
+    Consolas, monospace;
+  --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+
+  --bar-height: 3.25rem;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --ground: #101314;
+    --surface: #171b1c;
+    --ink: #e6e9e7;
+    --ink-soft: #969e9d;
+    --rule: #2a3032;
+    --rule-strong: #3b4345;
+    --patina: #4fb3a6;
+    --patina-ink: #a7ded6;
+    --oxide: #c98058;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+}
+
+body {
+  background: var(--ground);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 16px;
+  line-height: 1.55;
+  -webkit-text-size-adjust: 100%;
+  overflow-x: hidden;
+}
+
+/* ---------- the accession band ---------- */
+
+.bar {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  min-height: var(--bar-height);
+  background: var(--surface);
+  border-bottom: 1px solid var(--rule-strong);
+}
+
+.mark {
+  display: flex;
+  align-items: center;
+  padding: 0 1rem;
+  font-family: var(--mono);
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.34em;
+  text-indent: 0.34em;
+  color: var(--ink);
+  border-right: 1px solid var(--rule);
+  white-space: nowrap;
+}
+
+.identity {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0.1rem;
+  padding: 0.4rem 1rem;
+  min-width: 0;
+  flex: 1;
+}
+
+.filename {
+  font-size: 0.9rem;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* The relic id is a catalog number, so it is set like one. */
+.accession {
+  font-family: var(--mono);
+  font-size: 0.66rem;
+  letter-spacing: 0.14em;
+  color: var(--ink-soft);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  user-select: all;
+}
+
+.actions {
+  display: flex;
+  align-items: stretch;
+  border-left: 1px solid var(--rule);
+}
+
+.action {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0 0.9rem;
+  border: 0;
+  border-right: 1px solid var(--rule);
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.82rem;
+  text-decoration: none;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.actions .action:last-child {
+  border-right: 0;
+}
+
+.action:hover {
+  background: var(--ground);
+  color: var(--patina-ink);
+}
+
+.action:focus-visible {
+  outline: 2px solid var(--patina);
+  outline-offset: -2px;
+}
+
+.action.primary {
+  background: var(--patina);
+  color: #fff;
+  border: 0;
+  padding: 0.55rem 1rem;
+  align-self: flex-start;
+}
+
+.action.primary:hover {
+  background: var(--patina-ink);
+  color: #fff;
+}
+
+.icon {
+  width: 14px;
+  height: 14px;
+  flex: none;
+  fill: currentColor;
+}
+
+@media (max-width: 34rem) {
+  .action span {
+    display: none;
+  }
+  .action {
+    padding: 0 0.75rem;
+  }
+}
+
+/* ---------- the reading surface ---------- */
+
+.stage {
+  padding: 2rem 1.25rem 5rem;
+}
+
+.doc {
+  max-width: 46rem;
+  margin: 0 auto;
+}
+
+.toggle-row {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 0.75rem;
+}
+
+.toggle-row .action {
+  border: 1px solid var(--rule);
+  padding: 0.35rem 0.7rem;
+}
+
+.notice {
+  display: flex;
+  gap: 0.6rem;
+  align-items: flex-start;
+  max-width: 46rem;
+  margin: 0 auto 1.5rem;
+  padding: 0.7rem 0.9rem;
+  border-left: 3px solid var(--oxide);
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 0.86rem;
+}
+
+.notice .icon {
+  fill: var(--oxide);
+  margin-top: 0.2rem;
+}
+
+/* ---------- prose ---------- */
+
+.prose {
+  font-family: var(--serif);
+  font-size: 1.06rem;
+  line-height: 1.7;
+}
+
+.prose h1,
+.prose h2,
+.prose h3,
+.prose h4,
+.prose h5,
+.prose h6 {
+  font-family: var(--sans);
+  line-height: 1.25;
+  margin: 2rem 0 0.6rem;
+  letter-spacing: -0.01em;
+}
+
+.prose h1 {
+  font-size: 1.7rem;
+  padding-bottom: 0.4rem;
+  border-bottom: 1px solid var(--rule);
+}
+
+.prose h2 {
+  font-size: 1.32rem;
+}
+
+.prose h3 {
+  font-size: 1.1rem;
+}
+
+.prose p {
+  margin: 0 0 1.1rem;
+}
+
+.prose a {
+  color: var(--patina-ink);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+}
+
+.prose blockquote {
+  margin: 1.2rem 0;
+  padding-left: 1rem;
+  border-left: 2px solid var(--rule-strong);
+  color: var(--ink-soft);
+}
+
+.prose hr {
+  border: 0;
+  border-top: 1px solid var(--rule);
+  margin: 2rem 0;
+}
+
+.prose code {
+  font-family: var(--mono);
+  font-size: 0.86em;
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  padding: 0.05em 0.3em;
+}
+
+.prose pre {
+  font-family: var(--mono);
+  font-size: 0.82rem;
+  line-height: 1.6;
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-left: 3px solid var(--rule-strong);
+  padding: 0.9rem 1rem;
+  overflow-x: auto;
+  margin: 1.2rem 0;
+}
+
+.prose pre code {
+  background: none;
+  border: 0;
+  padding: 0;
+  font-size: inherit;
+}
+
+.md-image {
+  font-family: var(--mono);
+  font-size: 0.8rem;
+  color: var(--ink-soft);
+  border: 1px dashed var(--rule-strong);
+  padding: 0.1em 0.4em;
+}
+
+/* Wide content scrolls inside its own container; the body never does. */
+.md-scroll {
+  overflow-x: auto;
+  margin: 1.2rem 0;
+  border: 1px solid var(--rule);
+}
+
+.prose table {
+  border-collapse: collapse;
+  width: 100%;
+  font-family: var(--sans);
+  font-size: 0.88rem;
+}
+
+.prose th,
+.prose td {
+  text-align: left;
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid var(--rule);
+  white-space: nowrap;
+}
+
+.prose th {
+  background: var(--surface);
+  font-weight: 600;
+}
+
+.raw {
+  font-family: var(--mono);
+  font-size: 0.82rem;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  padding: 1rem;
+  margin: 0;
+}
+
+/* ---------- code ---------- */
+
+.code {
+  display: flex;
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  overflow-x: auto;
+  font-family: var(--mono);
+  font-size: 0.82rem;
+  line-height: 1.6;
+}
+
+.gutter {
+  margin: 0;
+  padding: 1rem 0.75rem;
+  text-align: right;
+  color: var(--ink-soft);
+  background: var(--ground);
+  border-right: 1px solid var(--rule);
+  user-select: none;
+  flex: none;
+}
+
+.code-body {
+  margin: 0;
+  padding: 1rem;
+  flex: 1;
+  min-width: 0;
+}
+
+.tok-kw {
+  color: var(--patina-ink);
+  font-weight: 600;
+}
+
+.tok-str {
+  color: var(--oxide);
+}
+
+.tok-num {
+  color: var(--oxide);
+}
+
+.tok-com {
+  color: var(--ink-soft);
+  font-style: italic;
+}
+
+/* ---------- image, html, download ---------- */
+
+.doc-image {
+  max-width: none;
+  display: flex;
+  justify-content: center;
+}
+
+.doc-image img {
+  max-width: 100%;
+  height: auto;
+  border: 1px solid var(--rule);
+  background: var(--surface);
+}
+
+.doc-html {
+  max-width: none;
+}
+
+.sandbox-frame {
+  width: 100%;
+  height: calc(100vh - var(--bar-height) - 4rem);
+  border: 1px solid var(--rule);
+  background: #fff;
+}
+
+.card {
+  max-width: 34rem;
+  margin: 3rem auto;
+  padding: 1.75rem;
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-top: 3px solid var(--rule-strong);
+}
+
+.card-title {
+  font-family: var(--sans);
+  font-size: 1.15rem;
+  font-weight: 600;
+  margin: 0 0 0.35rem;
+  word-break: break-word;
+}
+
+.card-meta {
+  font-family: var(--mono);
+  font-size: 0.76rem;
+  color: var(--ink-soft);
+  margin-bottom: 1.25rem;
+  word-break: break-word;
+}
+
+.card-note {
+  margin: 1.25rem 0 0;
+  font-size: 0.86rem;
+  color: var(--ink-soft);
+}
+
+.stage-dead .card {
+  border-top-color: var(--oxide);
+}
+
+.stage-dead .accession {
+  margin-top: 1.25rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--rule);
+}
+
+/* ---------- toast ---------- */
+
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: 1.5rem;
+  transform: translateX(-50%);
+  max-width: calc(100vw - 2rem);
+  padding: 0.7rem 1rem;
+  background: var(--ink);
+  color: var(--ground);
+  font-size: 0.84rem;
+  border-left: 3px solid var(--patina);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .toast {
+    animation: rise 180ms ease-out;
+  }
+  @keyframes rise {
+    from {
+      opacity: 0;
+      transform: translate(-50%, 0.5rem);
+    }
+  }
+}

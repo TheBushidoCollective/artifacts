@@ -1,0 +1,409 @@
+# Relic: the publish contract
+
+What the publishing client exposes to an agent, what it sends the app server, what it does when any leg of the publish fails, and what it tells the publisher about the key it's about to put in a transcript.
+
+`docs/frame.md` and `docs/preconditions.md` are locked inputs. `docs/spec/format.md` and `docs/spec/service.md` are siblings whose decisions are inputs here, cited where they bind. Nothing in this document reopens any of them. `service.md` section 1.6 was written for this unit and is consumed verbatim, never restated with different values. Items belonging to `shape` are routed in section 6, and only those five.
+
+## 0. The protocol revision, pinned
+
+**Relic's publishing client targets MCP protocol revision `2026-07-28`.** That's the current revision ([MCP versioning](https://modelcontextprotocol.io/specification/versioning)), and version selection is per request rather than per session: every request declares its revision in `_meta`, and `server/discover` is available up front as "a mandatory RPC that returns the server's supported protocol versions, capabilities, and identity in a single request."
+
+The pin isn't housekeeping. Tool-result semantics are revision-dependent, so a document that doesn't name its revision is ambiguous by construction: `structuredContent`, `outputSchema`, and the two-mechanism error model in section 1.6 all take their meaning from a specific revision, and the handshake-based revisions, which the spec bounds as "2025-11-25 and earlier", negotiate through an `initialize` handshake this contract doesn't have ([MCP versioning](https://modelcontextprotocol.io/specification/versioning)). Every "the spec says" in this document means `2026-07-28`.
+
+**The server is a local stdio binary that encrypts in-process**, per the locked frame. It returns no script and it exposes no remote MCP surface. That choice determines which client-side timeouts bind (1.5) and which status rules are vacuous but obeyed anyway (2.3).
+
+## 1. The MCP tool surface
+
+### 1.1 The tool name
+
+**The tool is named `relic_publish`.** One name, stable across releases, and renaming it is a breaking change because every saved agent instruction and every project prompt references it by string.
+
+The spec allows a wide field: names run "between 1 and 128 characters in length (inclusive)", are case-sensitive, and are limited to ASCII letters, digits, underscore, hyphen, and dot ([MCP tools](https://modelcontextprotocol.io/specification/2026-07-28/server/tools)). Uniqueness is only guaranteed inside one server. The spec then names the hazard directly: clients that aggregate tools from multiple servers may hit collisions and should implement "a disambiguation strategy such as prefixing tool names with a server identifier", and the server's own `name` "is not guaranteed to be unique across servers" so it can't be leaned on for that.
+
+A bare `publish` collides with incumbent publishing MCP servers, and the consequence is a security outcome produced by a naming decision. The model asks for `publish`, the client disambiguates to whichever server it prefers, and the file lands on a service with different encryption or none. The publisher sees a URL come back and has no way to tell which service produced it. Prefixing with the product name makes that collision essentially impossible, and it's the spec's own remedy taken literally rather than a house convention: a prefix is the leading segment, so "prefixing tool names with a server identifier" puts the identifier first, which is what `relic_publish` spells. Putting the product first also groups every Relic tool together in an aggregated list, which is what a human scanning `/mcp` actually reads.
+
+### 1.2 The input schema
+
+**One content input, and it's a path.**
+
+| Member | Type | Required | Meaning |
+|---|---|---|---|
+| `path` | string | yes | Filesystem path to the file to publish |
+| `filename` | string | no | Overrides the name written into the encrypted envelope header |
+
+**Inline content is not accepted, and there is no `content` member.** A path keeps the plaintext out of the model's context entirely, so only the key leaks upward. Inline content puts the plaintext in the transcript too, compounding the leak from "the key leaks" to "the key and the file leak." Accepting both without a stated preference is the worst option available, because a model already holding the bytes inlines by default and the safe path becomes the one nobody takes. A caller holding generated content in context writes it to disk first. In that case the plaintext was already in the transcript, so the rule loses nothing there and wins the common case, where an agent publishes a file it produced with a tool rather than in its own output.
+
+**A relative `path` resolves against the server process's working directory, and the result echoes the resolved absolute path**, so a publish that picked up the wrong file is diagnosable from the result instead of a support thread.
+
+**The renderer class is not a tool input.** The frame locks it as client-declared, meaning declared by the local binary that holds the plaintext. Exposing it as a parameter makes the taxonomy model-attested, and the metric's second clause then has an unreliable narrator reporting its only input. The binary derives the class from the decrypted-side bytes it already holds: magic-byte sniffing first, the extension as a fallback when sniffing is inconclusive, and `binary` when both are. `format.md` 3.9 overrides all of it in one case, unconditionally: zero-byte content declares `binary` regardless of filename, extension, or sniffed type. The derived class is echoed in the result (1.3) because a publisher with no dashboard has no other way to see what was reported about them.
+
+**A directory is refused.** `format.md` 3.1 fixes entry count at exactly 1 in version 1, so a directory can't be represented as a multi-entry relic at all; publishing one means silently tarring it into a single opaque blob that takes class `archive` and is download-only in the first release. "Publish my report folder" would then produce an unrenderable relic and no error. The tool refuses with `source_is_directory` (2.2) and names the fix, so a publisher who genuinely wants the archive creates it themselves and owns the download-only outcome. This is a purely local refusal with no HTTP anywhere in it.
+
+**A non-regular file is refused** with `source_not_regular_file`. A FIFO, socket, or device node is readable and has no stable size, which breaks the declared-size contract in section 3 before it starts.
+
+**No separate display title exists.** `format.md` 3.1 fixes the envelope header's contents as the version, an entry count, and per entry a filename, a declared mimetype, and an offset and length, and says nothing else is in there, with a strict parser that refuses unknown fields. A title would be a new field and therefore a format version bump, which is `format.md`'s call and isn't in its version 1. The optional `filename` override is the whole of the answer: it sets the string that already exists in the envelope, defaults to the basename of `path`, and reaches the recipient as the download name and taskbar label. It stays untrusted display text under `format.md` 3.1 and the tool asserts nothing about it.
+
+**The client pre-checks the cap before requesting a grant**, and it can do it authoritatively because the challenge step in 3.1 returns `size_limit_bytes` and `size_basis` before any grant is requested. The client stats the file, compares, and refuses locally with `local_size_precheck_failed` carrying the same three fields the server would have sent. That turns a wasted grant plus a failed upload into an instant, self-correctable error, using a number that came from the server moments earlier rather than a compiled-in constant that goes stale. The client keeps no cap on disk between invocations, so there's no stale local policy to reason about.
+
+### 1.3 The result shape
+
+Success returns `structuredContent` with seven members, all required:
+
+- **`url`** the full URL including the fragment. Without the fragment the model can't produce a usable link, which is the product.
+- **`relic_id`** the normalized canonical ID, separately. Every operator-facing workflow takes the ID with the fragment already stripped: abuse reports, takedown requests, support tickets. Making a caller slice it out of a URL means somebody eventually slices wrong.
+- **`relic_expires_at`** RFC 3339, UTC, taken from the grant response and never computed locally, because `service.md` section 3 makes the app server's clock authoritative for every TTL-bearing timestamp. A CI job needs this to know whether the link outlives the pipeline that mailed it.
+- **`renderer_class`** the derived class, echoed as disclosure of what was reported.
+- **`filename`** the string written into the envelope header, echoed because the caller may have overridden it.
+- **`report_url`** the stable `/abuse` URL.
+- **`disclosure_url`** the published statement `service.md` section 5 specifies.
+
+**No expiry for the grant, no signed URL, no object length, and no key as a separate field.** The grant's clock is internal to section 3, and a key in its own member is a second copy of something already in `url`.
+
+**The tool returns no `resource_link` content block and no embedded `resource`.** A resource link is "a URI that can be subscribed to or fetched by the client" ([MCP tools](https://modelcontextprotocol.io/specification/2026-07-28/server/tools)), and a client that helpfully fetches it is doing something nobody in this flow asked for. The precise hazard is narrower than it first looks and it still lands on the same rule: under `service.md` section 2, fetching `/{id}` returns a static shell and mints nothing, so a plain fetch doesn't touch the open counter. What isn't safe is a client that renders the link in a real browser engine, or one that follows the shell's own mint request, either of which produces a phantom open against the frame's primary metric. The tool can't tell those clients apart from the safe ones, and a `resource_link` carrying the fragment also hands the key to whatever the client does with links it decides to preview. The URL travels as a string field and as text, and nowhere else.
+
+`service.md` section 5 assigns this document how the disclosure statement gets surfaced before a first publish. **It's surfaced twice: in the tool description, which the client renders and the model reads before it can ever call the tool, and in `disclosure_url` on every success.** The description also carries the transcript consequence in one sentence (section 5), because the description is the only surface guaranteed to be read before a publish happens, never after.
+
+That gives `disclosure_url` and `report_url` two sources, so they get a reconciliation rule before anyone needs one. Both siblings already treat an unreconciled second copy as a defect class: `format.md` 3.6 excludes a value whose two copies could disagree, and `service.md` 2.1 excludes a second copy on the same ground. **The challenge response (3.1) is authoritative for both URLs. The tool description carries a compiled-in default serving only the pre-first-call surface, where no challenge has happened yet, and any disagreement resolves to the challenge.** A stale default in a shipped binary then costs a wrong link on a description nobody has acted on, never a wrong link in a result.
+
+### 1.4 `outputSchema` and `isError`, decided together
+
+These interact, so they're one decision.
+
+**`outputSchema` is declared, strict, with all seven members of 1.3 required. `structuredContent` appears on success only. Every failure returns `isError: true` with no `structuredContent` at all.**
+
+The spec's requirement is conditional, and reading it precisely is what makes this shape legal rather than clever: where an output schema is provided, servers must "provide structured results that conform to this schema" ([MCP tools](https://modelcontextprotocol.io/specification/2026-07-28/server/tools)). It binds the structured results a server provides. It doesn't oblige a server to provide structured results on every call. An error result that carries no structured content provides none, conforms to nothing, and violates nothing.
+
+The alternatives are worse in ways that matter. A permissive schema with a nullable `url` throws away validation on the success path, which is the path a caller depends on, and it invites a client to hand the model a typed object whose URL is null. A conforming object with a null URL is a lie in a typed field. Omitting `outputSchema` entirely loses typing everywhere to buy uniformity on the error path.
+
+Success also returns a text content block carrying the serialized JSON, because the spec asks for it in as many words: "For backwards compatibility, a tool that returns structured content SHOULD also return the serialized JSON in a TextContent block" ([MCP tools](https://modelcontextprotocol.io/specification/2026-07-28/server/tools)).
+
+**Every result this tool returns carries `resultType: "complete"`**, success and failure alike, because the pinned revision puts that member on every `tools/call` result including its own `isError: true` example. A document arguing that result semantics are revision-dependent has to name the member the revision added. The sibling value is `input_required`, where "Servers MAY respond to tools/call with an InputRequiredResult to indicate that additional input is needed before the tool call can be completed" ([MCP tools](https://modelcontextprotocol.io/specification/2026-07-28/server/tools)). **`relic_publish` never returns it.** It elicits nothing: every input it needs arrives in the call, and a missing one is a refusal the model corrects by calling again.
+
+**The rule for which failures are protocol-level and which set `isError: true`:**
+
+The spec names three protocol-error categories, not two, and the split has to be stated against all three ([MCP tools](https://modelcontextprotocol.io/specification/2026-07-28/server/tools)). They are an unknown tool, "Malformed requests" that "fail to satisfy `CallToolRequest` schema", and "Server errors". Protocol errors are scoped to issues "with the request structure itself that models are less likely to be able to fix".
+
+**Protocol-level JSON-RPC errors, and only these:** an unknown tool name, and a call that fails the `CallToolRequest` schema. Both are malformed at the envelope, the tool body never runs for either, and there is nothing in a Relic result shape for them to carry.
+
+**Arguments that satisfy `CallToolRequest` and fail this tool's `inputSchema` set `isError: true`.** That's the placement the spec's own worked example asks for: its tool execution error list includes "Input validation errors (e.g., date in wrong format, value out of range)", which are JSON Schema constraints, and its `isError: true` example is a bad date. The protocol-error bullet is scoped to `CallToolRequest`, the envelope, and never to a tool's own schema. A missing `path` or a `path` that arrived as a number is the single most correctable failure in this contract, and clients "provide tool execution errors to language models to enable self-correction" while they merely may pass protocol errors along. Routing it to JSON-RPC is how a model that forgot one required string gets an error it may never see. It carries `local_invalid_arguments` (2.2).
+
+**The third category, "Server errors", is where this contract knowingly diverges, and it says so rather than pretending the spec scopes it that way.** "Server" there means the MCP server, which here is the publishing binary. The spec files those under protocol errors; Relic returns them as `isError: true` on a normal result. The reason is the asymmetry the spec itself states one paragraph later: clients SHOULD hand tool execution errors to the model and merely MAY hand it protocol errors, so a JSON-RPC error is the shape most likely to reach nobody. A failure inside the binary belonging to no leg carries `local_internal_error`; a failure the app-server leg produced and the client can't classify carries `app_response_unusable` (2.2). Both are terminal, neither is retried, and both give the publisher a code to quote in a report, which a swallowed protocol error does not.
+
+**Everything else sets `isError: true` on a normal result.** Every Group A refusal, every Group B failure, a path that doesn't exist, a network failure mid-upload, a rate limit, a collision. The spec's own category is tool execution errors, which "contain actionable feedback that language models can use to self-correct and retry with adjusted parameters". Leaving this unstated is how an implementer returns a protocol error for a missing file, which the model then can't self-correct from, discarding the entire point of the field-level mapping in section 2.
+
+**The body of every `isError: true` result is the RFC 9457 problem document from section 2, serialized as JSON in a text block.** One shape for both groups. A client that validates results against `outputSchema` must key on `isError` and must not read the absence of `structuredContent` as a validation failure.
+
+### 1.5 Progress notifications
+
+**The tool emits `notifications/progress` for the whole publish, from before the first byte moves through the last.** The first notification goes out at grant time, not at first byte, and notifications continue on a bounded interval for the duration of the upload. Progress is only possible when the caller asked for it: a client "includes a `progressToken` in the request metadata", and a server holding no token has nothing to reference ([MCP progress](https://modelcontextprotocol.io/specification/2026-07-28/basic/utilities/progress)). Notifications "stop after completion", and the server may "Send notifications at whatever frequency they deem appropriate", which is what makes the interval this document's to set rather than the spec's.
+
+**The failure this prevents is an orphaned relic.** Without progress the client aborts the call, the model reports failure to the human, the upload completes anyway, and the result is a relic that consumed publish quota and storage, that nobody holds the URL for, and that sits there until the TTL reaps it. The publisher gets a failure message about a file that published fine.
+
+**The numbers, stated for the transport Relic actually uses.** Claude Code's 60-second time-to-first-byte default and its five-minute idle window are HTTP-side figures, and the publishing client is a local stdio binary. Per the client's own documentation, "Stdio and WebSocket servers have no per-request timer", and the idle window defaults to five minutes for HTTP, SSE, WebSocket, and connector servers "and to 30 minutes for stdio servers". So the pressure is real and weaker than the HTTP case: no first-byte timer at all, and a half-hour of silence before an abort. It isn't absent, because `CLAUDE_CODE_MCP_TOOL_IDLE_TIMEOUT` is user-settable to anything including much lower, because a cap-sized upload on a poor link can genuinely exceed the window, and because the 60-second timer binds immediately if a remote surface ever ships. Design to the tighter figure and the looser one costs nothing.
+
+One property is load-bearing and easy to get backwards: **progress defeats the idle timeout and does not defeat the wall-clock limit.** The per-server `timeout` "is a hard wall-clock limit per tool call, and progress notifications from the server don't extend it" ([Claude Code MCP](https://code.claude.com/docs/en/mcp)). What progress buys is the difference between the documented idle behavior, where "A tool call to an MCP server that sends no response and no progress notification for the idle window aborts with an error instead of waiting for the wall-clock limit", and running to the wall clock. A publish that would exceed the wall-clock limit is not rescued by progress and is bounded by the size cap instead.
+
+**When no progress token is supplied, the server can't keep the call warm and doesn't try.** The orphan risk returns in full, and the mitigation is section 4.7: the client generated the ID and the key before anything left the machine, so the URL exists in the tool's own hands regardless of what happens to the response.
+
+### 1.6 One tool, and why there's no delete tool
+
+**`relic_publish` is the only tool.** Every additional name is another entry in an aggregated namespace and another chance for a model to pick the wrong server (1.1), and the product has nothing else to offer: no accounts, no relic list, no dashboard, no republish.
+
+**A publisher cannot delete their own relic in the first release, and that's what forecloses a delete tool.** The non-goals forbid a dashboard and a relic list rather than a per-relic delete, so this needed deciding rather than assuming. With no accounts, a delete has to be authorized by something the publisher holds, and there are exactly two candidates. Authorizing on anything derivable from the URL means every recipient can delete the relic, which hands a link-holder a destructive capability the publisher never granted and reproduces the burn-after-reading failure the frame ruled out for the first release. Authorizing on a separately stored token means the client keeps durable per-relic state on disk, which is a relic list under another name and which no locked surface provides a home for.
+
+So deletion stays operator-only through `/abuse` (`service.md` section 4), which already works on the ID alone and needs no key. A publisher who wants their own relic gone reports it with its ID. The mandatory TTL bounds the exposure in the meantime, which is why this is deferrable rather than a hole. If a later station adds publisher self-delete, the delete tool becomes specifiable and this section is what it reopens.
+
+## 2. Error mapping, and the two legs the app server is not in
+
+### 2.1 Group A: app-server-originated
+
+Every one of these maps onto a status and code `service.md` already fixed. **This document invents no app-server status, no app-server code, and no field name.**
+
+| Failure | Status | `code` | Named fields the client reads |
+|---|---|---|---|
+| Declared size over cap at grant time | `413` | `size_over_cap` | `size_limit_bytes`, `declared_size_bytes`, `size_basis`, `relic_id` |
+| Publish rate limited | `429` | `publish_rate_limited` | `retry_after_seconds` |
+| Malformed renderer class or client name | `400` | `invalid_publish_metadata` | none |
+| Egress kill switch engaged | `503` | `service_paused` | `retry_after_seconds` |
+| Client-supplied ID fails alphabet, length, or reserved table | `400` | `invalid_relic_id` | `id_validation_failure`, `relic_id` |
+| Grant requested for an ID that already exists | `409` | `relic_id_collision` | `relic_id` |
+| Grant presenting a challenge nonce that expired or was never issued | `409` | `invalid_challenge_nonce` | none |
+| Mint on an ID whose grant is live and whose object hasn't landed | `409` | `relic_not_yet_published` | `retry_after_seconds`, `relic_id` |
+| Grant expired with no object ever landing | `410` | `relic_never_published` | `relic_id` |
+
+**`409 relic_id_collision` is the code the client keys redraw-and-retry on.** `format.md` 1.4 obliges the client to draw a new ID and retry, and `service.md` 1.6 is where that retry hangs. On this code and no other, the client draws three fresh values from the platform CSPRNG and sends a new grant request: a fresh relic ID, a fresh relic key drawn independently of it, and **a fresh idempotency key**. The third is not optional and 4.3 is where the trace lives; reusing the key turns the redraw into a replay of the collision it's trying to escape. It never surfaces a collision to the model as a failure on the first occurrence, because there's nothing for a model to correct. It does surface one after the retry cap (4.6), because repeated collisions under full bearer-token entropy mean a broken RNG and should fail loudly instead of spinning.
+
+The last two rows are diagnostic from this client's seat rather than steps in its normal flow. Completion is discovered lazily at first mint (4.1), so the publishing client doesn't mint, and `relic_not_yet_published` and `relic_never_published` are what a publisher sees in the viewer when they open their own link too early or after an upload that never landed. They're listed because a publishing client that retries into either of them is broken, and because 4.7 tells a publisher which one to expect.
+
+**The extraction rule: the client reads `code` and the named extension members. It never reads the human prose.** RFC 9457 says so about its own member: "Consumers SHOULD NOT parse the "detail" member for information" ([RFC 9457](https://www.rfc-editor.org/rfc/rfc9457.html)). A client that string-matches `detail` or `title` breaks on the first copy edit. The client also ignores members it doesn't recognize, which the same RFC requires: "Clients consuming problem details MUST ignore any such extensions that they don't recognize". Forward compatibility is free and this is where it's spent.
+
+Two fields are load-bearing and get named twice for that reason. **A size rejection surfaces both the cap and the actual size**, through `size_limit_bytes` and `declared_size_bytes`, with `size_basis` saying which side of the encryption the numbers describe, because `format.md` 3.11 requires the published number be a plaintext number a user can check with `ls` while `shape` picks the enforced side. A message with one number and not the other tells a publisher they're over a limit they can't compare against. **A rate limit surfaces retry-after**, through `retry_after_seconds`, and the client passes the number through untouched.
+
+**The client never sleeps through a rate limit inside a tool call.** It returns `publish_rate_limited` with `retry_after_seconds` immediately and lets the model decide. Sleeping burns the idle window described in 1.5 and manufactures the orphan that section exists to prevent.
+
+**The degraded edge is handled the way `service.md` 1.5 specifies, not reinterpreted.** Where the deployed edge can't produce a problem document, a bare `429` on the publish path reads as `publish_rate_limited` and a bare `503` reads as `service_paused`. The client implements that fallback and treats any other bare status with no problem document as `upload_storage_error` if it came from the storage leg and as `app_response_unusable` (2.2) if it came from the challenge or grant leg. **Every unmatched response lands on a named code, and naming the outcome without naming a code would leave a hole.** A bare `500`, `502`, or `504` from the edge on the challenge or grant leg would otherwise produce `isError: true` with no `code` at all, which the extraction rule above cannot read, leaving the client holding an error whose only content is prose it's forbidden to parse.
+
+### 2.2 Group B: every failure with no app-server status to mirror
+
+Group B is the complement of Group A, so its membership test is a negative one: **no app-server status the client can read.** That covers two situations rather than one. Most of it is the legs the app server is structurally not in, the local read path and the client-to-storage upload path (`docs/preconditions.md` section 4), where no status from it exists at all. The rest is the app-server leg itself, where a status may well have arrived and the client still can't act on it, because 2.1's extraction rule reads `code` and there wasn't one it recognized. **Either way the code is this document's to define**, because a client-side classification is not an app-server status and only Group A's table is `service.md`'s.
+
+Group B uses the same RFC 9457 shape as Group A, served as `application/problem+json` semantics inside the text block of an `isError: true` result, with `type` formed the same way `service.md` 1.5 forms it, the problems URL concatenated with `code`.
+
+**The `status` member is omitted on every Group B problem document**, including the ones written after a real HTTP response, because the document is the client's own and there's no app-server status it is entitled to speak in. RFC 9457 permits the omission directly: "The "status" member, if present, is only advisory". Observed statuses ride extension members instead, `storage_status` for the storage leg and `app_status` for the app-server leg, so nobody mistakes a GCS or edge response code for an app-server one this contract endorses.
+
+Every code names its leg in its prefix. `source_*` is the local read path with no network at all, `local_*` is a client-side refusal or failure with no leg, `app_*` is the client-to-app-server leg covering both messages of 3.1, and `upload_*` is the client-to-storage leg. An `app_*` code names a client-side classification and never an app-server status, so it touches nothing in `service.md`'s taxonomy.
+
+| `code` | When | Extension members |
+|---|---|---|
+| `source_not_found` | `path` doesn't resolve to an existing file | `path` |
+| `source_unreadable` | Exists, can't be opened or read | `path` |
+| `source_is_directory` | `path` is a directory (1.2) | `path` |
+| `source_not_regular_file` | FIFO, socket, or device node (1.2) | `path` |
+| `source_changed_during_read` | Size or mtime moved between the stat and the end of the read | `path`, `declared_size_bytes` |
+| `local_invalid_arguments` | Arguments satisfy `CallToolRequest` and fail this tool's `inputSchema` (1.4) | `schema_path` |
+| `local_entropy_unavailable` | The platform CSPRNG failed or is unavailable | none |
+| `local_size_precheck_failed` | Plaintext size exceeds the cap the challenge returned (1.2) | `size_limit_bytes`, `declared_size_bytes`, `size_basis` |
+| `local_internal_error` | A failure inside the binary belonging to no leg (1.4) | none |
+| `app_response_unusable` | The challenge or grant leg returned something the client cannot classify | `app_status`, `leg`, `app_code` |
+| `upload_size_refused` | The storage leg refused the body against the grant's signed size constraint | `size_limit_bytes`, `declared_size_bytes`, `size_basis`, `storage_status`, `relic_id` |
+| `upload_grant_expired` | The grant's clock ran out mid-upload | `storage_status`, `relic_id` |
+| `upload_network_failed` | Transport failure on the upload leg, terminal after retries | `relic_id`, `url`, `completion` |
+| `upload_storage_error` | Any other storage-leg error | `storage_status`, `relic_id`, `url`, `completion` |
+| `upload_retries_exhausted` | The retry cap was reached | `attempts`, `last_code`, `relic_id`, `url`, `completion` |
+
+None of these collides with the codes fixed in `service.md` 1.1 and 1.6, and the prefix discipline keeps it that way as either side grows. No `service.md` code carries a `source_`, `local_`, `app_`, or `upload_` prefix, and none of this document's codes carries a `relic_`, `size_`, `publish_`, `mint_`, `download_`, `service_`, or `invalid_` one.
+
+**`app_response_unusable` is the terminal classification for the app-server leg, and it exists so no response can arrive with nothing the client may read.** It covers four cases: a bare status with no problem document, once 2.1's `429` and `503` fallbacks have had their turn; a response body that doesn't parse; a well-formed problem document whose `code` this client doesn't recognize, which is the case RFC 9457's ignore-unknown-members rule never reaches, because it governs members rather than the value of `code`; and a grant response whose echoed `relic_id` is not the one the client declared (4.3). `app_status` carries the HTTP status where one exists, `leg` is `challenge` or `grant`, and `app_code` carries the unrecognized code when one arrived. The client never retries into it, since an unclassifiable response is not a transient by any evidence the client holds. **A newer server code therefore degrades to a named terminal failure rather than to silence**, which is the property the extraction rule needs and the reason this code is worth its row.
+
+**`local_size_precheck_failed`, `size_over_cap`, and `upload_size_refused` are three different refusals and are named separately on purpose.** The first is the client refusing before it asks. The second is the app server refusing to issue a grant for a declared size over the cap, which is Group A and `service.md`'s. The third is the storage leg refusing bytes against the constraint signed into the grant, which happens after a grant was legitimately issued and means either the file grew under the client or the client lied about its size. Conflating them produces a support answer that's wrong two thirds of the time, and conflating the second and third in particular hides the case where the enforcement that the preconditions call structural is the thing that fired.
+
+**`local_entropy_unavailable` never degrades.** `format.md` 1.3 puts the ID and the key on the platform CSPRNG and forbids `Math.random`. If the CSPRNG is unavailable the publish fails; it does not fall back.
+
+**Three codes carry `completion`.** See 4.7.
+
+### 2.3 The scope of the 401/403 rule
+
+`docs/preconditions.md` locks rate limiting to `429`, never `401` or `403`, because "Claude Code marks a remote server as needing authentication when the server responds with `401 Unauthorized` or `403 Forbidden`" ([Claude Code MCP](https://code.claude.com/docs/en/mcp)), and `service.md` 1.1 widens it to the whole public app-server surface. Stated exactly: it's a Claude Code MCP **client** behavior, and stdio carries no HTTP status at all, so on the local binary this rule binds nothing directly. It binds immediately on any future remote MCP surface.
+
+It's obeyed everywhere anyway, and here that's not a gesture. **The storage leg genuinely returns `403`**, on an expired signature or a mismatched signed header, and the publishing client is the thing that decides what a model sees when it does. A raw `403` surfaced upward is exactly the signal that makes a client offer to sign in against an authorization server that doesn't exist. So a storage `403` maps to `upload_grant_expired` or `upload_storage_error`, with the original in `storage_status`, and no Relic result ever presents a bare `401` or `403` to a client as its own status. The second reason is `service.md`'s and it holds here too: a rule scoped to one condition gets violated by the next author who adds a different one.
+
+## 3. The grant hop
+
+### 3.1 Three messages, always
+
+1. **Challenge.** The client asks for a challenge. The server returns a challenge nonce, a difficulty parameter, the challenge's expiry, and the publish policy the client needs before committing to anything: `size_limit_bytes`, `size_basis`, the abuse URL, and the disclosure URL. Nothing about the file crosses in this message and no ID exists yet.
+2. **Grant.** The client sends the challenge solution plus everything in 3.2, and gets a grant or a Group A refusal.
+3. **Upload.** The client sends ciphertext straight to storage under the grant. The app server is not in this leg.
+
+**The challenge round trip is unconditional, and its strongest justification has nothing to do with proof of work.** It's a policy round trip that happens to carry a nonce. Without it the client cannot pre-check the cap authoritatively: message 1 returns `size_limit_bytes` and `size_basis`, and 1.2's local refusal is built on numbers that arrived seconds earlier instead of a compiled-in constant that goes stale the first time the cap moves. Delete proof of work from the design entirely and the round trip still ships, unchanged, for that reason alone. The objection that a zero-difficulty challenge is unexercised ceremony therefore has nothing to attach to, because the message does real work in the first release.
+
+What's left is a difficulty value, and it is deliberately not open as a protocol question. A challenge-then-grant flow is a different contract from a single grant call, so leaving proof of work open would mean `shape` picks one round trip and PoW becomes an unaddable breaking change. Making the round trip conditional is the same trap wearing a disguise, because the conditional branch is the one nobody exercises. **In the first release the difficulty is zero, the solution member is present and unvalidated, and turning it on is a tuning change rather than a protocol change.**
+
+Two consequences get named rather than absorbed, and they fall on different sides of the difficulty decision.
+
+**The solution refusal is conditional.** While difficulty is zero there's no solution to refuse, so no code is needed. A non-zero difficulty creates a grant-time refusal that `service.md` doesn't have a code for, and that code is `service.md`'s to add, not this document's to invent. It travels with the routed decision in section 6.
+
+**The nonce refusal is unconditional and it's needed at launch.** The challenge carries an expiry, so a grant presenting an expired nonce, or a nonce the server never issued, has to be refused at grant time whatever the difficulty is. The alternative is that the nonce goes unvalidated, which makes the expiry decorative and the nonce replayable, and which is what would actually reduce the round trip to ceremony. `service.md` 1.6 carries it as `409 invalid_challenge_nonce`, one code for both cases, and it ships in the first release rather than waiting on a difficulty value. **The client keys a fresh challenge on that code**, discarding the dead nonce, taking a new challenge, and resubmitting the grant (4.6). An uncoded refusal here is one the client cannot act on: 2.1's extraction rule reads `code`, so an unrecognized or absent one lands in `app_response_unusable`, which 4.6 never retries, and the publisher takes a terminal failure where a re-challenge fixes it.
+
+The challenge is subject to the publish rate limiter and the kill switch, so its only refusals are `429 publish_rate_limited` and `503 service_paused`, both of which already exist. Rate limiting it is not optional: an unlimited challenge endpoint is a free policy oracle and a free load surface, and the spec makes rate limiting a server MUST, listing "Rate limit tool invocations" among the requirements ([MCP tools](https://modelcontextprotocol.io/specification/2026-07-28/server/tools)).
+
+### 3.2 What the client declares
+
+- **`relic_id`**, generated client-side before the grant request per `format.md` 1.3, drawn from the platform CSPRNG independently of the key.
+- **`declared_size_bytes` with `size_basis` of `plaintext`.** The client always declares the plaintext number. It's the number it knows exactly, having just stat'd the file, and it's the number `format.md` 3.11 fixes as the one a user can check with `ls`. The server converts to the enforced side when it needs to. Sending the ciphertext number instead would make the grant-time refusal compare against a figure the publisher can't reproduce.
+- **`renderer_class`**, one of the frame's seven values, derived by the binary per 1.2.
+- **`client_name`** and **`client_version`**, as two members.
+- **`idempotency_key`**, per 4.3.
+- **The challenge nonce and solution**, per 3.1.
+
+**Nothing else crosses.** `format.md` 3.2 bars anything content-descriptive from the publish request, and names this as the most likely quiet frame violation in the build: the filename and the declared mimetype live in the encrypted envelope header and nowhere else, and putting either in the grant request is the obvious way to make a taskbar show a name early. The assertion is directly checkable, because the publish request body is inspectable in full.
+
+**`client_version` is a judgment call and gets stated as one.** `format.md` section 5 says nothing finer than the seven-value class and the client name crosses to the server, and a version string is a third thing.
+
+That sentence is a content-leakage bar rather than a two-item whitelist, and a sibling settles it without any argument from this document. `service.md` 1.5 fixes `declared_size_bytes` as a named extension member on `size_over_cap`, and the server can only echo that number because the client declared it in the grant request. So a decided sibling already has a third value crossing, and it crosses because it describes the request rather than the content. `format.md` 3.2 names the test the bar was written for, that neither the publish request body nor the object's custom metadata carries anything content-descriptive, and a version describes the client. It clears the bar on the bar's own test.
+
+It's sent for one reason, and the reason is field support: a distribution with no versions can't distinguish a client that predates a fix from one that carries it, which turns every field report into guesswork and every rollout into an unmeasurable one. It is not evidence for the frame's second supporting condition, which asks whether the distribution includes headless, CI, and non-Claude clients, and whose stated remedy is the client name rather than a version. Claiming it there would be borrowing a warrant the field doesn't carry. The cost is real and small: a version narrows a publisher's fingerprint slightly, alongside the IP and timestamp the preconditions already retain.
+
+### 3.3 No content hash, and why the two purposes must stay apart
+
+**The grant request carries no content hash.**
+
+For blocklist purposes it's foreclosed by the preconditions: the hash is computed over the object after it lands, there is no refusal count because the server never sees the upload stream, and the object doesn't exist when the grant is minted. Sending one at grant time reintroduces exactly the door-check the preconditions ruled out, and it would buy nothing, because `format.md` 3.10 gives every relic a fresh key, so the same plaintext produces entirely different ciphertext on every publish and the hash matches nothing.
+
+For idempotency it's the wrong instrument for the same reason. A content hash conflates "the same bytes" with "the same request", and under fresh per-relic keys the ciphertext isn't stable across the very retries idempotency exists to make safe. Idempotency gets a dedicated key (4.3). Conflating the two purposes in one field is how a design ends up with a door-check nobody voted for.
+
+### 3.4 Two clocks
+
+**Grant expiry and relic TTL are separate clocks, both set by the app server, both returned in the grant response.** Collapsing them kills slow uploads at the TTL boundary, since a grant that lives until the TTL ends produces relics that expire the moment they finish uploading. The grant expiry is sized to a slow upload of a cap-sized object and is always shorter than the TTL. `relic_expires_at` is what reaches the caller in 1.3; `grant_expires_at` stays internal.
+
+**Grant expiry has to be enforced on the storage leg, because the app server isn't in it.** That's a constraint on the grant shape rather than a preference. Under a signed-URL shape, the signature's own expiry does it, bounded above because "The longest expiration value is 604800 seconds (7 days)" ([signed URLs](https://docs.cloud.google.com/storage/docs/access-control/signed-urls)). Under a resumable session it doesn't come free: "A session URI expires after one week but can be cancelled prior to expiring" ([resumable uploads](https://docs.cloud.google.com/storage/docs/resumable-uploads)), so a shape choosing that form either accepts a one-week upload window or cancels the session at grant expiry.
+
+The invariant that must hold under any of them: **no object may land for a relic ID after the app server has declared that grant expired.** `service.md` case 6 makes such an ID permanently unservable, so a late object is storage nobody can ever reach and telemetry that reads as a relic which never landed while the bytes sit there being billed.
+
+**Cancellation isn't a credentials question, it's a possession question, and that's what separates the resumable branches.** Cancelling is a DELETE against the session URI, and "SESSION_URI is the value returned in the Location header when you initiated the resumable upload" ([performing resumable uploads](https://docs.cloud.google.com/storage/docs/performing-resumable-uploads)). Whoever initiates holds it. Server-side initiation puts it in the app server's hands and the remedy works. **Client-side initiation doesn't**: the app server never sees that URI, none of 3.1's three messages carries it back, and no credential the server already holds substitutes for a value it was never told. So the invariant fails on that branch and the failure is the expensive one the paragraph above describes.
+
+That makes the branches unequal, and `shape` gets told so rather than discovering it. **A POST policy document and a server-initiated resumable session can satisfy the invariant. Client-side initiation cannot, as the flow stands.** Picking it obliges a message returning the session URI to the app server before the first data byte moves, which makes 3.1 four messages on that branch alone, and it obliges accepting what that message hands over: "a session URI can be used by anyone in possession of it to upload data" ([signed URLs](https://docs.cloud.google.com/storage/docs/access-control/signed-urls)), so the return trip is a write credential in flight and gets treated as one. Without that message the branch isn't available.
+
+The trade behind it gets named too, because `shape` is otherwise choosing blind. Client-side initiation exists for a reason the same page states: "resumable uploads are pinned to the region of the initial request", so server-side initiation pins every publisher's upload to the app server's region regardless of where they are. The choice is publisher-region upload performance against an enforceable grant expiry, and those are not two spellings of the same shape.
+
+### 3.5 The response never contains the fragment
+
+**The grant response carries no key, no fragment, and no assembled URL.** It carries the echoed `relic_id`, the upload target and its constraints, `grant_expires_at`, and `relic_expires_at`. The client assembles `https://<relic-domain>/{id}#{secret}` locally from the domain, the ID, and the key that never left the process.
+
+Named as a standing guard, because the pressure here is a convenience feature rather than an attack: **no endpoint may ever accept a key in order to build or shorten a share URL.** The frame concedes that the decrypting JavaScript is served by the party the claim is made against, so that half of zero-knowledge rests on operator intent. The server never receiving the key is the half that's structural, and a share-URL builder trades the structural half for a nicety. It's drift routing back to `frame`, never a `shape` decision.
+
+### 3.6 The grant carries a signed size constraint
+
+**The cap is enforced by a constraint signed into the grant, never by the client.** `docs/preconditions.md` requires that an oversized object cannot come into existence, and says in as many words that this holds only for a grant shape carrying a signed size constraint. A plain signed PUT doesn't bound the body length, so choosing the convenient shape turns the cap into a client-side suggestion that looks present in the code and is absent on the wire.
+
+**Exactly one construction has documented enforcement. The other two are candidates whose enforcement is unverified, and they get labelled that way rather than counted as equals.** The distinction is the whole load here, because the preconditions rest the cap's "cannot come into existence" on the constraint being real on the wire, and a reading that treats a candidate as documented is how that claim goes false while looking satisfied.
+
+- **A POST policy document. Documented.** Its conditions are "An array of conditions that every upload must satisfy", and one of them is `content-length-range`, which "Specifies a range of acceptable values that can be used in the Content-Length field" ([signatures](https://docs.cloud.google.com/storage/docs/authentication/signatures)). Conditions every upload must satisfy is enforcement stated as enforcement. It's a single POST with no resume story, so it fails 4.4 outright.
+- **A resumable session. Undocumented on this axis.** Total size can be declared at initiation, where `X-Upload-Content-Length` sits among "Optional headers that you can add to the request" ([performing resumable uploads](https://docs.cloud.google.com/storage/docs/performing-resumable-uploads)). Optional, at initiation, and nothing on that page binds it against the bytes actually persisted. The data leg is weaker than the initiation leg suggests under either form of initiation, because "after the request to initiate the upload, subsequent PUT requests to upload the object data use a session URI, which acts as an authentication token" and "This means that PUT requests don't use any signed URLs", and that token is bearer: "a session URI can be used by anyone in possession of it to upload data" ([signed URLs](https://docs.cloud.google.com/storage/docs/access-control/signed-urls)). This is the only candidate that satisfies 4.4.
+- **A signed PUT with `Content-Length` among the signed headers. A candidate, and omitting it would understate the option set.** `X-Goog-SignedHeaders` names "Headers that had to be included as part of any request that used the signed URL" ([signed URLs](https://docs.cloud.google.com/storage/docs/access-control/signed-urls)), and the run's recorded hosting knowledge is that signing `content-length` works, because a mismatch breaks the signature. This is not the plain signed PUT the paragraph above rules out; plain means the length is unsigned and therefore unbounded. It has no resume story either, so it doesn't dissolve the conflict, and it is listed so `shape` reconciles three candidates instead of two.
+
+Initiation for the resumable candidate can be server-side or client-side under a signed URL: "While you can create and use a signed URL for the initial POST request to initiate the upload, in most cases the server can initiate the resumable upload instead", with the caveat that "resumable uploads are pinned to the region of the initial request" ([signed URLs](https://docs.cloud.google.com/storage/docs/access-control/signed-urls)). Both of those sentences live on the signed-urls page rather than the resumable-upload pages, and 3.4 is where that choice gets decided, because it's the one that bears on grant expiry.
+
+So the conflict is real and no closer reading resolves it: the construction with documented size enforcement has no resume, and the construction with resume has no documented size enforcement. Reconciling that is `shape`'s (section 6).
+
+**The check is the same under every candidate and it does not mean the same thing under each.** Upload a body larger than the constraint under a real grant and assert the storage leg refuses it. **Under the POST policy document it confirms documented behavior**, so it's a regression test and it belongs at launch. **Under the resumable branch and the signed-header branch it's the open empirical question those branches' viability turns on**, so it runs against a prototype grant before the shape is committed, not after. A negative result there eliminates a branch rather than filing a bug, and finding that out at launch means finding it out too late.
+
+**The constraint is computed against the cap rather than the declared size.** The declared size's job is the grant-time `413` in 2.1; the signed constraint's job is bounding what can exist. Where enforcement lands on ciphertext, the server computes the bound with `format.md` 3.11's rule, taking the maximum over every format version it still accepts so a client on an older framing with slightly greater overhead isn't refused for a file that's under the published plaintext cap.
+
+### 3.7 `ifGenerationMatch: 0` on the grant
+
+**Every grant carries the precondition that the object does not already exist.** In Cloud Storage terms a generation-match precondition of zero means "the request only proceeds if no object with the specified name exists in the bucket or if there are only noncurrent versions of the object in the bucket", and "If there is a live version with the specified name, the request fails with a status code of 412 Precondition Failed" ([request preconditions](https://docs.cloud.google.com/storage/docs/request-preconditions)). It's the right instrument for exactly this: "The 0 value should only be used when writing object data: no other requests can succeed with a 0 precondition."
+
+Without it, anyone holding the grant can replace the ciphertext under a URL that's already been shared, and the recipient who clicks a link they were sent gets whatever was substituted, decrypting cleanly under the same key if the substituted object was encrypted with it. **The locked republish non-goal supplies this for free.** A new relic is a new URL, so no legitimate flow ever overwrites, so the precondition costs nothing and closes the substitution completely.
+
+It also bounds a residual `format.md` 3.5 leaves open. The container's header sits outside every AEAD tag, so anyone who can write the object can mis-frame it or change the derived key, which is denial of service rather than forgery. The size of that residual is entirely "who can write the object", and this precondition holds it at one successful write.
+
+### 3.8 The quota is charged at grant-mint
+
+**The per-IP publish quota is charged when the grant is issued, never at upload completion.** Charging at completion lets an attacker mint unlimited grants for free, and the app server can't observe completion anyway without a separate data source, since it sees the mint and whether an object materialized, never the upload itself.
+
+The cost is that an honest publisher whose upload fails still spent quota, and a naive retry that re-mints spends again. That's precisely what the idempotency key fixes: a retried grant under the same key returns the original grant and charges once (4.3). The two decisions only work together, and charging at mint without idempotency would make a flaky network into a self-inflicted quota ban.
+
+## 4. Completion, retry, and failure
+
+### 4.1 Lazy discovery at first mint confirms completion
+
+**Nothing confirms completion at publish time. The server learns whether an object landed at the first mint, and not before.**
+
+The alternatives both cost more than they return. An explicit completion call strands a relic whose call failed: the object landed, the confirmation didn't, and the server now believes nothing landed for an ID that's serving. A storage-side finalize notification adds an infrastructure dependency and an eventually-consistent window with no name, which is the shape of gap that later gets papered over with a retry loop. Lazy discovery is free, rides the mint the viewer performs anyway, and records telemetry for relics that never landed, since the server holds a grant record with no object.
+
+**The honest limit, and it matters for anyone reading the number.** The server's knowledge of "did this land" is only as fresh as the first mint. A relic nobody ever opens is indistinguishable from a relic that never landed, so the count of never-landed relics is a lagging figure that overstates until someone tries each one. Nobody downstream reads it as a real-time upload failure rate.
+
+### 4.2 Grants that are never used
+
+**A relic ID with no object is a normal, expected state with a stated refusal. It is never a `500`.** `service.md` 1.6 and case 6 already give it both codes: `409 relic_not_yet_published` while the grant is live and the object hasn't landed, carrying `retry_after_seconds`, and `410 relic_never_published` once the grant expired with nothing there. The publishing client treats neither as a bug and retries into neither.
+
+### 4.3 Idempotency
+
+**Every publish carries an `Idempotency-Key` on the grant request. The key is drawn from the platform CSPRNG at the same moment as the relic ID it accompanies, and reused unchanged on every retry of that same grant request.**
+
+Without one, a retried grant mints a second grant, a second ID, and a second telemetry row, and under 3.8 it charges quota twice. Stripe is the prior art and its documented behavior is the model: idempotency works by "saving the resulting status code and body of the first request made for any given idempotency key, regardless of whether it succeeds or fails", and "Subsequent requests with the same key return the same result, including 500 errors" ([Stripe](https://docs.stripe.com/api/idempotent_requests)). Keys are client-generated, and for entropy "we suggest using V4 UUIDs, or another random string with enough entropy to avoid collisions."
+
+Four rules make it work here instead of merely resembling the prior art.
+
+**The server matches the idempotency key before it checks whether the ID exists.** Otherwise a client's own retry hits `409 relic_id_collision` and follows 2.1's instruction to draw a new ID, which is exactly wrong for a duplicate of your own request. Key match wins and returns the stored response.
+
+**A collision redraw draws a fresh idempotency key alongside the fresh ID. Without this rule the one above it strangles the redraw mechanism 2.1 exists to protect, and the two are only compatible because this rule is here.** Trace it with the key held constant. A grant under key K declaring ID A collides. The server stores `409 relic_id_collision` under K, because results are stored regardless of whether they succeed or fail. The client draws a fresh ID B and retries under K. Key match wins before the existence check, so the server replays the stored `409` for A. The client draws C, gets the same replay, and spins until 4.6's cap fires and reports a broken RNG that is working perfectly. **A redraw is a different request rather than a retry of the failed one**: different ID, different object path, different grant. A fresh key is what makes that true on the wire, and it costs one CSPRNG draw the client is already making beside the ID. It charges quota again under 3.8, which is the correct outcome, because a distinct ID taking a distinct grant is exactly what quota counts, and 4.6's cap bounds how many a genuinely broken RNG can burn.
+
+The other available fix, declining to store refused grants under the key, is worse and gets rejected on the record. It contradicts the Stripe behavior quoted above as the model, and it would mean a client's retry after a real `413` re-executes the grant instead of replaying its refusal, which is the case idempotency exists to make cheap.
+
+**A duplicate arriving while the original is still executing serializes on the key and gets the stored response when it exists.** It does not get a distinct in-flight status. The cost is that the second request holds a connection for the remainder of the first, bounded by the server's own request timeout, and if it times out the client retries with the same key. **This is a deliberate divergence, and the reason is not that the prior art is silent.** Stripe's error table names a status for exactly this case: `409`, "Conflict", "The request conflicts with another request (perhaps due to using the same idempotent key)." What Stripe declines to do is store the outcome, since on a conflict with a concurrently executing request it does not "save the idempotent result because no API endpoint initiates the execution", and "You can retry these requests." Relic diverges on the status alone, because `service.md` owns the app-server status taxonomy and has no in-flight code in it, so adopting the prior art here would mean inventing one. The routing consequence takes the same shape 3.1 gives the PoW code: if a later station wants a distinct in-flight status, that code is `service.md`'s to add and never this document's.
+
+**Stripe carries a third idempotency rule, and Relic enforces its effect from the client side because the server side would need a code it may not invent.** There, the idempotency layer "compares incoming parameters to those of the original request" and errors when they differ, "to prevent accidental misuse". Something has to sit in that position, because key-match-first has a live failure without it: a client reusing a key across a genuinely new publish intent receives the grant for the *old* ID, and 4.5 makes that reachable, since a publish that exhausts its retries and is invoked again is a new relic. It would then upload ciphertext encrypted under the new key to the old object path. **The client compares the echoed `relic_id` in the grant response (3.5) against the one it declared and refuses any mismatch with `app_response_unusable`, before a byte moves.** That catches the same defect at the same moment, it needs no app-server refusal status, and the header rule above makes the defect a bug rather than an accident, since a key drawn fresh from the CSPRNG beside each ID cannot wander across intents on its own.
+
+**The key never derives from the relic key or the relic ID.** Stripe's own guidance is the general form of the rule: "Avoid using sensitive data (for example, email addresses or personal identifiers) as idempotency keys." Deriving it from the relic key would hand the server a value computed from the one secret it must never hold.
+
+**Idempotency scopes to the grant hop only.** The upload leg is idempotent by construction under 3.7 plus 4.4.
+
+### 4.4 Retry safety on the upload leg
+
+**The grant shape must support resuming an interrupted upload from the byte where it stopped.** This is a requirement on `shape`'s choice in 3.6, and it's the requirement that makes the choice hard: of the three candidates there, only the resumable session satisfies it, and it's the one whose size enforcement is undocumented. The POST policy document and the signed-header PUT both restart at zero.
+
+A resumable session has the property outright. On a status check "the 308 response has a Range header, which specifies which bytes Cloud Storage has persisted so far", or, when nothing persisted, "If Cloud Storage has not yet persisted any bytes, the 308 response does not have a Range header." Overlap is safe: "Cloud Storage ignores any bytes you send at an offset that Cloud Storage has already persisted" ([performing resumable uploads](https://docs.cloud.google.com/storage/docs/performing-resumable-uploads)).
+
+**A plain signed PUT has no equivalent, so every retry restarts at zero.** On a cap-sized object over a flaky link that doubles or triples egress against a cost precondition the preconditions already describe as unbounded on the global side, and it converts one bad connection into repeated full-size transfers.
+
+### 4.5 A retry never re-encrypts, and why that isn't a preference
+
+**The ciphertext is produced exactly once, streamed into a temporary file, and every retry resumes that same immutable artifact under the same key.** No retry path ever re-runs the encryptor.
+
+Re-encrypting means a fresh key, because `format.md` 3.10 and RFC 8188 §4.3 require one: the framing uses a fixed nonce progression, so "a new content-encryption key is needed for every application of the content coding" ([RFC 8188](https://www.rfc-editor.org/rfc/rfc8188.html)). A fresh key is a different fragment, so any URL already emitted is dead, including one a model already handed to a human.
+
+Resuming under the same key is therefore the only option, and it carries the sharp edge. **The record sequence must continue at the correct index.** The nonce isn't independent of position: "The result is combined with the record sequence number -- using exclusive or -- to produce the nonce." Restarting the sequence mid-object under one key reproduces nonces that key has already used, and the base rule is stated plainly one section later: "Encrypting different plaintext with the same content-encryption key and nonce in AES-GCM is not safe".
+
+**This is the catastrophic case rather than a degraded mode.** "Repeated use of the same nonce under the same key causes most ciphers to fail catastrophically", and under AES-GCM specifically it leaks the authentication key, "allowing an attacker to perpetrate chosen ciphertext attacks including message forgeries and even potentially full plaintext recovery" ([nonce reuse](https://github.com/miscreant/meta/wiki/Nonce-Reuse-Misuse-Resistance)). A partial upload that resumes with the sequence restarted doesn't produce a corrupt relic. It produces a relic whose encryption is broken.
+
+Encrypting once to a temp file is what removes this from the retry path entirely. Sequence correctness becomes a property of a finished file and a byte offset rather than a property of retry logic under network failure, which is the code path least likely to be exercised in testing and most likely to be edited later.
+
+**A publish that exhausts its retries and is invoked again is a new relic**: new ID, new key, new ciphertext, new URL. The previous ID and key are never reused.
+
+### 4.6 The retry cap
+
+**Retries are capped, with exponential backoff and jitter, and the count is bounded per publish rather than per leg.** Uncapped retries turn a flaky network into a self-inflicted rate-limit ban, and under 3.8 into a self-inflicted quota ban. Reaching the cap terminates with `upload_retries_exhausted`, carrying `attempts` and `last_code` so the failure names which underlying error kept recurring.
+
+Retries apply to transport-level failures and storage-leg `5xx` responses. They never apply to a `429` from the app server (2.1), and they never apply to any Group A refusal, all of which are decisions rather than transients. They never apply to `app_response_unusable`, which is terminal by construction (2.2).
+
+**Collision redraws are bounded by the same counter and they are not retries.** Each one is a fresh request under a fresh ID and a fresh idempotency key (4.3), so what they share with a retry is the budget rather than the request identity. The counter is shared on purpose: it's the thing that turns a broken RNG into a loud, bounded failure instead of an infinite loop, which is what 2.1 asks for. Nothing about that shared budget licenses reusing the key, and 4.3 is where that gets said in full. The cap's value and the backoff bounds are `shape`'s (section 6).
+
+**A re-challenge on `invalid_challenge_nonce` is bounded by that same counter and it isn't a retry either.** The client discards the dead nonce, takes a fresh challenge, and resubmits the grant under the relic ID it already drew, which was refused rather than granted and is therefore unspent. It draws a fresh idempotency key, for the reason 4.3 gives about redraws: the refusal is stored under the old key, so resubmitting under it replays that refusal instead of reaching the server's validation at all. Retrying the grant unchanged is the one move that cannot work, since the nonce the server just rejected is the nonce it would be asked to accept again. Nothing is charged for the round trip, because 3.8 charges quota when a grant is issued and this one wasn't.
+
+### 4.7 A lost confirmation is a non-event, and the tool says only what it knows
+
+**`format.md` 1.3 put ID generation on the client precisely so this wouldn't be a failure mode.** The ID and the key exist on the publishing machine before anything leaves it, so the client can reconstruct the full URL from state it already holds no matter what happens to any response. That's the whole reason generation sits there, and it's why a lost grant response or a lost upload response costs nothing structural.
+
+Two honesty rules bound what the tool may claim:
+
+**The tool never reports success on a response it did not receive.** A completed transfer is not confirmed by the absence of an error.
+
+**The tool never reports failure in language implying nothing was uploaded when it cannot know that.** For `upload_network_failed`, `upload_storage_error`, and `upload_retries_exhausted`, whether the object landed is genuinely unknown from the client's seat.
+
+So those three codes carry **`completion: "unknown"`** and, with it, **`relic_id` and `url`**. Emitting the URL on a failure is a deliberate trade and it goes the way it does because the alternative is worse. The key exists only in the tool's memory; discarding it on an ambiguous failure means that if the object did land, the ciphertext sits in storage consuming quota and egress budget until the TTL reaps it, permanently unreadable by anyone including the publisher. That's a worse orphan than the one 1.5 is about. Emitting the URL costs nothing new in transcript exposure, because a successful publish puts the same key in the same transcript, and it gives the publisher a link to test and an ID to hand the operator for deletion.
+
+**The objection, that this may hand a human a dead link, is already answered by a sibling rather than merely outweighed.** `service.md` 1.6 gives an ID whose grant is live and whose object hasn't landed `409 relic_not_yet_published` with `retry_after_seconds`, its case 6 gives an ID whose grant expired with nothing there `410 relic_never_published`, and 1.6 fixes the viewer wording: the relic is still uploading, never anything that reads as a dead link. So a link emitted under `completion: "unknown"` renders as a specific labeled state on Relic's own viewer, either still uploading or never published, and both tell the publisher what actually happened. The dead link the objection is about doesn't exist here.
+
+**The URL on a failure lives in the problem document, never in `structuredContent`**, consistent with 1.4. No typed field ever carries a URL that might not resolve, and the result text says plainly that the upload may not have completed and the link may not work.
+
+Every other failure carries no URL and none is emitted: `source_*` and `local_*` never reached the network, and every Group A refusal happened before a byte moved.
+
+### 4.8 Crash safety
+
+- **No plaintext temporary file, ever.** The source is read and encrypted in a streaming pass whose only output is ciphertext.
+- **The ciphertext temporary file lives in the system temporary directory**, in a per-invocation subdirectory with restrictive permissions, and never beside the source, where it would pollute a repository and trip file watchers.
+- **It's removed on success, on failure, and on signal.** A crash that skips cleanup leaves ciphertext with no key, since the key was only ever in process memory, so the residue is inert.
+- **The key is never written to disk**, in any file, at any point, including logs and progress messages.
+- **The source file is never modified, moved, renamed, or truncated.** It's opened read-only. "Publish" means "move" in other tools, and an agent calling this on a file in someone's working tree must not be able to lose it.
+
+### 4.9 Double publish
+
+**Publishing the same file twice produces two relics: two IDs, two keys, two URLs, two TTLs.** No deduplication, and the tool doesn't notice the repeat, because recognizing it would need a local record of what was published, which is a relic list under another name and durable state the binary deliberately doesn't keep.
+
+**Deduplication isn't a storage optimization here.** `format.md` 3.10 gives every relic a fresh key, so identical plaintext yields entirely different ciphertext and there's nothing for a deduplicator to match. The only construction that would change that is convergent encryption, and `format.md` 3.10 already rules it drift routing back to `frame` rather than an optimization available to `shape` or `build`, because deriving the key from the plaintext would let the operator confirm two publishers uploaded the same file and test whether any given file is on the service.
+
+## 5. The disclosure obligation
+
+**The tool result necessarily carries the fragment into the model's context and into the session transcript.** The tool must return the full URL including the fragment, because handing a person a usable link is the product, and the fragment is the decryption key. There is no version of this where the key doesn't transit the agent.
+
+So the property has a precise boundary and it gets stated at that boundary:
+
+- **Against the Relic operator, zero-knowledge holds, unchanged.** The server receives ciphertext, never receives the key, and cannot read a byte.
+- **Against the model provider and the transcript store, it does not apply at all.** Anyone with access to the session transcript holds the key and the URL, which is complete access to the plaintext.
+- **This is unfixable inside this architecture** rather than a defect to schedule. Withholding the fragment from the result means the agent can't produce a usable link, which is the product.
+
+**It bounds the honest claim.** "The service can't read your file" is true. "Nobody but the recipient can read your file" is false whenever an agent produced the link, and nothing in Relic's marketing, docs, or tool description may say it.
+
+`service.md` section 5 owns the published statement and lists this as its second required content. This document owns getting a publisher to it in time, which is 1.3: the disclosure URL and a one-sentence statement of this consequence sit in the tool description, which the client renders and the model reads before a first call, and `disclosure_url` rides every successful result. The path-only input schema in 1.2 is the other half of the response, and it's the only part of this that's actually mitigable: it keeps the plaintext out of the transcript so that what leaks upward is the key alone.
+
+## 6. Routed to `shape`
+
+Five items, and only these five.
+
+1. **The grant shape.** Three candidates (3.6): a POST policy document, a resumable session, or a signed PUT carrying `Content-Length` among the signed headers. If resumable, whether the session is initiated by the server or by the client under a signed URL. It must carry a signed size constraint (3.6), the `ifGenerationMatch: 0` precondition (3.7), a grant expiry the storage leg actually enforces (3.4), and support for resuming from a byte offset (4.4). Those requirements are not aligned across the candidates and only one of the three has documented size enforcement, so reconciling them is the decision. Two constraints narrow it before any preference does. **Client-side initiation cannot satisfy 3.4's invariant unless `shape` adds a message returning the session URI to the app server**, which makes the flow four messages and puts a bearer write credential in flight. **The size check in 3.6 runs against a prototype grant before the resumable or signed-header branches are committed**, because a negative result there eliminates a branch rather than filing a bug. Once picked: the exact upload request shape, whether that check is now a launch regression test or has already decided the branch, and whether 3.4's session-cancellation obligation applies.
+2. **Whether proof of work is in the flow, and at what difficulty.** The wire shape is fixed in 3.1 so this is a value rather than a protocol change. Once picked, if difficulty is non-zero: `service.md` gains one grant-time refusal code for an invalid or expired solution, which is that document's to define and never this one's.
+3. **The size cap value and its referent**, plaintext or ciphertext. Constrained by `format.md` 3.11 and by `service.md` 2.3's arithmetic. Once picked: the challenge response's `size_limit_bytes` and `size_basis`, the client pre-check in 1.2, and the signed constraint in 3.6.
+4. **The retry cap and the backoff bounds** (4.6). Once picked: when `upload_retries_exhausted` fires and how much egress a single failing publish can consume.
+5. **Whether object metadata is set at upload time at all.** Get the premises right on this one. The app server can set, patch, and delete GCS custom metadata through the API with credentials it already holds, and it can pin client-supplied metadata by signing `x-goog-meta-*` headers into the grant, so nothing here is a capability question. `format.md` 3.2 already bars anything content-descriptive from living in metadata, so what's genuinely open is whether any metadata is needed at all. Once picked: whether the grant must sign metadata constraints, and whether the blocklist scanner reads metadata or only object bytes.

@@ -63,6 +63,58 @@ iterations:
     Its number two is the branch-B free-text matcher, with a concrete failure it supplies: "this file contains employee records from my former employer" attaches the possessive to the employer, not the subject, so the trigger misses and the obligations go unmet silently.
 
     **Base rate to carry into the challenge: three units in a row had their number-one nomination come back sound. Do not let this list steer the sweep.**
+- worker: resolver
+  started_at: 2026-08-02T20:43:08.471529+00:00
+  completed_at: 2026-08-02T20:43:08.471529+00:00
+  result: advance
+  note: |-
+    `docs/design/operations.md` resolved and committed at `19f4c58`. **All seven defects fixed. One sub-part of defect 4 is an explicitly named residual risk rather than a silent gap.** Worktree clean.
+
+    **Gates re-run independently by the manager:** 10,933 words against 2,600; 12 sources against 8; all 12 resolve; zero dashes; trailing newline confirmed. `git diff --name-only HEAD~1 HEAD` returns `docs/design/operations.md` alone. Orphan check clean manager-side.
+
+    **Verified in the file rather than on the note's word:** the Branch A/B grep returns only the two pre-existing unrelated pairs at 139/141 and 259/261/273/365, with nothing new; "Nine standing checks" agrees at both call sites, line 225 and line 333 item 13; counsel questions 9 and 10 are present at 355 and 356; the screen is item 1 of section 2.2; and section 1 and section 6.5 both now name the two-project topology.
+
+    ## Defect 1 changed the architecture, and the SLA survived its own justification
+
+    **The screen fires before deletion.** The beat grounded that on locked text rather than preference, quoting `service.md` 4.1's "The clock starts at arrival, not at triage" and reasoning that **a clock refusing to start at triage only makes sense if triage sits between arrival and the action being timed.** That is the right way to settle it: the spec already implied the answer and nobody had read it out.
+
+    Section 2.2 gained item 1, and the framing is careful where it needed to be: **"That is a routing decision, not a credibility one: section 1 already forecloses judging whether the underlying claim is true, and the screen does not reopen that question."** Naming a human step in a delete-on-plausible-report pipeline risks smuggling adjudication back in, and this explicitly refuses that. Section 2.1's closing sentence became "A report that clears the screen described in section 2.2 travels this remaining distance, steps 2 through 8, with no further human decision."
+
+    **The SLA stays 24 hours and criterion 12 is now genuinely satisfied rather than nominally.** The number never moved, but its justification did: the sleep-gap argument always assumed a human on the critical path, and naming the screen made section 6.3 consistent with section 2.1 instead of contradicting it. Section 2.2's items renumbered 1-5 to 2-6, and item 6 now distinguishes itself from the screen, "what makes a one-person operation viable against everything except the screen above."
+
+    ## Defect 2 was larger than the challenge found, and the beat said so
+
+    **The one-project assumption was not confined to line 329.** It was load-bearing in section 1's entire forced-answer argument at the old lines 55 to 61. **Fixing only section 6.5, which is what the work order literally asked for, would have left one section describing a survivable suspension and another describing total loss.** The beat found that itself and fixed both. That is the correct instinct: the work order named the symptom, not the extent.
+
+    Section 1 now quotes `preconditions.md`'s locked blast-radius sentence and then states the decision, that the sentence "describes what one project holding everything costs, and it is exactly the risk `docs/design/storage.md` section 6 designs against." The consequences were rewritten downstream so "total loss of service" became "every live relic going dark, with no accounts and no channel to tell any holder of a link why." **The triage decision is still forced, now on a severe but factually correct asymmetry rather than an overstated one.**
+
+    Section 6.5 closes honestly rather than comfortably: the wind-down tooling survives, "what does not survive is the service itself, dark for as long as the suspension runs," and it is a smaller bad outcome "only because section 1 spent the cost storage.md section 6 names for it."
+
+    **The vocabulary collision was handled better than instructed.** The beat drafted a version attributing the recommendation as "names its branch B there," judged that this still carried collision risk against the two existing unrelated pairs, and **removed the clause before committing.** Every reference is the spelled-out "two-project topology" with `storage.md` section 6 cited by name. The manager's grep confirms zero new occurrences.
+
+    ## The remaining five
+
+    **Defect 3:** the volumetric vector is now priced separately from the per-relic griefing vector, with the asymmetry named against locked text: publish and mint carry `publish_rate_limited` and `mint_rate_limited` in `service.md`'s status table, `publish.md` 3.1 scopes proof of work to publish alone, and `/abuse` has neither. **It routed the owner correctly and non-obviously:** not to a sibling, but to `build`, "because it is a gap in the locked rate-limiting scheme itself" needing a refusal code `service.md` does not yet have. Standing check 9 was added, and its rationale names the trap directly, that check 8 "reading better during the attack" is itself the anomaly.
+
+    **Defect 4:** counsel question 9 added, plus an interim operational default stated rather than left implicit: every `csam`-category report is filed on pending counsel. **The reasoning is the statute's own asymmetry**, that 2258A(e) penalizes failure to report and never a report filed on a claim later shown mistaken, so over-filing costs nothing under the statute. **The residual is named, not fixed away:** the filing duty widens past "rare" if such reports arrive at volume, and mislabeling stays free to an attacker. That is honest, and it is the correct call, because the underlying question is one of the two this document says up front cannot be closed by more reading.
+
+    **Defect 5:** adjacency loosened to same-sentence or same-clause co-occurrence, using the challenge's own counter-example verbatim in the text. English-only stated as an explicit v1 limitation carried into the disclosure statement, with the French example marked "for instance" so it carries no verbatim obligation. **The backstop is the sharpest part:** the section 2.2 screen reads every report's free text end to end regardless of what the matcher catches, "for as long as report volume stays inside what one person can read, which is what section 1's rate-limit fix and section 4's ninth check exist to keep true." **Defects 1, 3 and 5 were resolved into one coherent mechanism rather than three patches.**
+
+    **Defect 6:** counsel question 10 added, and section 2.3 states the discipline explicitly, that Article 12(3) "carries no equivalent textual condition" and "this document does not import that resolution here by silent analogy." It names both readings rather than picking one.
+
+    **Defect 7:** "same-day" replaced with one rolling day, made concrete, "a report arriving at 23:00 gets until 23:00 the next day, never until the following midnight." **It left the one remaining use in section 3 untouched and said why**, because that instance reports `preconditions.md`'s own phrasing rather than making this document's argument. Correct scoping.
+
+    ## Verification the beat ran on itself
+
+    Two new load-bearing quotations, both checked against the locked files in the worktree with `grep -o` rather than curl since both are local: `preconditions.md`'s blast-radius sentence and `service.md` 4.1's clock sentence. Both match exactly. **It noted that its inline quote drops the source's markdown bold while the words are unchanged**, which is the right level of precision. No other new quotations were introduced; the rest is paraphrase without quotation marks and therefore carries no verbatim obligation. The challenge's 76-quotation audit stands untouched.
+
+    **It grepped every `2.1`, `2.2` and `2.3` cross-reference before and after the renumbering** to confirm none broke. That was the only structural change with real cross-reference risk and it was the one thing it checked mechanically.
+
+    ## Residual risk Build inherits
+
+    **The defect 4 default and the defect 3 rate limit lean on each other, and Build needs to know that.** In the beat's own framing: if the `/abuse` limiter is loose or merely per-endpoint rather than tuned against the volumetric scenario, `csam`-labeled volume can grow past what section 2.2's rare framing assumes, and the mandatory-report duty scales with it. **Build should treat the rate limiter as protecting the mandatory-report cost model, not only the griefing vector it was originally scoped for.**
+
+    Carried to the station audit, unclosed by design: counsel questions 1 through 10, the two of which this document has always said no further reading can answer; whether the operational predictions hold at real report volume, since the monitoring surface measures SLA latency and now report rate, but nothing measures comprehension; and whether `design-product-surface` actually received the two choices this unit designed both branches for. **That last one is now checkable at the station level and was not checkable from inside either unit**, since each was forbidden the other's output. `surface.md` decided the viewer distinguishes cap exhaustion from takedown, and `operations.md` recommends the merged screen as cheaper for a one-person operation while naming surface as the owner. **The two documents disagree on the recommendation, which is exactly the shape the split was designed to produce, and the audit should confirm operations' triage path matches the branch surface actually chose.**
 reviews:
   fit:
     at: 2026-07-30T11:40:36.253906+00:00

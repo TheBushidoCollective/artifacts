@@ -78,6 +78,26 @@ export interface MintResponse {
   readonly mints_remaining: number;
 }
 
+/**
+ * Somewhere to keep a key so a reload does not lose it.
+ *
+ * The fragment is stripped from the address bar the moment it is read, which
+ * is what makes a reload land on a page with no key. That is a real cost paid
+ * for a real benefit, and remembering the key on the recipient's own machine
+ * buys back the reload without putting the key back in the URL.
+ *
+ * It does change who can open the relic. Anyone with this browser profile can
+ * reopen it for as long as the entry lives, without ever having the link.
+ * That is a deliberate trade, it is scoped to the service origin, and it is
+ * stated in the disclosure rather than done quietly.
+ */
+export interface KeyVault {
+  /** Remember a key against a relic, until the relic expires. */
+  remember(relicId: string, fragment: string, expiresAt: number): void;
+  recall(relicId: string): string | undefined;
+  forget(relicId: string): void;
+}
+
 export interface ViewerDeps {
   readonly serviceOrigin: string;
   readonly fetch: typeof globalThis.fetch;
@@ -86,6 +106,7 @@ export interface ViewerDeps {
   /** Calls `history.replaceState` to drop the fragment from the address bar. */
   readonly stripFragment: () => void;
   readonly locationHref: string;
+  readonly keyVault: KeyVault;
 }
 
 export async function load(
@@ -100,12 +121,22 @@ export async function load(
   // existed before the replace, so browser history sync, an extension with
   // host permissions, and the application the link was clicked from all
   // already saw it.
-  const fragment = deps.takeFragment();
+  const fromUrl = deps.takeFragment();
   const shareUrl = deps.locationHref;
   deps.stripFragment();
 
+  // A reload arrives with no fragment, because reading it stripped it. Fall
+  // back to what this browser was told last time.
+  const recalled =
+    fromUrl.length === 0 || fromUrl === '#'
+      ? deps.keyVault.recall(relicId)
+      : undefined;
+  const fragment = recalled ?? fromUrl;
+  /** Whether the key came from storage, so a bad one can be evicted. */
+  const fromVault = recalled !== undefined;
+
   if (fragment.length === 0 || fragment === '#') {
-    // A reload loses the key. The reloaded page is dead and says so, pointing
+    // No key in the URL and none remembered here. Say so plainly, pointing
     // back at the original link rather than showing a decrypt error.
     return {
       kind: 'dead',
@@ -136,6 +167,9 @@ export async function load(
         'unknown_version'
       );
     }
+    // A remembered key that no longer parses is corrupt storage, not a bad
+    // link. Drop it so the next attempt is a clean one.
+    if (fromVault) deps.keyVault.forget(relicId);
     if (error instanceof MalformedFragmentError) {
       return dead(
         'This link looks truncated',
@@ -150,8 +184,23 @@ export async function load(
   }
 
   const minted = await mint(relicId, deps);
-  if ('dead' in minted) return { kind: 'dead', dead: minted.dead };
+  if ('dead' in minted) {
+    // Expired, removed, or never published. Whatever this browser remembered
+    // is worthless now, and keeping a dead key is keeping a secret for no
+    // reason at all.
+    deps.keyVault.forget(relicId);
+    return { kind: 'dead', dead: minted.dead };
+  }
   const mintResponse = minted.mint;
+
+  // The relic is real and this key reached it, so it is worth remembering
+  // until the relic itself expires. Done after the mint rather than before,
+  // so a key for a relic that does not exist is never written down.
+  deps.keyVault.remember(
+    relicId,
+    fragment,
+    Date.parse(mintResponse.relic_expires_at)
+  );
 
   // Refuse before allocating, using a bound computed from the object length
   // and the record size rather than anything the server declared.

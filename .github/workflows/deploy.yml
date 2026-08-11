@@ -174,3 +174,21 @@ jobs:
 
           echo "and the two are different registrable domains, or there is no boundary"
           test "$(echo "$SERVICE" | sed 's#https\?://##')" != "$(echo "$SANDBOX" | sed 's#https\?://##')"
+
+          # The frame has no allow-same-origin, so its document is an opaque
+          # origin and every request it makes is cross-origin with Origin:
+          # null. A linked module script is fetched with CORS and silently
+          # refused, which renders as a blank frame and an empty console. The
+          # script has to be inline, and this is the only place that can tell.
+          echo "and the sandbox page carries its script inline, fetching nothing"
+          curl -fsS "$SANDBOX/sandbox.html" -o /tmp/sandbox.html
+
+          if ! grep -q 'relic:sandbox-ready' /tmp/sandbox.html; then
+            echo "sandbox.html does not carry its handler inline; the frame will never render"
+            exit 1
+          fi
+
+          if grep -qE '<script[^>]+src=' /tmp/sandbox.html; then
+            echo "sandbox.html links a script; an opaque-origin document cannot fetch it"
+            exit 1
+          fi

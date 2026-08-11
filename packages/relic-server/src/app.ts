@@ -981,6 +981,19 @@ key lives in the URL fragment, after the \`#\`. **Your browser never sends the
 key to Relic's servers.** That is the correct form of the claim. Saying "the
 key never reaches a server" unqualified would be wrong.
 
+## What your own browser keeps
+
+Opening a relic strips the key out of the address bar immediately, which means
+a reload would otherwise lose it. So the viewer remembers the key in your
+browser's local storage for that relic, until the relic expires, and clears it
+as soon as the relic is gone.
+
+It never leaves your machine, and it is stored under Relic's origin rather than
+the sandbox that renders content. The trade is real and worth stating plainly:
+for as long as the entry lives, anyone using this browser profile can reopen
+that relic without ever having been sent the link. Clearing site data for this
+origin removes every remembered key.
+
 ## What we do know
 
 - **A coarse renderer class**, one of: markdown, code, html, image, media,

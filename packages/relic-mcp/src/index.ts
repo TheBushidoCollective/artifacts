@@ -17,18 +17,33 @@ import { createServer } from 'node:http';
 import { Readable } from 'node:stream';
 import { nodeFiles } from './files.ts';
 import { createHttpHandler } from './http.ts';
+import { requiredOrigin } from './origin.ts';
 import type { PublishDeps } from './publish.ts';
 import { serveStdio } from './server.ts';
 
+// The value travels with whatever installs this: the plugin sets it, and one
+// plugin version bump moves every install. See origin.ts for why there is no
+// default.
+const serviceOrigin = requiredOrigin(
+  'RELIC_SERVICE_ORIGIN',
+  process.env['RELIC_SERVICE_ORIGIN']
+);
+
 const deps: PublishDeps = {
-  serviceOrigin: process.env['RELIC_SERVICE_ORIGIN'] ?? 'https://relic.example',
+  serviceOrigin,
+  // Where the shareable link points, when a reverse proxy or custom domain
+  // fronts the API. Defaults to the API's own origin, which is the common case.
   relicOrigin:
-    process.env['RELIC_ORIGIN'] ??
-    process.env['RELIC_SERVICE_ORIGIN'] ??
-    'https://relic.example',
+    process.env['RELIC_ORIGIN'] === undefined
+      ? serviceOrigin
+      : requiredOrigin('RELIC_ORIGIN', process.env['RELIC_ORIGIN']),
   files: nodeFiles,
   fetch: globalThis.fetch,
-  clientName: process.env['RELIC_CLIENT_NAME'] ?? 'relic-mcp/0.1.0',
+  // Recorded against the grant, so the service can tell what published. No
+  // version baked in: a literal here goes stale the first release nobody
+  // remembers to edit, and a wrong version in a log is worse than none.
+  // Whatever installs this can set the variable to something more specific.
+  clientName: process.env['RELIC_CLIENT_NAME'] ?? 'relic-mcp',
 };
 
 if (process.env['RELIC_MCP_HTTP'] === '1') {

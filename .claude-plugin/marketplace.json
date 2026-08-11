@@ -1,0 +1,34 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "relic",
+  "description": "Relic: zero-knowledge publishing for agent output. Install the plugin to give your agent a tool that turns a local file into a shareable link without handing the file to anybody.",
+  "owner": {
+    "name": "The Bushido Collective",
+    "url": "https://thebushido.co"
+  },
+  "plugins": [
+    {
+      "name": "relic",
+      "description": "Publish a file from your machine as an encrypted, shareable link. The agent encrypts locally, uploads only ciphertext, and hands back a URL whose fragment holds the key, so the service stores something it cannot read.",
+      "version": "0.1.0",
+      "source": "./plugin",
+      "author": {
+        "name": "The Bushido Collective",
+        "url": "https://thebushido.co"
+      },
+      "homepage": "https://github.com/TheBushidoCollective/artifacts",
+      "category": "productivity",
+      "keywords": [
+        "claude-code",
+        "claude-code-plugin",
+        "sharing",
+        "encryption",
+        "zero-knowledge",
+        "publishing"
+      ]
+    }
+  ],
+  "metadata": {
+    "version": "0.1.0"
+  }
+}

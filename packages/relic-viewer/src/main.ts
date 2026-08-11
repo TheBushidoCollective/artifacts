@@ -17,6 +17,7 @@ import { highlightCode, renderMarkdown } from './markdown.ts';
 import {
   type DeadView,
   formatBytes,
+  type KeyVault,
   load,
   type ReadyView,
   type ViewerDeps,
@@ -453,10 +454,109 @@ function renderDead(dead: DeadView): void {
   document.body.appendChild(main);
 }
 
+const VAULT_PREFIX = 'relic:key:';
+
+/**
+ * Keys remembered in this browser's storage for the service origin.
+ *
+ * Storage can be absent or refuse to write: private browsing, a quota, an
+ * embedded webview, or a user who has blocked site data. None of that should
+ * cost somebody the relic they are currently looking at, so every operation
+ * degrades to doing nothing. The worst case is the behaviour that existed
+ * before this: a reload asks for the original link.
+ *
+ * Entries carry their relic's expiry and are swept on every read, so storage
+ * does not accumulate keys to relics that stopped existing days ago.
+ */
+export function localStorageKeyVault(
+  storage: Storage | undefined = globalThis.localStorage,
+  now: () => number = Date.now
+): KeyVault {
+  const read = (): Storage | undefined => {
+    try {
+      // Touching localStorage throws outright in some embedded contexts,
+      // rather than being absent, so the guard has to be a try and not a null
+      // check.
+      return storage ?? undefined;
+    } catch {
+      return undefined;
+    }
+  };
+
+  const sweep = (store: Storage): void => {
+    const stale: string[] = [];
+    for (let i = 0; i < store.length; i++) {
+      const name = store.key(i);
+      if (name === null || !name.startsWith(VAULT_PREFIX)) continue;
+      try {
+        const entry = JSON.parse(store.getItem(name) ?? '') as {
+          expiresAt?: number;
+        };
+        if (typeof entry.expiresAt !== 'number' || entry.expiresAt <= now()) {
+          stale.push(name);
+        }
+      } catch {
+        // Unreadable entry. Not ours to interpret, and not worth keeping.
+        stale.push(name);
+      }
+    }
+    for (const name of stale) store.removeItem(name);
+  };
+
+  return {
+    remember(relicId, fragment, expiresAt) {
+      const store = read();
+      if (store === undefined) return;
+      if (!Number.isFinite(expiresAt) || expiresAt <= now()) return;
+      try {
+        store.setItem(
+          `${VAULT_PREFIX}${relicId}`,
+          JSON.stringify({ fragment, expiresAt })
+        );
+      } catch {
+        // Quota, or storage disabled mid-session. A remembered key is a
+        // convenience; failing to store one is not worth an error page.
+      }
+    },
+
+    recall(relicId) {
+      const store = read();
+      if (store === undefined) return undefined;
+      try {
+        sweep(store);
+        const raw = store.getItem(`${VAULT_PREFIX}${relicId}`);
+        if (raw === null) return undefined;
+        const entry = JSON.parse(raw) as {
+          fragment?: unknown;
+          expiresAt?: unknown;
+        };
+        if (typeof entry.fragment !== 'string') return undefined;
+        if (typeof entry.expiresAt !== 'number' || entry.expiresAt <= now()) {
+          return undefined;
+        }
+        return entry.fragment;
+      } catch {
+        return undefined;
+      }
+    },
+
+    forget(relicId) {
+      const store = read();
+      if (store === undefined) return;
+      try {
+        store.removeItem(`${VAULT_PREFIX}${relicId}`);
+      } catch {
+        // Nothing to do, and nothing worth telling the reader about.
+      }
+    },
+  };
+}
+
 export function makeBrowserDeps(): ViewerDeps {
   return {
     serviceOrigin: SERVICE_ORIGIN,
     fetch: globalThis.fetch.bind(globalThis),
+    keyVault: localStorageKeyVault(),
     takeFragment: () => window.location.hash,
     stripFragment: () => {
       // Replace the current entry with the fragment removed. The URL that

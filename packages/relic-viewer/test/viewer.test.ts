@@ -34,10 +34,35 @@ function shimFetch(): typeof globalThis.fetch {
   }) as typeof globalThis.fetch;
 }
 
-function deps(fragment: string, href = `${SERVICE}/x#${fragment}`): ViewerDeps {
+/** An in-memory stand-in for the browser's storage, shared across a test. */
+export function fakeVault(seed: Record<string, string> = {}) {
+  const entries = new Map(Object.entries(seed));
+  return {
+    entries,
+    vault: {
+      // No expiry check. The app under test runs on its own clock, so
+      // comparing its expiry to real wall time would reject everything.
+      // Expiry belongs to the storage implementation and is tested there.
+      remember(relicId: string, fragment: string, _expiresAt: number) {
+        entries.set(relicId, fragment);
+      },
+      recall: (relicId: string) => entries.get(relicId),
+      forget: (relicId: string) => {
+        entries.delete(relicId);
+      },
+    },
+  };
+}
+
+function deps(
+  fragment: string,
+  href = `${SERVICE}/x#${fragment}`,
+  vault = fakeVault().vault
+): ViewerDeps {
   return {
     serviceOrigin: SERVICE,
     fetch: shimFetch(),
+    keyVault: vault,
     takeFragment: () => {
       fragmentReads += 1;
       return fragment;
@@ -172,6 +197,95 @@ describe('the fragment', () => {
 
     expect(state.kind).toBe('ready');
     if (state.kind === 'ready') expect(state.view.shareUrl).toBe(href);
+  });
+});
+
+/**
+ * The reload path.
+ *
+ * Reading the fragment strips it, so a reload arrives with nothing in the URL.
+ * Before this the page simply died and told the reader to find the original
+ * link, which is a bad answer to a refresh.
+ */
+describe('remembering the key', () => {
+  test('a reload with no fragment opens from the remembered key', async () => {
+    const { id, fragment } = await seed(
+      utf8('# Still here\n'),
+      'report.md',
+      'text/markdown'
+    );
+    const { vault } = fakeVault();
+
+    const first = await load(
+      id,
+      deps(fragment, `${SERVICE}/x#${fragment}`, vault)
+    );
+    expect(first.kind).toBe('ready');
+
+    // Same browser, same relic, no fragment: a refresh.
+    const reloaded = await load(id, deps('', `${SERVICE}/x`, vault));
+    expect(reloaded.kind).toBe('ready');
+    if (reloaded.kind !== 'ready') return;
+    expect(new TextDecoder().decode(reloaded.view.content)).toBe(
+      '# Still here\n'
+    );
+  });
+
+  test('nothing is remembered for a relic that does not exist', async () => {
+    const { entries, vault } = fakeVault();
+    const { fragment } = await seed(utf8('x'), 'a.md', 'text/markdown');
+
+    // A well-formed key against an id that was never published.
+    const state = await load(
+      generateRelicId(),
+      deps(fragment, undefined, vault)
+    );
+
+    expect(state.kind).toBe('dead');
+    expect(entries.size).toBe(0);
+  });
+
+  test('a dead relic evicts whatever this browser remembered', async () => {
+    const { id, fragment } = await seed(
+      utf8('# Gone soon\n'),
+      'report.md',
+      'text/markdown'
+    );
+    const { entries, vault } = fakeVault();
+
+    await load(id, deps(fragment, `${SERVICE}/x#${fragment}`, vault));
+    expect(entries.size).toBe(1);
+
+    await app.fetch(
+      new Request(`${SERVICE}/api/relics/${id}`, {
+        method: 'DELETE',
+        headers: { authorization: 'Bearer operator-secret' },
+      })
+    );
+
+    const after = await load(id, deps('', `${SERVICE}/x`, vault));
+    expect(after.kind).toBe('dead');
+    // Keeping a key to a relic that no longer exists is keeping a secret for
+    // no reason at all.
+    expect(entries.size).toBe(0);
+  });
+
+  test('a remembered key that is corrupt is dropped, not retried forever', async () => {
+    const { id } = await seed(utf8('x'), 'a.md', 'text/markdown');
+    const { entries, vault } = fakeVault({ [id]: '#r1notavalidkey' });
+
+    const state = await load(id, deps('', `${SERVICE}/x`, vault));
+
+    expect(state.kind).toBe('dead');
+    expect(entries.size).toBe(0);
+  });
+
+  test('with nothing remembered, a reload still says what to do', async () => {
+    const state = await load(generateRelicId(), deps('', `${SERVICE}/x`));
+
+    expect(state.kind).toBe('dead');
+    if (state.kind !== 'dead') return;
+    expect(state.dead.code).toBe('fragment_missing');
   });
 });
 

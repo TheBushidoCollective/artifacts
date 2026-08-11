@@ -36,5 +36,48 @@ for (const name of await readdir('./public')) {
   await copyFile(`./public/${name}`, `${out}${name}`);
 }
 
+/**
+ * Inline the sandbox bundle into its page, rather than linking it.
+ *
+ * The sandbox frame is deliberately given no `allow-same-origin`, which puts
+ * its document in an opaque origin. Every request that document makes is
+ * therefore cross-origin with `Origin: null`, and a `type="module"` script is
+ * fetched with CORS semantics. With no `Access-Control-Allow-Origin` on the
+ * response the browser refuses the module, the script never runs, the frame
+ * never announces itself, and the parent's markup is posted to a listener that
+ * does not exist. The visible result is a blank frame and an empty console,
+ * because the failure is in the frame's origin and not the page's.
+ *
+ * Relaxing CORS on the asset would fix the symptom by making the sandbox
+ * origin serve something cross-origin, which is the property the sandbox
+ * exists to remove. An inline script fetches nothing, so there is no request
+ * to be blocked and no header anybody can regress.
+ *
+ * This runs after the copy above, which would otherwise put the linked version
+ * back.
+ */
+const SCRIPT_TAG = '<script type="module" src="/assets/sandbox.js"></script>';
+
+const shell = await Bun.file('./public/sandbox.html').text();
+if (!shell.includes(SCRIPT_TAG)) {
+  console.error(
+    'sandbox.html no longer contains the expected script tag, so the bundle ' +
+      'would ship linked instead of inlined and the frame would never render'
+  );
+  process.exit(1);
+}
+
+const sandboxJs = await Bun.file(`${out}sandbox.js`).text();
+await Bun.write(
+  `${out}sandbox.html`,
+  shell.replace(
+    SCRIPT_TAG,
+    // A `</script` anywhere in the bundle would close the tag early. Minified
+    // output has no reason to contain one, which is exactly why it would go
+    // unnoticed if it ever did.
+    `<script type="module">${sandboxJs.replace(/<\/script/gi, '<\\/script')}</script>`
+  )
+);
+
 const names = (await readdir(out)).sort();
 console.log(`built ${names.length} assets: ${names.join(', ')}`);

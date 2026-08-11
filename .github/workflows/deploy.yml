@@ -104,6 +104,7 @@ jobs:
           SERVICE="$(terraform output -raw service_url)"
           SANDBOX="$(terraform output -raw sandbox_url)"
           echo "service=$SERVICE" >> "$GITHUB_OUTPUT"
+          echo "sandbox=$SANDBOX" >> "$GITHUB_OUTPUT"
           {
             echo "### Relic is deployed"
             echo ""
@@ -142,3 +143,34 @@ jobs:
           echo "a never-issued id is a problem document, not a stack trace"
           curl -sS -o/tmp/b -w '%{http_code}' "$SERVICE/api/relics/aaaaaaaaaaaaaaaaaaaaaaaaaa/mint" -X POST | grep -q 404
           grep -q 'relic_not_found' /tmp/b
+
+      # The two origins have to agree about each other or HTML never renders,
+      # and neither side fails loudly on its own: the sandbox returns a healthy
+      # 200 to curl while every browser refuses the frame. Assert the pair.
+      - name: Smoke test the origin boundary
+        run: |
+          set -euo pipefail
+          SERVICE="${{ steps.urls.outputs.service }}"
+          SANDBOX="${{ steps.urls.outputs.sandbox }}"
+
+          echo "the sandbox serves its page"
+          curl -fsS --retry 10 --retry-all-errors --retry-delay 3 \
+            -D/tmp/sh -o/dev/null "$SANDBOX/sandbox.html"
+
+          echo "and names the service origin as the only page allowed to frame it"
+          grep -qi "^content-security-policy:.*frame-ancestors $SERVICE\(;\|\$\)" /tmp/sh || {
+            echo "sandbox frame-ancestors does not name $SERVICE:"
+            grep -i '^content-security-policy:' /tmp/sh
+            exit 1
+          }
+
+          echo "and the service allows exactly that sandbox as a frame source"
+          curl -fsS -D/tmp/vh -o/dev/null "$SERVICE/aaaaaaaaaaaaaaaaaaaaaaaaaa"
+          grep -qi "^content-security-policy:.*frame-src $SANDBOX\(;\|\$\)" /tmp/vh || {
+            echo "service frame-src does not name $SANDBOX:"
+            grep -i '^content-security-policy:' /tmp/vh
+            exit 1
+          }
+
+          echo "and the two are different registrable domains, or there is no boundary"
+          test "$(echo "$SERVICE" | sed 's#https\?://##')" != "$(echo "$SANDBOX" | sed 's#https\?://##')"

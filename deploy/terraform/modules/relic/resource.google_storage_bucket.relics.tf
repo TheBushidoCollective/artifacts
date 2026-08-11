@@ -12,12 +12,32 @@ resource "google_storage_bucket" "relics" {
   # second. Granularity here is days rounded to the next UTC midnight, and a
   # config change takes up to 24 hours to take effect, so nothing is ever
   # served on the strength of an object still existing.
+  # Ciphertext, and the metadata that only describes it.
+  #
+  # Scoped by prefix rather than applied to the whole bucket, because the
+  # bucket now also holds records that must outlive the relic: tombstones, the
+  # blocklist, and abuse reports. An unscoped rule would delete a report of
+  # abuse on the same schedule as the thing reported.
   lifecycle_rule {
     action {
       type = "Delete"
     }
     condition {
-      age = var.relic_ttl_days
+      age            = var.relic_ttl_days
+      matches_prefix = concat(["${local.ciphertext_prefix}/"], local.ephemeral_store_prefixes)
+    }
+  }
+
+  # Challenges and mint dedup entries. Live for minutes, expire at the coarsest
+  # granularity a lifecycle rule offers, and are refused on age by the
+  # application long before this runs.
+  lifecycle_rule {
+    action {
+      type = "Delete"
+    }
+    condition {
+      age            = 1
+      matches_prefix = local.transient_store_prefixes
     }
   }
 

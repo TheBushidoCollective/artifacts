@@ -16,4 +16,31 @@ locals {
     RELIC_SERVICE_ORIGIN = var.service_url
     RELIC_SANDBOX_ORIGIN = var.sandbox_url
   }
+
+  # Where each kind of object lives in the bucket. Defined here because both
+  # the service environment and the bucket's lifecycle rules need them, and a
+  # lifecycle rule whose prefix no longer matches what the app writes fails
+  # silently: nothing errors, objects simply stop expiring.
+  ciphertext_prefix = "r"
+  store_prefix      = "m"
+
+  # Metadata that is worthless once the relic it describes is gone, and should
+  # expire on the same schedule as the ciphertext.
+  ephemeral_store_prefixes = [
+    "${local.store_prefix}/relic/",
+    "${local.store_prefix}/mintlog/",
+  ]
+
+  # Metadata that must outlive the relic. A tombstone is what makes a removed
+  # relic answer "removed" instead of "never existed", and an abuse report is a
+  # record of a decision somebody may have to answer for later. Neither gets a
+  # delete rule.
+  #
+  # Challenges and dedup entries are minutes-lived but the shortest granularity
+  # a lifecycle rule has is a day, so they take the one-day rule below rather
+  # than a schedule that pretends to be exact.
+  transient_store_prefixes = [
+    "${local.store_prefix}/challenge/",
+    "${local.store_prefix}/dedup/",
+  ]
 }

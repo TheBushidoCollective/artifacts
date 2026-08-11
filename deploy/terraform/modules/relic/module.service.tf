@@ -12,8 +12,9 @@ module "service" {
   env = merge(local.origin_env, {
     NODE_ENV = "production"
 
-    RELIC_GCS_BUCKET = var.bucket_name
-    RELIC_GCS_PREFIX = "r"
+    RELIC_GCS_BUCKET   = var.bucket_name
+    RELIC_GCS_PREFIX   = local.ciphertext_prefix
+    RELIC_STORE_PREFIX = local.store_prefix
 
     # No RELIC_GCS_CLIENT_EMAIL or RELIC_GCS_PRIVATE_KEY. Their absence is
     # what selects the metadata signer, so V4 signatures come from the IAM
@@ -49,7 +50,7 @@ module "sandbox" {
     NODE_ENV = "production"
 
     RELIC_GCS_BUCKET = var.bucket_name
-    RELIC_GCS_PREFIX = "r"
+    RELIC_GCS_PREFIX = local.ciphertext_prefix
   })
 
   max_instances = 2

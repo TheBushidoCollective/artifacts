@@ -2,8 +2,15 @@
 
 import { createApp } from './app.ts';
 import { diskAssets } from './assets.ts';
-import { gcsStorage, metadataSigner, privateKeySigner } from './gcs.ts';
+import {
+  gcsStorage,
+  metadataAccessToken,
+  metadataSigner,
+  privateKeySigner,
+} from './gcs.ts';
+import { gcsStore } from './gcsstore.ts';
 import { MemoryStorage, type ObjectStorage } from './storage.ts';
+import { MemoryStore, type RelicStore } from './store.ts';
 
 /**
  * Real storage when credentials are present, memory otherwise.
@@ -51,6 +58,53 @@ async function resolveStorage(): Promise<ObjectStorage> {
 }
 
 /**
+ * The relic rows, which are as load-bearing as the ciphertext.
+ *
+ * `resolveStorage` above already refuses to serve the bytes from memory in
+ * production, for a reason it states plainly: a service that does looks
+ * healthy, accepts publishes, and loses everything on restart. That reasoning
+ * was never applied here, so production ran on `MemoryStore` and a relic
+ * existed only inside the instance that minted it. Deploys, scale to zero, and
+ * a request landing on a sibling instance all produced `relic_not_found`
+ * against ciphertext that was sitting in the bucket the whole time.
+ *
+ * Same rule as storage now: real store when the bucket is configured, memory
+ * only outside production, and a refusal rather than a quiet downgrade.
+ */
+async function resolveStore(): Promise<RelicStore> {
+  const bucket = process.env['RELIC_GCS_BUCKET'];
+
+  // The metadata server is what supplies the bearer token, so this path is
+  // available exactly where the deployment runs. A downloaded key would need a
+  // JWT exchange to become a token, and development does not need one.
+  const onCloudRun = !process.env['RELIC_GCS_CLIENT_EMAIL'];
+
+  if (bucket && onCloudRun) {
+    return gcsStore({
+      bucket,
+      getAccessToken: () => metadataAccessToken(),
+      ...(process.env['RELIC_STORE_PREFIX']
+        ? { prefix: process.env['RELIC_STORE_PREFIX'] }
+        : {}),
+    });
+  }
+
+  if (process.env['NODE_ENV'] === 'production') {
+    throw new Error(
+      'A durable relic store is required in production. Refusing to start on ' +
+        'an in-memory store: every relic would be lost on the next revision, ' +
+        'and invisible to every other instance before then.'
+    );
+  }
+
+  console.warn(
+    'relic: no durable store, using memory. Relics do not survive a restart ' +
+      'and are invisible across instances.'
+  );
+  return new MemoryStore();
+}
+
+/**
  * `name:secret` pairs, comma separated.
  *
  * Per-operator rather than one shared token, because every delete writes an
@@ -75,6 +129,7 @@ const app = createApp({
     killSwitchEngaged: process.env['RELIC_KILL_SWITCH'] === 'true',
   },
   storage: await resolveStorage(),
+  store: await resolveStore(),
   assets: diskAssets(
     process.env['RELIC_ASSET_ROOT'] ??
       new URL('../../relic-viewer/dist/', import.meta.url).pathname

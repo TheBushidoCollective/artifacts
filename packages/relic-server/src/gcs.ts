@@ -310,6 +310,35 @@ export function iamSigner(options: {
   };
 }
 
+let cachedToken: { value: string; expiresAt: number } | undefined;
+
+/**
+ * The attached identity's OAuth token, for APIs that take a bearer token
+ * rather than a signature.
+ *
+ * Cached until shortly before it expires. The metadata server is a local hop
+ * and caches too, but the store below calls this on every read and write, and
+ * a per-operation round trip is a latency floor worth not having.
+ */
+export async function metadataAccessToken(now = Date.now()): Promise<string> {
+  if (cachedToken !== undefined && now < cachedToken.expiresAt) {
+    return cachedToken.value;
+  }
+
+  const raw = await metadata('instance/service-accounts/default/token');
+  const parsed = JSON.parse(raw) as {
+    access_token: string;
+    expires_in: number;
+  };
+
+  // A minute of headroom, so a token cannot expire in flight.
+  cachedToken = {
+    value: parsed.access_token,
+    expiresAt: now + Math.max(0, parsed.expires_in - 60) * 1000,
+  };
+  return cachedToken.value;
+}
+
 /** The signer a Cloud Run deployment uses: ambient identity, no key. */
 export async function metadataSigner(): Promise<Signer> {
   const clientEmail = await metadata('instance/service-accounts/default/email');

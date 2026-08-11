@@ -9,11 +9,8 @@ module "service" {
   image                 = var.image
   service_account_email = google_service_account.app.email
 
-  env = {
+  env = merge(local.origin_env, {
     NODE_ENV = "production"
-
-    RELIC_SERVICE_ORIGIN = var.service_url
-    RELIC_SANDBOX_ORIGIN = var.sandbox_url
 
     RELIC_GCS_BUCKET = var.bucket_name
     RELIC_GCS_PREFIX = "r"
@@ -25,7 +22,7 @@ module "service" {
 
     RELIC_KILL_SWITCH     = tostring(var.kill_switch_engaged)
     RELIC_OPERATOR_TOKENS = var.operator_tokens
-  }
+  })
 }
 
 # Both origins run the same image. The isolation is the origin boundary, not a
@@ -45,15 +42,15 @@ module "sandbox" {
   # The sandbox serves two static files. It is given a bucket so the shared
   # image boots identically, but it never mints, never reads an object, and
   # never sees a key: nothing routes to those paths on this host.
-  env = {
+  #
+  # Same origin pair as the service, from the same local. See locals.tf for why
+  # that is not an oversight.
+  env = merge(local.origin_env, {
     NODE_ENV = "production"
-
-    RELIC_SERVICE_ORIGIN = var.sandbox_url
-    RELIC_SANDBOX_ORIGIN = var.service_url
 
     RELIC_GCS_BUCKET = var.bucket_name
     RELIC_GCS_PREFIX = "r"
-  }
+  })
 
   max_instances = 2
   memory        = "256Mi"

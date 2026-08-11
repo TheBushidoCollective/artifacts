@@ -73,7 +73,29 @@ your file without reading it or contacting anything.
 npx -y relic-mcp   # nothing to clone, nothing to build
 ```
 
-### Claude Code
+### Claude Code, as a plugin
+
+The plugin is the packaged version of everything below: it wires the server,
+pins the client version, points at the hosted service, and adds a skill that
+tells the agent when publishing is the right move and what to disclose when it
+hands over a link.
+
+```bash
+claude plugin marketplace add TheBushidoCollective/artifacts
+claude plugin install relic@relic
+```
+
+Restart Claude Code, then ask for something: *"share ./report.md"*.
+
+To point it at your own deployment, override the origin after installing:
+
+```bash
+claude mcp add relic \
+  --env RELIC_SERVICE_ORIGIN=https://relic.your-domain.com \
+  -- npx -y relic-mcp
+```
+
+### Claude Code, without the plugin
 
 ```bash
 claude mcp add relic \

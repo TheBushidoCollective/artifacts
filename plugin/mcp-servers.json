@@ -1,0 +1,11 @@
+{
+  "relic": {
+    "type": "stdio",
+    "command": "npx",
+    "args": ["-y", "relic-mcp@0.1.1"],
+    "env": {
+      "RELIC_SERVICE_ORIGIN": "https://relic-wh2jw5fg2q-uc.a.run.app",
+      "RELIC_CLIENT_NAME": "relic-plugin/0.1.0"
+    }
+  }
+}

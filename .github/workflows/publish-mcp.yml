@@ -71,11 +71,13 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
-      - name: Build the readable bundle
-        run: bun run --filter 'relic-mcp' build
-
       # Set the version and drop the workspace protocol in one pass, with
       # node rather than `npm version`.
+      #
+      # Before the build, not after. The build generates the plugin manifests
+      # from package.json, so building first would stamp them with the version
+      # this release is replacing and publish a tarball that disagrees with
+      # itself about what it is.
       #
       # `npm version` resolves the dependency tree, and any npm command run
       # inside this directory walks up to the workspace root and resolves the
@@ -96,6 +98,40 @@ jobs:
             delete pkg.devDependencies;
             fs.writeFileSync("package.json", JSON.stringify(pkg, null, 2) + "\n");
             console.log(`${pkg.name}@${pkg.version}`);
+          ' "${{ inputs.version }}"
+
+      - name: Build the readable bundle
+        run: bun run --filter 'relic-mcp' build
+
+      # The manifests are generated, so the only way they can be wrong is if
+      # the build read a stale package.json. Assert they agree before anything
+      # is published, because a plugin that reports the wrong version installs
+      # fine and then never updates.
+      - name: Check the plugin manifests carry this version
+        working-directory: packages/relic-mcp
+        run: |
+          set -euo pipefail
+          for FILE in .claude-plugin/plugin.json .claude-plugin/marketplace.json; do
+            test -f "$FILE" || { echo "$FILE was not generated"; exit 1; }
+          done
+          node -e '
+            const fs = require("node:fs");
+            const want = process.argv[1];
+            const read = (f) => JSON.parse(fs.readFileSync(f, "utf8"));
+            const plugin = read(".claude-plugin/plugin.json");
+            const market = read(".claude-plugin/marketplace.json");
+            const found = [
+              ["plugin.json", plugin.version],
+              ["marketplace plugin", market.plugins[0].version],
+              ["marketplace metadata", market.metadata.version],
+            ];
+            for (const [where, got] of found) {
+              if (got !== want) {
+                console.error(`${where} says ${got}, expected ${want}`);
+                process.exit(1);
+              }
+            }
+            console.log(`manifests agree at ${want}`);
           ' "${{ inputs.version }}"
 
       # The bundle is what runs on a user machine. Assert the properties that
@@ -139,6 +175,26 @@ jobs:
 
           echo '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28"}}}' \
             | ./node_modules/.bin/relic-mcp | grep -q relic_describe_client
+
+          # The package is also the Claude Code plugin, which only holds if the
+          # manifests survive packing. npm is historically uneven about
+          # dot-prefixed entries in `files`, and this is the same class of bug
+          # as the `bin` entry it used to drop: installs fine, silently does
+          # less than it claims.
+          for FILE in \
+            node_modules/relic-mcp/.claude-plugin/plugin.json \
+            node_modules/relic-mcp/.claude-plugin/marketplace.json \
+            node_modules/relic-mcp/mcp-servers.json \
+            node_modules/relic-mcp/skills/relic/SKILL.md
+          do
+            test -f "$FILE" || {
+              echo "$FILE is missing from the tarball; the package would not be installable as a plugin"
+              exit 1
+            }
+          done
+
+          # And the installer has to run from the packed copy, not just in dev.
+          ./node_modules/.bin/relic-mcp --help | grep -q 'relic-mcp install'
 
       - name: Pack and list contents
         working-directory: packages/relic-mcp

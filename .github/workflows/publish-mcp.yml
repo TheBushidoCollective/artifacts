@@ -152,8 +152,19 @@ jobs:
           test "$LINES" -gt 200
 
           # It has to run under plain Node, which is what npx will have.
+          #
+          # The origin is supplied because the server requires one and refuses
+          # to start without it. That refusal is the point: an unconfigured
+          # install should fail at startup naming the variable rather than at
+          # the first publish with a DNS error. The value is irrelevant here,
+          # since nothing is published; only that the bundle boots and answers.
           echo '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28"}}}' \
-            | node "$BUNDLE" | grep -q relic_publish
+            | RELIC_SERVICE_ORIGIN=https://relic.invalid node "$BUNDLE" \
+            | grep -q relic_publish
+
+          # And it starts without one, so `--help` works on a machine that has
+          # never configured anything.
+          node "$BUNDLE" --help | grep -q 'relic-mcp install'
 
       # The manifest is not the tarball. npm normalizes `bin` on publish and
       # will silently drop an entry it dislikes, which produces a package that
@@ -174,7 +185,8 @@ jobs:
             || { echo "bin was dropped: npx relic-mcp would not work"; exit 1; }
 
           echo '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28"}}}' \
-            | ./node_modules/.bin/relic-mcp | grep -q relic_describe_client
+            | RELIC_SERVICE_ORIGIN=https://relic.invalid ./node_modules/.bin/relic-mcp \
+            | grep -q relic_describe_client
 
           # The package is also the Claude Code plugin, which only holds if the
           # manifests survive packing. npm is historically uneven about

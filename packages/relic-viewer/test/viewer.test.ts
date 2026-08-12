@@ -7,6 +7,7 @@ import {
   deadFromProblem,
   load,
   routeFor,
+  shareUrlFor,
   type ViewerDeps,
 } from '../src/viewer.ts';
 
@@ -286,6 +287,85 @@ describe('remembering the key', () => {
     expect(state.kind).toBe('dead');
     if (state.kind !== 'dead') return;
     expect(state.dead.code).toBe('fragment_missing');
+  });
+
+  /**
+   * The share link after a reload.
+   *
+   * The address bar is the one place the key is guaranteed not to be, so a
+   * share URL read back off it is keyless exactly when the reader fell back to
+   * storage. It failed silently: the copy succeeded and claimed to contain the
+   * key, and the recipient got a page that could not open.
+   */
+  test('copying after a reload still yields a link that carries the key', async () => {
+    const { id, fragment } = await seed(
+      utf8('# Share me\n'),
+      'report.md',
+      'text/markdown'
+    );
+    const { vault } = fakeVault();
+
+    await load(id, deps(fragment, `${SERVICE}/${id}#${fragment}`, vault));
+
+    // The reload: the URL has no fragment, the key comes from storage.
+    const reloaded = await load(id, deps('', `${SERVICE}/${id}`, vault));
+
+    expect(reloaded.kind).toBe('ready');
+    if (reloaded.kind !== 'ready') return;
+    expect(reloaded.view.shareUrl).toContain('#');
+    expect(reloaded.view.shareUrl).toBe(`${SERVICE}/${id}#${fragment}`);
+  });
+
+  test('a share link is openable, not merely non-empty', async () => {
+    const { id, fragment } = await seed(
+      utf8('# Round trip\n'),
+      'report.md',
+      'text/markdown'
+    );
+    const { vault } = fakeVault();
+
+    await load(id, deps(fragment, `${SERVICE}/${id}#${fragment}`, vault));
+    const reloaded = await load(id, deps('', `${SERVICE}/${id}`, vault));
+    if (reloaded.kind !== 'ready') throw new Error('expected ready');
+
+    // Hand the copied link to a browser with no memory of this relic.
+    const copied = new URL(reloaded.view.shareUrl);
+    const fresh = await load(
+      id,
+      deps(copied.hash, reloaded.view.shareUrl, fakeVault().vault)
+    );
+
+    expect(fresh.kind).toBe('ready');
+    if (fresh.kind !== 'ready') return;
+    expect(new TextDecoder().decode(fresh.view.content)).toBe('# Round trip\n');
+  });
+});
+
+describe('shareUrlFor', () => {
+  test('attaches the key to the page the reader is on', () => {
+    expect(shareUrlFor('https://relic.example/abc', 'r1KEY')).toBe(
+      'https://relic.example/abc#r1KEY'
+    );
+  });
+
+  test('accepts a fragment with or without its hash', () => {
+    expect(shareUrlFor('https://relic.example/abc', '#r1KEY')).toBe(
+      'https://relic.example/abc#r1KEY'
+    );
+  });
+
+  test('replaces a stale fragment rather than appending to it', () => {
+    expect(shareUrlFor('https://relic.example/abc#r1OLD', 'r1NEW')).toBe(
+      'https://relic.example/abc#r1NEW'
+    );
+  });
+
+  // A custom domain or a proxy in front of the service should produce a link
+  // that works from where the reader got it.
+  test('keeps the host the reader is actually on', () => {
+    expect(shareUrlFor('https://relics.example.co/abc?x=1', 'r1KEY')).toBe(
+      'https://relics.example.co/abc?x=1#r1KEY'
+    );
   });
 });
 

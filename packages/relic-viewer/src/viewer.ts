@@ -109,6 +109,19 @@ export interface ViewerDeps {
   readonly keyVault: KeyVault;
 }
 
+/**
+ * The link to hand somebody else: this page, plus the key.
+ *
+ * Keeps the origin and path the reader is actually on, so a custom domain or a
+ * proxy in front of the service produces a link that works from where they got
+ * it rather than one pointing at whatever the service calls itself.
+ */
+export function shareUrlFor(href: string, fragment: string): string {
+  const url = new URL(href);
+  url.hash = fragment.startsWith('#') ? fragment.slice(1) : fragment;
+  return url.toString();
+}
+
 export async function load(
   relicId: string,
   deps: ViewerDeps
@@ -122,7 +135,6 @@ export async function load(
   // host permissions, and the application the link was clicked from all
   // already saw it.
   const fromUrl = deps.takeFragment();
-  const shareUrl = deps.locationHref;
   deps.stripFragment();
 
   // A reload arrives with no fragment, because reading it stripped it. Fall
@@ -134,6 +146,16 @@ export async function load(
   const fragment = recalled ?? fromUrl;
   /** Whether the key came from storage, so a bad one can be evicted. */
   const fromVault = recalled !== undefined;
+
+  // Rebuilt from the key actually in use, never read back off the address bar.
+  //
+  // The address bar is the one place the key is guaranteed not to be: it was
+  // stripped on the way in, and a reload arrives with it already gone. Taking
+  // the share URL from `location.href` therefore produced a link with no key
+  // on exactly the visits where the reader had to fall back to storage, and it
+  // did it silently: the copy succeeded, the toast said the link contained the
+  // key, and the recipient got a page that could not open.
+  const shareUrl = shareUrlFor(deps.locationHref, fragment);
 
   if (fragment.length === 0 || fragment === '#') {
     // No key in the URL and none remembered here. Say so plainly, pointing

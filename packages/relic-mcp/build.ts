@@ -73,7 +73,7 @@ const PLUGIN_DESCRIPTION =
   'read.';
 
 const author = { name: 'The Bushido Collective', url: 'https://thebushido.co' };
-const homepage = 'https://github.com/TheBushidoCollective/artifacts';
+const homepage = 'https://github.com/TheBushidoCollective/relic';
 
 await mkdir('./.claude-plugin', { recursive: true });
 

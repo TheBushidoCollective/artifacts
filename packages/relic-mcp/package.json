@@ -20,12 +20,12 @@
   ],
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/TheBushidoCollective/artifacts.git",
+    "url": "git+https://github.com/TheBushidoCollective/relic.git",
     "directory": "packages/relic-mcp"
   },
-  "homepage": "https://github.com/TheBushidoCollective/artifacts#readme",
+  "homepage": "https://github.com/TheBushidoCollective/relic#readme",
   "bugs": {
-    "url": "https://github.com/TheBushidoCollective/artifacts/issues"
+    "url": "https://github.com/TheBushidoCollective/relic/issues"
   },
   "files": [
     "dist",

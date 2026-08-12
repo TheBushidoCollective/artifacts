@@ -113,7 +113,7 @@ and what to disclose when it hands over a link.
 the repo:
 
 ```bash
-claude plugin marketplace add TheBushidoCollective/artifacts
+claude plugin marketplace add TheBushidoCollective/relic
 claude plugin install relic@relic
 ```
 

@@ -87,4 +87,4 @@ revisions (`2025-11-25` and earlier) are still answered.
 
 Requires Node 18 or newer.
 
-MIT licensed. Source: https://github.com/TheBushidoCollective/artifacts
+MIT licensed. Source: https://github.com/TheBushidoCollective/relic

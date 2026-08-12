@@ -73,29 +73,63 @@ your file without reading it or contacting anything.
 npx -y relic-mcp   # nothing to clone, nothing to build
 ```
 
+### Any harness, one command
+
+The npm package installs itself. It knows where each harness keeps its config,
+merges into what is already there, and backs the file up first.
+
+```bash
+npx relic-mcp install                    # what is installed on this machine
+npx relic-mcp install --client cursor    # add it there
+```
+
+| `--client` | Writes |
+|---|---|
+| `claude-code` | installs as a plugin, skill included |
+| `claude-desktop` | `claude_desktop_config.json` |
+| `cursor` | `.cursor/mcp.json` |
+| `windsurf` | `.codeium/windsurf/mcp_config.json` |
+| `gemini` | `.gemini/settings.json` |
+| `vscode` | VS Code's `mcp.json` |
+| `codex` | `.codex/config.toml` |
+
+Useful flags: `--origin <url>` for your own deployment, `--dry-run` to see what
+would change, `--print` to write nothing and print the config to paste (which
+is also the answer for any harness not in that table), and `--force` to replace
+an entry that is already there.
+
+Nothing is overwritten silently. An existing server of the same name refuses
+until you pass `--force`, an unparseable config refuses rather than replacing
+it, and any file that already existed is copied to `<file>.relic-backup` before
+the write.
+
 ### Claude Code, as a plugin
 
-The plugin is the packaged version of everything below: it wires the server,
-pins the client version, points at the hosted service, and adds a skill that
-tells the agent when publishing is the right move and what to disclose when it
-hands over a link.
+The plugin is the packaged version: it wires the server, points at the hosted
+service, and adds a skill telling the agent when publishing is the right move
+and what to disclose when it hands over a link.
+
+`npx relic-mcp install --client claude-code` does this for you. By hand, from
+the repo:
 
 ```bash
 claude plugin marketplace add TheBushidoCollective/artifacts
 claude plugin install relic@relic
 ```
 
-Restart Claude Code, then ask for something: *"share ./report.md"*.
-
-To point it at your own deployment, override the origin after installing:
+or from the installed package, with no clone and no network:
 
 ```bash
-claude mcp add relic \
-  --env RELIC_SERVICE_ORIGIN=https://relic.your-domain.com \
-  -- npx -y relic-mcp
+npm i -g relic-mcp
+claude plugin marketplace add "$(npm root -g)/relic-mcp"
+claude plugin install relic@relic
 ```
 
-### Claude Code, without the plugin
+Both install the same directory. The npm package **is** the plugin: the
+manifests are generated from `package.json` at build time and ship in the
+tarball, so the version can never disagree with itself.
+
+### Claude Code, server only
 
 ```bash
 claude mcp add relic \

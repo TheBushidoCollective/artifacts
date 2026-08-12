@@ -30,7 +30,10 @@
   "files": [
     "dist",
     "src",
-    "README.md"
+    "README.md",
+    ".claude-plugin",
+    "skills",
+    "mcp-servers.json"
   ],
   "publishConfig": {
     "access": "public",

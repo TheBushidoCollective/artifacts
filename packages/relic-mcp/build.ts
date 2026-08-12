@@ -48,3 +48,89 @@ await chmod(bundle, 0o755);
 console.log(
   `built dist/relic-mcp.js: ${text.split('\n').length} readable lines`
 );
+
+/**
+ * Generate the Claude Code manifests from package.json.
+ *
+ * The package and the plugin are the same artifact: installing from npm and
+ * installing from the repo have to describe the same thing, and a version that
+ * only matches because somebody remembered to edit it in four places will stop
+ * matching. Generating them means package.json is the one source of truth, and
+ * a stale manifest cannot be committed because it is not committed at all.
+ */
+const pkg = (await Bun.file('./package.json').json()) as {
+  version: string;
+  description: string;
+  author?: unknown;
+  homepage?: string;
+  repository?: unknown;
+};
+
+const PLUGIN_DESCRIPTION =
+  'Publish a file from your machine as an encrypted, shareable link. The ' +
+  'agent encrypts locally, uploads only ciphertext, and hands back a URL ' +
+  'whose fragment holds the key, so the service stores something it cannot ' +
+  'read.';
+
+const author = { name: 'The Bushido Collective', url: 'https://thebushido.co' };
+const homepage = 'https://github.com/TheBushidoCollective/artifacts';
+
+await mkdir('./.claude-plugin', { recursive: true });
+
+await Bun.write(
+  './.claude-plugin/plugin.json',
+  `${JSON.stringify(
+    {
+      name: 'relic',
+      version: pkg.version,
+      description: PLUGIN_DESCRIPTION,
+      mcpServers: './mcp-servers.json',
+      author,
+      homepage,
+      repository: homepage,
+      license: 'UNLICENSED',
+      keywords: [
+        'claude-code',
+        'claude-code-plugin',
+        'sharing',
+        'encryption',
+        'zero-knowledge',
+        'publishing',
+      ],
+    },
+    null,
+    2
+  )}\n`
+);
+
+// The package is also a marketplace of one, so `claude plugin marketplace add
+// <path to the installed package>` works with no clone and no network.
+await Bun.write(
+  './.claude-plugin/marketplace.json',
+  `${JSON.stringify(
+    {
+      $schema: 'https://anthropic.com/claude-code/marketplace.schema.json',
+      name: 'relic',
+      description:
+        'Relic: zero-knowledge publishing for agent output. Turns a local ' +
+        'file into a shareable link without handing the file to anybody.',
+      owner: author,
+      plugins: [
+        {
+          name: 'relic',
+          description: PLUGIN_DESCRIPTION,
+          version: pkg.version,
+          source: './',
+          author,
+          homepage,
+          category: 'productivity',
+        },
+      ],
+      metadata: { version: pkg.version },
+    },
+    null,
+    2
+  )}\n`
+);
+
+console.log(`wrote plugin manifests at version ${pkg.version}`);

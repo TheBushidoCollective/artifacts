@@ -17,9 +17,24 @@ import { createServer } from 'node:http';
 import { Readable } from 'node:stream';
 import { nodeFiles } from './files.ts';
 import { createHttpHandler } from './http.ts';
+import { runInstall, USAGE } from './installer.ts';
 import { requiredOrigin } from './origin.ts';
 import type { PublishDeps } from './publish.ts';
 import { serveStdio } from './server.ts';
+
+// Subcommands are handled before anything that needs configuration, so
+// `--help` works on a machine that has never set an origin.
+const argv = process.argv.slice(2);
+
+if (argv[0] === 'install') {
+  await runInstall(argv.slice(1));
+  process.exit(0);
+}
+
+if (argv[0] === '--help' || argv[0] === '-h' || argv[0] === 'help') {
+  process.stdout.write(USAGE);
+  process.exit(0);
+}
 
 // The value travels with whatever installs this: the plugin sets it, and one
 // plugin version bump moves every install. See origin.ts for why there is no

@@ -436,6 +436,35 @@ body {
   background: #fff;
 }
 
+/*
+ * A published HTML document is already a page. It brings its own margins, its
+ * own background, and often a full-bleed hero that runs to the edge on
+ * purpose. Sitting it inside the reading gutter puts a second margin around a
+ * document that already decided how it wants to sit, and frames somebody's
+ * design in a border they did not ask for.
+ *
+ * So the HTML route gets the whole surface. Markdown and code keep the gutter,
+ * because that markup is generated here from a plain file and has no opinion
+ * of its own to respect.
+ */
+.stage-sandboxed-html {
+  padding: 0;
+}
+
+.stage-sandboxed-html .sandbox-frame {
+  /* Block, or the iframe sits on the text baseline and leaves a strip of page
+     background under it that reads as one more stray margin. */
+  display: block;
+  height: calc(100vh - var(--bar-height));
+  border: 0;
+}
+
+/* Routing rules mean a downgrade notice cannot currently reach this route, but
+   if one ever does it should not be jammed against the window edge. */
+.stage-sandboxed-html .notice {
+  margin: 1rem 1.25rem;
+}
+
 .card {
   max-width: 34rem;
   margin: 3rem auto;

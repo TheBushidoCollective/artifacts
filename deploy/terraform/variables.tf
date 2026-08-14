@@ -10,6 +10,21 @@ variable "region" {
   default     = "us-central1"
 }
 
+variable "service_domain" {
+  description = "Registrable domain for the Relik service. Never hosts untrusted sandbox content."
+  type        = string
+  default     = "relik.link"
+  nullable    = false
+
+  validation {
+    condition = (
+      can(regex("^[a-z]([a-z0-9-]*[a-z0-9])?(\\.[a-z]([a-z0-9-]*[a-z0-9])?)+$", var.service_domain)) &&
+      length(replace(var.service_domain, ".", "-")) <= 63
+    )
+    error_message = "service_domain must be a lowercase DNS name whose hyphenated form starts with a letter and is at most 63 characters."
+  }
+}
+
 variable "run_url_infix" {
   description = <<-EOT
     The project-and-region infix in this project's Cloud Run hostnames.

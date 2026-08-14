@@ -15,7 +15,8 @@ set -euo pipefail
 
 PROJECT_ID="${PROJECT_ID:-thebushido-co}"
 REGION="${REGION:-us-central1}"
-REPO="${REPO:-TheBushidoCollective/artifacts}"
+REPO="${REPO:-TheBushidoCollective/relic}"
+PREVIOUS_REPO="${PREVIOUS_REPO:-TheBushidoCollective/artifacts}"
 ACCOUNT="${ACCOUNT:-jwaldrip@thebushido.co}"
 
 STATE_BUCKET="${PROJECT_ID}-tfstate"
@@ -39,6 +40,7 @@ g services enable \
   cloudresourcemanager.googleapis.com \
   storage.googleapis.com \
   artifactregistry.googleapis.com \
+  dns.googleapis.com \
   run.googleapis.com
 
 say "Terraform state bucket: gs://${STATE_BUCKET}"
@@ -111,6 +113,7 @@ for ROLE in \
   roles/run.admin \
   roles/storage.admin \
   roles/artifactregistry.admin \
+  roles/dns.admin \
   roles/iam.serviceAccountAdmin \
   roles/iam.serviceAccountUser \
   roles/resourcemanager.projectIamAdmin \
@@ -155,7 +158,13 @@ if ! g iam workload-identity-pools providers describe "${PROVIDER_ID}" \
     --attribute-mapping="google.subject=assertion.sub,attribute.repository=assertion.repository,attribute.ref=assertion.ref" \
     --attribute-condition="assertion.repository == '${REPO}'"
 else
-  echo "already exists"
+  # Repository transfers change the OIDC assertion. Leaving the old condition
+  # in place makes every deploy fail before Terraform starts.
+  g iam workload-identity-pools providers update-oidc "${PROVIDER_ID}" \
+    --location=global \
+    --workload-identity-pool="${POOL_ID}" \
+    --display-name="${REPO}" \
+    --attribute-condition="assertion.repository == '${REPO}'"
 fi
 
 say "Letting ${REPO} impersonate the deployer"
@@ -163,6 +172,21 @@ g iam service-accounts add-iam-policy-binding "${DEPLOYER_EMAIL}" \
   --role=roles/iam.workloadIdentityUser \
   --member="principalSet://iam.googleapis.com/projects/${PROJECT_NUMBER}/locations/global/workloadIdentityPools/${POOL_ID}/attribute.repository/${REPO}" \
   >/dev/null
+
+if [ "${PREVIOUS_REPO}" != "${REPO}" ]; then
+  PREVIOUS_MEMBER="principalSet://iam.googleapis.com/projects/${PROJECT_NUMBER}/locations/global/workloadIdentityPools/${POOL_ID}/attribute.repository/${PREVIOUS_REPO}"
+  EXISTING_PREVIOUS_MEMBER="$(g iam service-accounts get-iam-policy "${DEPLOYER_EMAIL}" \
+    --flatten="bindings[].members" \
+    --filter="bindings.role:roles/iam.workloadIdentityUser AND bindings.members:${PREVIOUS_MEMBER}" \
+    --format="value(bindings.members)")"
+  if [ -n "${EXISTING_PREVIOUS_MEMBER}" ]; then
+    say "Removing obsolete ${PREVIOUS_REPO} impersonation"
+    g iam service-accounts remove-iam-policy-binding "${DEPLOYER_EMAIL}" \
+      --role=roles/iam.workloadIdentityUser \
+      --member="${PREVIOUS_MEMBER}" \
+      >/dev/null
+  fi
+fi
 
 WIF_PROVIDER="projects/${PROJECT_NUMBER}/locations/global/workloadIdentityPools/${POOL_ID}/providers/${PROVIDER_ID}"
 

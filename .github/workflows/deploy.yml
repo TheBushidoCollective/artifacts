@@ -96,23 +96,37 @@ jobs:
         working-directory: deploy/terraform
         run: terraform apply -input=false -auto-approve tfplan
 
-      - name: Report the deployed origins
+      - name: Report the deployed origins and DNS delegation
         id: urls
         working-directory: deploy/terraform
         run: |
           set -euo pipefail
           SERVICE="$(terraform output -raw service_url)"
           SANDBOX="$(terraform output -raw sandbox_url)"
+          DOMAIN="$(terraform output -raw service_domain)"
+          NAMESERVERS="$(terraform output -json service_name_servers | jq -r '.[]')"
+          DS_RECORD="$(terraform output -raw service_ds_record)"
           echo "service=$SERVICE" >> "$GITHUB_OUTPUT"
           echo "sandbox=$SANDBOX" >> "$GITHUB_OUTPUT"
           {
-            echo "### Relic is deployed"
+            echo "### Relik infrastructure is deployed"
             echo ""
-            echo "| Origin | URL |"
+            echo "| Resource | Value |"
             echo "|---|---|"
-            echo "| Service | $SERVICE |"
-            echo "| Sandbox | $SANDBOX |"
+            echo "| Service origin | $SERVICE |"
+            echo "| Sandbox origin | $SANDBOX |"
+            echo "| Service domain | $DOMAIN |"
             echo "| Bucket | \`$(terraform output -raw bucket_name)\` |"
+            echo ""
+            echo "Authoritative nameservers for registrar delegation:"
+            echo '```text'
+            echo "$NAMESERVERS"
+            echo '```'
+            echo ""
+            echo "DNSSEC DS record (add only after nameserver delegation removes the registrar's old DS):"
+            echo '```text'
+            echo "$DS_RECORD"
+            echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
       # A green apply says Terraform is satisfied. It does not say the service

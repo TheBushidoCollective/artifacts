@@ -15,6 +15,9 @@ concurrency:
   group: verify-${{ github.ref }}-${{ github.event_name }}
   cancel-in-progress: true
 
+env:
+  TF_VERSION: 1.9.8
+
 jobs:
   verify:
     runs-on: ubuntu-latest
@@ -28,6 +31,17 @@ jobs:
           # The versions in mise.toml, not whatever the runner ships.
           install: true
           cache: true
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Validate Terraform
+        working-directory: deploy/terraform
+        run: |
+          terraform fmt -check -recursive
+          terraform init -backend=false -input=false
+          terraform validate
 
       - name: Install dependencies
         run: bun install --frozen-lockfile

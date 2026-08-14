@@ -5,6 +5,7 @@ resource "google_project_service" "relic" {
     "run.googleapis.com",
     "artifactregistry.googleapis.com",
     "storage.googleapis.com",
+    "dns.googleapis.com",
     # V4 signing goes through signBlob with the ambient identity, so there is
     # no downloaded key anywhere in the deployment.
     "iamcredentials.googleapis.com",

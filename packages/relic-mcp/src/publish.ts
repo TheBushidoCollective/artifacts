@@ -82,12 +82,20 @@ export interface FileReader {
 export interface PublishInput {
   readonly path: string;
   readonly filename?: string | undefined;
+  /**
+   * A publisher-chosen lifetime in days. Undefined means the relic is kept
+   * until someone deletes it. The field is omitted from the grant entirely
+   * when unset, so the server's default decides, never a zero that happens
+   * to survive the wire.
+   */
+  readonly ttl_days?: number | undefined;
 }
 
 export interface PublishResult {
   readonly url: string;
   readonly relic_id: string;
-  readonly relic_expires_at: string;
+  /** Null when the relic has no lifetime, which is now the default. */
+  readonly relic_expires_at: string | null;
   readonly renderer_class: RendererClass;
   readonly filename: string;
   readonly resolved_path: string;
@@ -174,6 +182,10 @@ export async function publish(
         publishing_client: deps.clientName,
         declared_size_bytes: source.bytes.length,
         declared_ciphertext_bytes: container.length,
+        // Omitted rather than sent as anything, so an unset lifetime is the
+        // server's default (kept until deleted) and never a value this
+        // client guessed on the publisher's behalf.
+        ...(input.ttl_days === undefined ? {} : { ttl_days: input.ttl_days }),
       });
     } catch (error) {
       if (
@@ -220,7 +232,12 @@ export async function publish(
     return {
       url: relicUrl(deps.relicOrigin, relicId, key),
       relic_id: relicId,
-      relic_expires_at: String(grant['relic_expires_at']),
+      // Null is a real state now, the default one; String(null) would hand
+      // the caller the four characters "null" where a date used to be.
+      relic_expires_at:
+        grant['relic_expires_at'] == null
+          ? null
+          : String(grant['relic_expires_at']),
       renderer_class: rendererClass,
       filename,
       resolved_path: source.resolvedPath,

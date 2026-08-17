@@ -26,6 +26,17 @@ import {
 const SERVICE_ORIGIN =
   typeof window === 'undefined' ? '' : window.location.origin;
 
+/**
+ * The wordmark in the accession band.
+ *
+ * The recipient is deciding whether to trust an unfamiliar domain, so the
+ * wordmark is the domain itself rather than a product name they have no way to
+ * connect to the address bar. It is a brand fact and belongs in code: deriving
+ * it from the serving origin would print whatever host the deployment happens
+ * to answer on.
+ */
+const WORDMARK = 'relik.link';
+
 const ICONS = {
   copy: 'M5 2h7a1 1 0 0 1 1 1v8h-1V3H5V2zM3 4h7a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1zm0 1v8h7V5H3z',
   download:
@@ -151,7 +162,7 @@ function buildBar(view: ReadyView, relicId: string): HTMLElement {
 
   const mark = document.createElement('div');
   mark.className = 'mark';
-  mark.textContent = 'RELIC';
+  mark.textContent = WORDMARK;
   bar.appendChild(mark);
 
   const identity = document.createElement('div');
@@ -410,7 +421,7 @@ function renderDead(dead: DeadView): void {
   bar.className = 'bar';
   const mark = document.createElement('div');
   mark.className = 'mark';
-  mark.textContent = 'RELIC';
+  mark.textContent = WORDMARK;
   bar.appendChild(mark);
   document.body.replaceChildren(bar);
 

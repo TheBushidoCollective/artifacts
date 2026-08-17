@@ -47,6 +47,7 @@ async function publish(
     id?: string;
     rendererClass?: string;
     size?: number;
+    ttlDays?: number;
   } = {}
 ): Promise<{ id: string; key: Uint8Array }> {
   const challengeResponse = await app.fetch(
@@ -70,6 +71,7 @@ async function publish(
         publishing_client: 'relic-mcp/0.1.0 (test)',
         declared_size_bytes: options.size ?? 12,
         declared_ciphertext_bytes: encryptedSize(options.size ?? 12),
+        ...(options.ttlDays === undefined ? {} : { ttl_days: options.ttlDays }),
       }),
     })
   );
@@ -84,6 +86,30 @@ async function publish(
   storage.put(id, container);
 
   return { id, key };
+}
+
+/**
+ * A grant request the test controls field by field, for the metadata the
+ * publish helper does not model.
+ */
+async function grantFor(fields: Record<string, unknown>): Promise<Response> {
+  const challenge = (await app
+    .fetch(req('/api/challenge', { method: 'POST' }))
+    .then((r) => r.json())) as { challenge_nonce: string };
+  return app.fetch(
+    req('/api/grant', {
+      method: 'POST',
+      body: JSON.stringify({
+        challenge_nonce: challenge.challenge_nonce,
+        relic_id: generateRelicId(),
+        renderer_class: 'markdown',
+        publishing_client: 'test',
+        declared_size_bytes: 12,
+        declared_ciphertext_bytes: encryptedSize(12),
+        ...fields,
+      }),
+    })
+  );
 }
 
 describe('the shell', () => {
@@ -149,6 +175,32 @@ describe('reserved segments beat ids at the router', () => {
     expect(body).toContain('Your browser never sends the');
     expect(body).toContain('enters the model');
     expect(body).toContain('Deleted does not mean erased');
+  });
+
+  test('/install carries the configured origin, since the server has no default', async () => {
+    const response = await app.fetch(req('/install'));
+    expect(response.status).toBe(200);
+    const body = await response.text();
+    expect(body).toContain('claude mcp add relic');
+    expect(body).toContain('RELIC_SERVICE_ORIGIN=https://relic.example');
+    expect(body).toContain('"RELIC_SERVICE_ORIGIN": "https://relic.example"');
+  });
+
+  test('/install claims no more than the system delivers', async () => {
+    const body = await app.fetch(req('/install')).then((r) => r.text());
+    // The decrypting page is served by the operator the claim is made against,
+    // so the copy may not say the operator cannot read a relic.
+    expect(body).toContain('rests on our intent');
+    expect(body).not.toMatch(/nobody can read/i);
+  });
+
+  test('/install is noindex and needs no script', async () => {
+    const response = await app.fetch(req('/install'));
+    expect(response.headers.get('x-robots-tag')).toBe('noindex');
+    expect(response.headers.get('content-security-policy')).toContain(
+      "default-src 'none'"
+    );
+    expect(await response.text()).not.toContain('<script');
   });
 });
 
@@ -459,7 +511,7 @@ describe('the mint', () => {
   });
 
   test('an expired relic is 410 relic_expired', async () => {
-    const { id } = await publish();
+    const { id } = await publish({ ttlDays: 7 });
     now += 8 * 86_400 * 1000;
     const response = await app.fetch(
       req(`/api/relics/${id}/mint`, { method: 'POST' })
@@ -483,6 +535,7 @@ describe('the mint', () => {
           publishing_client: 'test',
           declared_size_bytes: 1,
           declared_ciphertext_bytes: encryptedSize(1),
+          ttl_days: 7,
         }),
       })
     );
@@ -739,7 +792,7 @@ describe('the download cap', () => {
 
 describe('signed URL validity', () => {
   test('clamps to min(url_validity, relic_expiry)', async () => {
-    const { id } = await publish();
+    const { id } = await publish({ ttlDays: 7 });
     // 5 minutes of relic life left, against a 15-minute validity window.
     now += 7 * 86_400 * 1000 - 5 * 60 * 1000;
 
@@ -755,7 +808,7 @@ describe('signed URL validity', () => {
   });
 
   test('refuses below the minimum viable validity rather than issuing a dying URL', async () => {
-    const { id } = await publish();
+    const { id } = await publish({ ttlDays: 7 });
     now += 7 * 86_400 * 1000 - 30 * 1000;
 
     const response = await app.fetch(
@@ -763,6 +816,103 @@ describe('signed URL validity', () => {
     );
     expect(response.status).toBe(410);
     expect((await response.json()).code).toBe('relic_expired');
+  });
+});
+
+describe('publisher lifetimes', () => {
+  const grantedAt = Date.parse('2026-08-02T12:00:00.000Z');
+
+  test('a grant with no ttl_days reports no deadline', async () => {
+    const response = await grantFor({});
+    const grant = (await response.json()) as {
+      relic_expires_at: string | null;
+    };
+    expect(grant.relic_expires_at).toBeNull();
+  });
+
+  test('an explicit null ttl_days means the same as omitting it', async () => {
+    const response = await grantFor({ ttl_days: null });
+    const grant = (await response.json()) as {
+      relic_expires_at: string | null;
+    };
+    expect(grant.relic_expires_at).toBeNull();
+  });
+
+  test('a supplied ttl_days is recorded as the grant deadline', async () => {
+    const response = await grantFor({ ttl_days: 3 });
+    const grant = (await response.json()) as {
+      relic_expires_at: string | null;
+    };
+    expect(grant.relic_expires_at).toBe(
+      new Date(grantedAt + 3 * 86_400 * 1000).toISOString()
+    );
+  });
+
+  test('the ttl_days boundaries are inclusive', async () => {
+    for (const ttlDays of [1, 3650]) {
+      const response = await grantFor({ ttl_days: ttlDays });
+      expect(response.status).toBe(200);
+    }
+  });
+
+  test('out-of-range and non-integer ttl_days refuse with invalid_publish_metadata', async () => {
+    for (const bad of [0, -1, 1.5, 3651, '7', true]) {
+      const response = await grantFor({ ttl_days: bad });
+      expect(response.status).toBe(400);
+      expect((await response.json()).code).toBe('invalid_publish_metadata');
+    }
+  });
+
+  test('a relic with no lifetime mints however far the clock advances', async () => {
+    const { id } = await publish();
+    // Past the 3650-day ceiling, past any retention window.
+    now += 11 * 365 * 86_400 * 1000;
+    const response = await app.fetch(
+      req(`/api/relics/${id}/mint`, { method: 'POST', ip: '203.0.113.5' })
+    );
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as {
+      relic_expires_at: string | null;
+    };
+    expect(body.relic_expires_at).toBeNull();
+  });
+
+  test('a relic with no lifetime reports null on complete too', async () => {
+    const { id } = await publish();
+    const response = await app.fetch(
+      req(`/api/relics/${id}/complete`, { method: 'POST' })
+    );
+    expect(response.status).toBe(200);
+    expect((await response.json()).relic_expires_at).toBeNull();
+  });
+
+  test('a relic with no lifetime mints at the full validity window', async () => {
+    const { id } = await publish();
+    // Thirty days past any TTL this service ever had, and the URL still
+    // carries the whole fifteen minutes: nothing left to clamp against.
+    now += 30 * 86_400 * 1000;
+    const body = (await app
+      .fetch(
+        req(`/api/relics/${id}/mint`, { method: 'POST', ip: '203.0.113.5' })
+      )
+      .then((r) => r.json())) as { url_expires_at: string };
+    expect(Date.parse(body.url_expires_at)).toBe(now + 15 * 60 * 1000);
+  });
+
+  test('a relic granted a lifetime behaves exactly as the fixed TTL did', async () => {
+    const { id } = await publish({ ttlDays: 7 });
+    now += 6 * 86_400 * 1000;
+    const live = await app.fetch(
+      req(`/api/relics/${id}/mint`, { method: 'POST', ip: '203.0.113.5' })
+    );
+    expect(live.status).toBe(200);
+
+    now += 2 * 86_400 * 1000;
+    const dead = await app.fetch(
+      req(`/api/relics/${id}/mint`, { method: 'POST', ip: '203.0.113.6' })
+    );
+    expect(dead.status).toBe(410);
+    expect((await dead.json()).code).toBe('relic_expired');
   });
 });
 
@@ -1045,12 +1195,6 @@ describe('stripToRelicId', () => {
 });
 
 describe('config invariants', () => {
-  test('refuses a retention window shorter than the TTL', () => {
-    expect(() =>
-      createApp({ config: { retentionSeconds: 3600, ttlSeconds: 86_400 } })
-    ).toThrow(/retention/);
-  });
-
   test('refuses a dedup interval inside the post-publish window', () => {
     expect(() =>
       createApp({

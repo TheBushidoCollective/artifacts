@@ -117,6 +117,6 @@ These bound every later station. Anything here showing up in a downstream design
 - **No republish-to-same-URL and no versioning.** That's Artifacts' genuine strength and it needs identity to do safely. A new relic is a new URL.
 - **No custom domains.** The domain strategy is a security control, not a branding surface.
 - **No team features.** No sharing groups, no org accounts, no permissions.
-- **No expiry configuration.** TTL is mandatory and fixed, set by the operator as an abuse control.
+- **No mandatory TTL.** Relics are kept until deleted. A publisher may set a lifetime at publish time; without one the relic never expires, and the operator cannot impose a lifetime of their own. This reverses the original rule that TTL was mandatory and fixed, and the cost is named rather than absorbed: the storage-side abuse mitigation is gone, the bounded-egress assumption it carried is gone, and what remains as abuse controls is delete-by-ID, the per-object download cap, and the kill switch.
 - **No burn-after-reading in the first release.** A Slack unfurl, a Safe Links scanner, or an antivirus mail gateway would fetch the URL and burn the relic before a human ever clicks, producing a stream of "the link is dead" reports that look exactly like a broken product.
 - **No first-party rendering of media, archives, or arbitrary binaries.** Download-only in the first release, per the wedge boundary. The framing constraint stays.

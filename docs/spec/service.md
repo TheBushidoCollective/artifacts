@@ -15,7 +15,7 @@ This section owns failures the **app server originates**. A purely local file er
 | # | Case | Status | `code` |
 |---|---|---|---|
 | 1 | ID was never issued | `404` | `relic_not_found` |
-| 2 | Expired past TTL | `410` | `relic_expired` |
+| 2 | Expired past a publisher-set lifetime | `410` | `relic_expired` |
 | 3 | Deleted for abuse | `410` | `relic_removed` |
 | 4 | Deleted under legal process | `410` | `relic_removed` |
 | 5 | Blocklist hash match | `410` | `relic_removed` |
@@ -25,7 +25,7 @@ This section owns failures the **app server originates**. A purely local file er
 | 9 | Mint rate limited | `429` | `mint_rate_limited` |
 | 10 | Per-object download cap exhausted | `410` | `download_cap_exhausted` |
 | 11 | Egress kill switch engaged | `503` | `service_paused` |
-| 12 | Malformed renderer class or client name | `400` | `invalid_publish_metadata` |
+| 12 | Malformed renderer class, client name, or `ttl_days` | `400` | `invalid_publish_metadata` |
 
 Case 6 is a relic whose publisher took a grant and never uploaded. It gets `410` rather than `404` because the ID is permanently spent: the server never overwrites and refuses a grant for an ID that already exists (`format.md` 1.4), so that path can never become servable. Its own code tells a publishing client that lost its confirmation that the upload never landed, which is a different instruction from "you mistyped."
 
@@ -49,7 +49,7 @@ A relic whose per-object download cap is spent is a genuine collision: it isn't 
 
 **They're distinguished.** `format.md` 1.2 fixes the ID at full bearer-token entropy, floored at 122 bits, and states the consequence directly: "Because the ID is unguessable, an expired relic and a relic that never existed **may be distinguished**." Only somebody already holding a valid ID can ask the question, and holding it means they were handed the link.
 
-**The split is three ways, not two.** `404 relic_not_found` is an ID the server never issued. `410 relic_expired` is one that lived and ran out. Case 6's `410 relic_never_published` sits between them: issued, granted, never filled. That middle state isn't a choice made here. It exists because `format.md` 1.4 refuses to overwrite, which is what makes a spent-but-empty ID permanent rather than pending, and a pending one would not deserve a terminal status at all (1.6).
+**The split is three way, not two.** `404 relic_not_found` is an ID the server never issued. `410 relic_expired` is one that lived and ran out, which only a relic whose publisher set a lifetime can ever be; one published without a lifetime never expires and never returns it. Case 6's `410 relic_never_published` sits between them: issued, granted, never filled. That middle state isn't a choice made here. It exists because `format.md` 1.4 refuses to overwrite, which is what makes a spent-but-empty ID permanent rather than pending, and a pending one would not deserve a terminal status at all (1.6).
 
 Against a short ID this would be an enumeration oracle, letting a stranger walk the space and harvest a map of live IDs plus the operator-conceded metadata. That design was rejected in `format.md` and this document doesn't reopen it. What distinguishing buys is the support stream the frame named when it ruled out burn-after-reading: "the link is dead" becomes an answerable question instead of a mystery. The honest limit is that the server never sees the fragment, so it can't tell a real recipient from a scanner, and the informative `410` is served to both. That costs nothing, because the scanner already had the URL.
 
@@ -116,7 +116,7 @@ This single rule keeps non-executing fetchers off both the open counter and the 
 
 - **`url`** the signed download URL.
 - **`url_expires_at`** RFC 3339, UTC. Lets the viewer reuse a still-valid URL instead of minting again.
-- **`relic_expires_at`** RFC 3339, UTC. Distinct from the above, because either can outlive the other.
+- **`relic_expires_at`** RFC 3339, UTC, or `null` when the relic has no publisher-set lifetime. Distinct from the above, because either can outlive the other.
 - **`object_length`** the ciphertext object's byte length, so the viewer can refuse before allocating and can detect a truncated transfer. `format.md` 3.3 derives plaintext size from this and `rs`.
 - **`object_crc32c`** base64, read from the object's non-editable metadata ([GCS](https://docs.cloud.google.com/storage/docs/metadata)), where CRC32C "is the recommended validation method for performing integrity checks" ([GCS](https://docs.cloud.google.com/storage/docs/data-validation)). Its only job here is separating transport corruption from everything else, which matters because `format.md` 3.5 establishes that a tag failure is indistinguishable from a wrong key. It removes one branch and it cannot remove the others.
 - **`mints_remaining`** so the viewer can warn before the cap kills the link rather than after.
@@ -141,27 +141,29 @@ Safe Links wrapping "is done per message recipient (both internal and external r
 
 So a cap in single digits, low enough to bound an abuser meaningfully, breaks ordinary email distribution on legitimate traffic alone. The value is `shape`'s and this is its binding constraint.
 
-## 3. Expiry, lifecycle, and time
+## 3. Expiry and time
 
-**A download that begins before expiry completes after it.** The app server isn't in the data path and structurally cannot stop an in-flight transfer.
+**Expiry is the publisher's to set, and by default there is none.** A relic is kept until deleted. A publisher may set a lifetime in the grant request (`ttl_days`, an integer 1 to 3650); anything else refuses with `invalid_publish_metadata` (1.1 case 12). A relic with no lifetime never expires: the mint path performs no expiry refusal, and `relic_expires_at` is `null` everywhere. This reverses the original rule that a TTL was mandatory and operator-set, and the cost is counted in the preconditions: no storage-side reaping exists, an expired relic's bytes outlive its refusal until explicitly deleted, and the ceiling rests on the download cap and the kill switch rather than on expiry.
 
-**Signed URL validity clamps to `min(url_validity, relic_expiry)` at mint.** The alternative, accepting the overhang, adds a term to the worst-case egress arithmetic and extends the real bound on how long abuse circulates past the TTL, which the preconditions call the single highest-leverage control. Trading a control for convenience is the wrong direction. The cost is that a mint moments before expiry yields a URL that dies mid-transfer, so the server refuses to mint below a minimum viable validity and returns `relic_expired` instead. GCS caps signed URL lifetime independently: "The longest expiration value is 604800 seconds (7 days)" ([GCS](https://docs.cloud.google.com/storage/docs/access-control/signed-urls)).
+**A download that begins before expiry completes after it.** The app server isn't in the data path and structurally cannot stop an in-flight transfer. This and the two rules below apply only on a relic with a publisher-set lifetime.
 
-**The publishing client's clock is never trusted.** Every timestamp feeding the TTL, the telemetry window, and the retention window is the app server's own, NTP-disciplined. The honest limit is that a skewed server mis-enforces the TTL silently, and the app can't raise an alarm about its own clock.
+**Signed URL validity clamps to `min(url_validity, relic_expiry)` at mint, on a relic that has a lifetime.** Accepting the overhang adds a term to the worst-case egress arithmetic. The cost of clamping is that a mint moments before expiry yields a URL that dies mid-transfer, so the server refuses to mint below a minimum viable validity and returns `relic_expired` instead. On a relic with no lifetime there is nothing to clamp against and the signed URL runs at its configured validity. GCS caps signed URL lifetime independently: "The longest expiration value is 604800 seconds (7 days)" ([GCS](https://docs.cloud.google.com/storage/docs/access-control/signed-urls)).
 
-### 3.1 The lifecycle gap
+**The publishing client's clock is never trusted.** Every timestamp feeding a publisher-set lifetime, the telemetry window, and the retention window is the app server's own, NTP-disciplined. The honest limit is that a skewed server mis-enforces a lifetime silently, and the app can't raise an alarm about its own clock.
 
-Lifecycle granularity is days rounded to the next UTC midnight, and "changes to a bucket's lifecycle configuration can take up to 24 hours to go into effect, and Object Lifecycle Management might still perform actions based on the old configuration during this time" ([GCS](https://docs.cloud.google.com/storage/docs/lifecycle)). The application-layer refusal is exact to the second; the lifecycle rule is storage hygiene.
+### 3.1 No lifecycle rule, and therefore no gap
 
-**Nothing is served in that gap.** Stated so nobody later "fixes" it by serving from the object's continued existence. Three consequences:
+The bucket's storage-side Delete rule is gone. A bucket lifecycle rule acts by age across everything it matches, so it cannot express a per-relic lifetime, and keeping it would have deleted ciphertext for relics the publisher asked to keep. Expiry is enforced only by the application, at mint, exact to the second, and there is no longer a window where the application refuses while storage is still deciding.
 
-1. The bytes are billable storage the whole time, and soft-deleted objects "incur storage charges until the soft-deleted objects are permanently deleted after the retention duration is over" ([GCS](https://docs.cloud.google.com/storage/docs/soft-delete)).
-2. **The ciphertext-hash scan still covers objects inside the gap.** Skipping expired objects leaves blocklisted content undetected exactly where a record is most wanted, since an expired relic is the one an abuse report arrives about after the fact.
-3. Any published byte-lifetime number counts TTL plus lifecycle lag plus the soft-delete window. It is not the TTL.
+Three consequences, stated so nobody "fixes" them by restoring a rule or by serving from an expired object's continued existence:
+
+1. An expired relic's bytes stay in the bucket as live, billable storage until something explicitly deletes them. The refusal stops serving; it reclaims nothing. Soft-deleted objects then "incur storage charges until the soft-deleted objects are permanently deleted after the retention duration is over" ([GCS](https://docs.cloud.google.com/storage/docs/soft-delete)).
+2. **The ciphertext-hash scan covers expired-but-undeleted objects.** They are indistinguishable from live objects in a bucket listing, and an expired relic is exactly the one an abuse report arrives about after the fact, so expiry is never a reason to skip one.
+3. Any published byte-lifetime number counts the lifetime, the indefinite stay until deletion, and the soft-delete window after it. For a relic with no lifetime there is no number to publish, only "kept until deleted."
 
 ### 3.2 Deleted doesn't mean erased
 
-"Soft delete is enabled by default on all buckets and has a retention duration of seven days unless you or your organization have chosen a different policy", "soft-deleted objects cannot be read or modified", and "objects deleted by Object Lifecycle Management become soft-deleted" ([GCS](https://docs.cloud.google.com/storage/docs/soft-delete)). Deletion stops serving immediately, which is the half that answers an abuse notice.
+"Soft delete is enabled by default on all buckets and has a retention duration of seven days unless you or your organization have chosen a different policy" and "soft-deleted objects cannot be read or modified" ([GCS](https://docs.cloud.google.com/storage/docs/soft-delete)). Deletion stops serving immediately, which is the half that answers an abuse notice.
 
 **Relic never promises erasure.** The policy is editable at any time, on creation or update, and it remains a decision to make before the first deploy for a narrower reason: a change reaches only objects deleted after it takes effect, so setting it late leaves a tail nobody can retroactively clear.
 
@@ -205,7 +207,7 @@ It lives at a stable URL, is linked from every relic page beside `/abuse`, and i
 2. **The transcript disclosure.** The publish tool must return the full URL including the fragment, because relaying a usable link is the product, so **the key enters the model's context and the session transcript on every publish**. Zero-knowledge holds against the Relic operator. It does not hold against the model provider or the transcript store, and this is structurally unfixable rather than a defect to schedule.
 3. **The served-JavaScript caveat**, as the frame already locks it: the decrypting code is served by the party the claim is made against, so it's a statement about operator intent rather than a property a recipient can verify.
 4. **The correct form of the fragment claim.** "The key never reaches a server" is wrong unqualified. The honest form is **"your browser never sends the key to Relic's servers."**
-5. **Retention, per sink, with its own window each.** Application records, edge and load balancer logs, GCS access logs where enabled, the intake mailbox or ticket queue, and soft-deleted object bytes. Listed separately rather than as one number, because a single figure is the claim that goes false first. It states that deleted does not mean erased, per 3.2.
+5. **Retention, per sink, with its own window each.** Application records, edge and load balancer logs, GCS access logs where enabled, the intake mailbox or ticket queue, and soft-deleted object bytes. Listed separately rather than as one number, because a single figure is the claim that goes false first. It states that deleted does not mean erased, per 3.2, and that a relic's ciphertext is kept until deleted, because nothing reaps it by age.
 
 One more, assigned by `format.md` 3.8: **the length leak.** Ciphertext length reveals plaintext length to within a record, so alongside the class the operator learns something like "an image of roughly 2.4 MB". Whether the container pads to buckets is `shape`'s, and the disclosure appears under either branch.
 
@@ -235,8 +237,8 @@ Seven items, and only these seven.
 
 1. **Edge fidelity for the statuses section 1 fixes.** No status, code, or distinction in section 1 is `shape`'s; all of them are settled there. What is `shape`'s: which of those statuses the deployed edge can actually produce under load shedding, and the edge's substitute behavior where it can't emit a problem document (1.5). Read this item as edge behavior only. Nothing in it reopens the table.
 2. **The per-object download cap value.** Priced against 2.3's arithmetic: a floor of 40 legitimate mints for a 40-person distribution list, near 80 where scanners detonate, against GCS internet egress at $0.12/GB for the first TB ([pricing](https://leanopstech.com/blog/google-cloud-storage-pricing-2026/)).
-3. **The TTL ceiling, and which lifecycle regime it lands in.** Anything under a day is inexpressible in lifecycle and is enforced only at the application layer (3.1).
+3. **The publisher lifetime ceiling.** Settled by reversal: relics do not expire unless the publisher sets a lifetime, and the accepted ceiling for one is 3650 days (`decisions.md` 3). No lifecycle regime is involved, because no storage-side rule exists; enforcement is only at the application layer (3.1).
 4. **The signed-URL validity window**, including the minimum viable validity below which a clamped mint is refused (section 3), bounded above by 604800 seconds.
-5. **The retention window, set together with the TTL.** A retention window shorter than the TTL silently stops the metric's publishing-IP filter firing on older relics, and neither locked document contains a number that would catch it. It also bounds how long the tombstone and the mint log's `code` survive, which the cap-exhaustion cost in 1.2 depends on.
+5. **The retention window.** A retention window shorter than the age of relics still being opened silently stops the metric's publishing-IP filter firing on older relics, and with relics that never expire no TTL bounds that age. It also bounds how long the tombstone and the mint log's `code` survive, which the cap-exhaustion cost in 1.2 depends on.
 6. **The published SLA in hours**, against the inputs in 4.1.
 7. **The mint dedup interval.** Whether a refused mint counts as an open, and whether a repeated one does, are rules and they're fixed in 2.2: refused never counts and never consumes cap; a repeat inside the interval isn't a distinct open and does consume cap. The interval's value is `shape`'s, and it interacts with the frame's 120-second window.

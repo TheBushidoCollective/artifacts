@@ -87,10 +87,11 @@ body {
   align-items: center;
   padding: 0 1rem;
   font-family: var(--mono);
-  font-size: 0.7rem;
+  font-size: 0.78rem;
   font-weight: 600;
-  letter-spacing: 0.34em;
-  text-indent: 0.34em;
+  /* A domain reads as an address, so it is set tight. The wide tracking this
+     replaced was balancing a five-letter uppercase monogram. */
+  letter-spacing: 0.01em;
   color: var(--ink);
   border-right: 1px solid var(--rule);
   white-space: nowrap;

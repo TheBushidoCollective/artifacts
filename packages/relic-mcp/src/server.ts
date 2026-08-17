@@ -73,6 +73,14 @@ export const TOOL_NAME = 'relic_publish';
  */
 export const DESCRIBE_TOOL_NAME = 'relic_describe_client';
 
+/**
+ * The ceiling on a publisher-supplied lifetime, matching the grant
+ * contract's `maxTtlDays`. Refusing here keeps a typo like 36500 from
+ * encrypting the file and round-tripping a grant only to be turned down
+ * after the work is done.
+ */
+const MAX_TTL_DAYS = 3650;
+
 export const TOOL_DEFINITION = {
   name: TOOL_NAME,
   title: 'Publish a relic',
@@ -93,6 +101,15 @@ export const TOOL_DEFINITION = {
           'Optional. Overrides the name written into the encrypted envelope ' +
           'header. Defaults to the basename of `path`.',
       },
+      ttl_days: {
+        type: 'integer',
+        minimum: 1,
+        maximum: MAX_TTL_DAYS,
+        description:
+          'Optional. Gives the relic a lifetime in days. Omit it and the ' +
+          'relic is kept until it is deleted. Shorter is better for ' +
+          'sensitive content.',
+      },
     },
     required: ['path'],
     additionalProperties: false,
@@ -102,7 +119,7 @@ export const TOOL_DEFINITION = {
     properties: {
       url: { type: 'string' },
       relic_id: { type: 'string' },
-      relic_expires_at: { type: 'string' },
+      relic_expires_at: { type: ['string', 'null'] },
       renderer_class: { type: 'string' },
       filename: { type: 'string' },
       resolved_path: { type: 'string' },
@@ -266,8 +283,31 @@ async function callTool(
   const filename =
     typeof args['filename'] === 'string' ? args['filename'] : undefined;
 
+  // A lifetime is opt-in: absent or null means the relic is kept until it is
+  // deleted. A value that fails the contract is refused rather than dropped,
+  // because silently dropping it publishes the opposite of what was asked:
+  // a relic meant to die in days lives forever.
+  const rawTtlDays = args['ttl_days'];
+  let ttlDays: number | undefined;
+  if (rawTtlDays !== undefined && rawTtlDays !== null) {
+    if (
+      typeof rawTtlDays !== 'number' ||
+      !Number.isSafeInteger(rawTtlDays) ||
+      rawTtlDays < 1 ||
+      rawTtlDays > MAX_TTL_DAYS
+    ) {
+      return errorResponse(
+        id,
+        ERROR_CODES.invalidParams,
+        `\`ttl_days\` must be an integer between 1 and ${MAX_TTL_DAYS}, or ` +
+          'omitted to keep the relic until it is deleted'
+      );
+    }
+    ttlDays = rawTtlDays;
+  }
+
   try {
-    const result = await publish({ path, filename }, deps);
+    const result = await publish({ path, filename, ttl_days: ttlDays }, deps);
     return {
       jsonrpc: '2.0',
       id,
@@ -281,7 +321,12 @@ async function callTool(
             type: 'text',
             text:
               `Published ${result.filename} as a relic.\n\n${result.url}\n\n` +
-              `Expires ${result.relic_expires_at}. Anyone with this link, ` +
+              // No lifetime is the default, so the agent relaying this needs
+              // a sentence that says so, not a date-shaped hole.
+              (result.relic_expires_at === null
+                ? 'It does not expire; it is kept until it is deleted. '
+                : `Expires ${result.relic_expires_at}. `) +
+              'Anyone with this link, ' +
               'including its fragment, can read the file. The key is in the ' +
               'fragment and it is now in this transcript.\n' +
               `What Relic knows: ${result.disclosure_url}`,

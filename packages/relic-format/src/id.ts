@@ -41,6 +41,9 @@ export const RESERVED_SEGMENTS: readonly string[] = [
   'health',
   '.well-known',
   'sandbox.html',
+  // Folds to `1nsta11` under lookup normalization, so the table is doing real
+  // work here even though length already excludes it.
+  'install',
 ];
 
 const RESERVED_NORMALIZED = new Set(

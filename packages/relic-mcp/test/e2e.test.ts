@@ -72,6 +72,19 @@ function shimFetch(): typeof globalThis.fetch {
   }) as typeof globalThis.fetch;
 }
 
+/** Records every /api/grant request body, so tests see the wire, not intent. */
+function captureGrants(
+  sink: Record<string, unknown>[]
+): typeof globalThis.fetch {
+  return (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = new URL(typeof input === 'string' ? input : String(input));
+    if (url.pathname === '/api/grant') {
+      sink.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
+    }
+    return deps.fetch(input, init);
+  }) as typeof globalThis.fetch;
+}
+
 beforeEach(() => {
   now = Date.parse('2026-08-02T12:00:00.000Z');
   storage = new MemoryStorage();
@@ -330,13 +343,63 @@ describe('the recipient experience on a dead relic', () => {
   });
 
   test('an expired relic reads as expired', async () => {
+    // Expiry is opt-in now, so this relic only dies because its publisher
+    // said it should.
     writeFile('/work/notes.md', 'hello');
-    const result = await publish({ path: 'notes.md' }, deps);
+    const result = await publish({ path: 'notes.md', ttl_days: 7 }, deps);
     now += 8 * 86_400 * 1000;
 
     const viewed = await open(result.url);
     expect(viewed.mintStatus).toBe(410);
     expect(viewed.problem.code).toBe('relic_expired');
+  });
+});
+
+describe('publisher-chosen lifetimes', () => {
+  test('forwards ttl_days on the grant and reports the expiry date', async () => {
+    writeFile('/work/notes.md', 'hello');
+    const grants: Record<string, unknown>[] = [];
+
+    const result = await publish(
+      { path: 'notes.md', ttl_days: 3 },
+      { ...deps, fetch: captureGrants(grants) }
+    );
+
+    expect(grants).toHaveLength(1);
+    expect(grants[0]?.['ttl_days']).toBe(3);
+    expect(Date.parse(result.relic_expires_at ?? '')).not.toBeNaN();
+
+    // The lifetime took effect server-side, not just on the wire.
+    const row = await app.store.getRelic(result.relic_id);
+    expect(row?.expiresAt).toBe(now + 3 * 86_400 * 1000);
+  });
+
+  test('omits ttl_days when none was supplied, and the relic never expires', async () => {
+    writeFile('/work/notes.md', 'hello');
+    const grants: Record<string, unknown>[] = [];
+
+    const result = await publish(
+      { path: 'notes.md' },
+      { ...deps, fetch: captureGrants(grants) }
+    );
+
+    expect(grants).toHaveLength(1);
+    // The field is absent, not zero and not null: an unset lifetime is the
+    // server's default to make, never this client's guess.
+    expect('ttl_days' in (grants[0] ?? {})).toBe(false);
+    expect(result.relic_expires_at).toBeNull();
+
+    const row = await app.store.getRelic(result.relic_id);
+    expect(row?.expiresAt).toBeUndefined();
+  });
+
+  test('a relic without a lifetime is still readable after any wait', async () => {
+    writeFile('/work/notes.md', 'hello');
+    const result = await publish({ path: 'notes.md' }, deps);
+    now += 3650 * 86_400 * 1000;
+
+    const viewed = await open(result.url);
+    expect(viewed.mintStatus).toBe(200);
   });
 });
 
@@ -407,11 +470,93 @@ describe('the MCP surface', () => {
 
   test('accepts a path and refuses inline content by schema', () => {
     const schema = TOOL_DEFINITION.inputSchema;
-    expect(Object.keys(schema.properties)).toEqual(['path', 'filename']);
+    expect(Object.keys(schema.properties)).toEqual([
+      'path',
+      'filename',
+      'ttl_days',
+    ]);
     expect(schema.additionalProperties).toBe(false);
     // Inline content would put the plaintext in the transcript too,
     // compounding the leak from "the key leaks" to "the key and the file leak".
     expect(Object.keys(schema.properties)).not.toContain('content');
+  });
+
+  test('the schema declares the lifetime bounds the contract fixes', () => {
+    const ttl = TOOL_DEFINITION.inputSchema.properties['ttl_days'];
+    expect(ttl.type).toBe('integer');
+    expect(ttl.minimum).toBe(1);
+    expect(ttl.maximum).toBe(3650);
+  });
+
+  test('refuses a malformed ttl_days before any HTTP, like a missing path', async () => {
+    const grants: Record<string, unknown>[] = [];
+
+    for (const ttl_days of [0, -1, 3651, 1.5, '7']) {
+      const response = await handleMessage(
+        {
+          jsonrpc: '2.0',
+          id: 11,
+          method: 'tools/call',
+          params: {
+            name: TOOL_NAME,
+            arguments: { path: 'notes.md', ttl_days },
+          },
+        },
+        { ...deps, fetch: captureGrants(grants) }
+      );
+      // A lifetime the contract cannot honor means the call cannot be made;
+      // answering it by publishing forever is the opposite of what was asked.
+      expect(response?.error?.code).toBe(-32602);
+    }
+    expect(grants).toHaveLength(0);
+  });
+
+  test('a null relic_expires_at is reported as no expiry, not a bogus date', async () => {
+    writeFile('/work/notes.md', '# hello');
+    const response = await handleMessage(
+      {
+        jsonrpc: '2.0',
+        id: 12,
+        method: 'tools/call',
+        params: { name: TOOL_NAME, arguments: { path: 'notes.md' } },
+      },
+      deps
+    );
+
+    const result = response?.result as {
+      isError: boolean;
+      structuredContent: { relic_expires_at: string | null };
+      content: { text: string }[];
+    };
+    expect(result.isError).toBe(false);
+    expect(result.structuredContent.relic_expires_at).toBeNull();
+    expect(result.content[0]?.text).toContain('does not expire');
+    expect(result.content[0]?.text).not.toContain('Expires null');
+  });
+
+  test('a ttl_days publish reports the expiry date in the same breath', async () => {
+    writeFile('/work/notes.md', '# hello');
+    const response = await handleMessage(
+      {
+        jsonrpc: '2.0',
+        id: 13,
+        method: 'tools/call',
+        params: {
+          name: TOOL_NAME,
+          arguments: { path: 'notes.md', ttl_days: 30 },
+        },
+      },
+      deps
+    );
+
+    const result = response?.result as {
+      isError: boolean;
+      structuredContent: { relic_expires_at: string | null };
+      content: { text: string }[];
+    };
+    expect(result.isError).toBe(false);
+    expect(typeof result.structuredContent.relic_expires_at).toBe('string');
+    expect(result.content[0]?.text).toContain('Expires ');
   });
 
   test('does not expose the renderer class as an input', () => {

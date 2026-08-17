@@ -11,8 +11,16 @@ A zero-knowledge publishing service driven by an MCP tool. You tell your coding 
 Settled before this document. Recorded, not reopened.
 
 1. **No server-returned executable script.** The local stdio MCP server holds the key and encrypts in-process. CVE-2025-6514 earned CVSS 9.6 for the accidental version of exactly the shape a returned script would make deliberate ([JFrog](https://jfrog.com/blog/2025-6514-critical-mcp-remote-rce-vulnerability/)).
-2. **Relic doesn't run under `thebushido.co`.** It needs two registrable domains distinct from it: one for the service, one for the sandbox origin that renders untrusted HTML. Google flagged every subdomain of `immich.cloud` over per-PR preview environments, including internal-only services, then flagged it again after a successful appeal ([Immich](https://immich.app/blog/google-flags-immich-as-dangerous)).
+2. **Relic doesn't run under `thebushido.co`.** It needs two registrable domains distinct from it: one for the service, one for the usercontent origin that renders untrusted HTML. Google flagged every subdomain of `immich.cloud` over per-PR preview environments, including internal-only services, then flagged it again after a successful appeal ([Immich](https://immich.app/blog/google-flags-immich-as-dangerous)).
 3. **Rendering is the wedge. Zero-knowledge is the permission slip.**
+
+A note on a word, so nobody reintroduces it: the origin that renders untrusted
+HTML was previously called the sandbox and is now the usercontent origin, named
+after `googleusercontent.com` and `githubusercontent.com`. The rename happened
+because "sandbox" reads as a preproduction environment, which cost real
+confusion; the origin is permanent architecture. The iframe's `sandbox`
+attribute and the `sandbox.html` document still say sandbox, because there the
+word names the frame mechanism, not the origin.
 
 ## The problem
 
@@ -102,7 +110,7 @@ Hitting either trigger changes the problem instead of adding a detail to absorb 
 
 Rendering is the wedge, so the frame bounds it or the wedge is unbounded. This is a value decision and it's urgent, because in-page archive browsing works only if the crypto framing supports range decryption, and that choice is irreversible once content is encrypted. `shape` picks the wire format and needs this signal first.
 
-**First release renders:** Markdown (rendered, with a source toggle), code and plain text (syntax highlighted), HTML (on the sandbox origin), and still images. Everything else is download-only in the first release.
+**First release renders:** Markdown (rendered, with a source toggle), code and plain text (syntax highlighted), HTML (on the usercontent origin), and still images. Everything else is download-only in the first release.
 
 That set is exactly `{markdown, code, html, image}`, exactly the renderable side of the telemetry taxonomy. No gap between what the metric counts as renderable and what the first release renders. If one slips, the taxonomy moves with it and the metric is restated. Same decision.
 

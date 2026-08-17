@@ -405,7 +405,7 @@ describe('rendering', () => {
     if (state.kind === 'ready') expect(state.view.route).toBe('image');
   });
 
-  test('routes html to the sandbox origin, never inline', async () => {
+  test('routes html to the usercontent origin, never inline', async () => {
     const { id, fragment } = await seed(
       utf8('<!doctype html><p>hi'),
       'page.html',

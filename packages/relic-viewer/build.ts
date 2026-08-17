@@ -2,8 +2,8 @@
  * Bundles the viewer into `dist/`, which the app server serves as `/assets/`.
  *
  * Three entry points, deliberately separate bundles. `viewer.js` runs on the
- * service origin and holds the key. `sandbox.js` runs on the sandbox origin
- * and must never contain a line of key-handling code, which staying a
+ * service origin and holds the key. `sandbox.js` runs on the usercontent
+ * origin and must never contain a line of key-handling code, which staying a
  * separate entry point makes true by construction rather than by review.
  * `sw.js` is the service worker and has to sit at the root scope.
  */
@@ -39,8 +39,8 @@ for (const name of await readdir('./public')) {
 /**
  * Inline the sandbox bundle into its page, rather than linking it.
  *
- * The sandbox frame is deliberately given no `allow-same-origin`, which puts
- * its document in an opaque origin. Every request that document makes is
+ * The frame is deliberately given no `allow-same-origin`, which puts its
+ * document in an opaque origin. Every request that document makes is
  * therefore cross-origin with `Origin: null`, and a `type="module"` script is
  * fetched with CORS semantics. With no `Access-Control-Allow-Origin` on the
  * response the browser refuses the module, the script never runs, the frame
@@ -48,8 +48,8 @@ for (const name of await readdir('./public')) {
  * does not exist. The visible result is a blank frame and an empty console,
  * because the failure is in the frame's origin and not the page's.
  *
- * Relaxing CORS on the asset would fix the symptom by making the sandbox
- * origin serve something cross-origin, which is the property the sandbox
+ * Relaxing CORS on the asset would fix the symptom by making the usercontent
+ * origin serve something cross-origin, which is the property that origin
  * exists to remove. An inline script fetches nothing, so there is no request
  * to be blocked and no header anybody can regress.
  *

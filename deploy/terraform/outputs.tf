@@ -29,9 +29,9 @@ output "service_certificate" {
   value       = google_compute_managed_ssl_certificate.service.name
 }
 
-output "sandbox_url" {
+output "usercontent_url" {
   description = <<-EOT
-    The sandbox origin, where untrusted HTML renders.
+    The usercontent origin, where untrusted HTML renders.
 
     Still a Cloud Run host, and still a distinct registrable domain from the
     service: *.run.app is on the Public Suffix List as a wildcard, so this
@@ -41,7 +41,7 @@ output "sandbox_url" {
     rather than a property of this deployment. What it must never become is a
     name under the service domain; check.run_urls.tf asserts that.
   EOT
-  value       = module.relic.sandbox_url
+  value       = module.relic.usercontent_url
 }
 
 output "service_domain" {

@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 
 # The app server plus the viewer's built assets. One image serves both the
-# service origin and the sandbox origin; the deployment routes by Host and
+# service origin and the usercontent origin; the deployment routes by Host and
 # each Cloud Run service gets its own registrable domain under *.run.app.
 
 FROM oven/bun:1-alpine AS build

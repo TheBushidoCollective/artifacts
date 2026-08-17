@@ -11,10 +11,11 @@ export interface RelicConfig {
   /** The service origin: the API and the PWA shell. */
   readonly serviceOrigin: string;
   /**
-   * The sandbox origin, where untrusted HTML renders. A distinct registrable
-   * domain, never a subdomain of the service (`preconditions.md` section 2).
+   * The usercontent origin, where untrusted HTML renders. A distinct
+   * registrable domain, never a subdomain of the service (`preconditions.md`
+   * section 2).
    */
-  readonly sandboxOrigin: string;
+  readonly usercontentOrigin: string;
 
   /** Published cap, on plaintext, verifiable with `ls`. */
   readonly plaintextCapBytes: number;
@@ -63,7 +64,7 @@ const DAY = 86_400;
 
 export const DEFAULT_CONFIG: RelicConfig = {
   serviceOrigin: 'https://relic.example',
-  sandboxOrigin: 'https://relic-sandbox.example',
+  usercontentOrigin: 'https://relic-usercontent.example',
 
   plaintextCapBytes: PLAINTEXT_CAP_BYTES,
   ciphertextCapBytes: ciphertextCapBytes(),
@@ -112,10 +113,11 @@ export function assertConfig(config: RelicConfig): void {
     );
   }
   if (
-    new URL(config.serviceOrigin).host === new URL(config.sandboxOrigin).host
+    new URL(config.serviceOrigin).host ===
+    new URL(config.usercontentOrigin).host
   ) {
     throw new Error(
-      'the sandbox origin must be a distinct host from the service origin'
+      'the usercontent origin must be a distinct host from the service origin'
     );
   }
 }

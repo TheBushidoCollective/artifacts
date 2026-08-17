@@ -5,7 +5,7 @@ on your machine, uploads only ciphertext, and hands you a link. The service
 never receives the key.
 
 ```
-https://<relic-domain>/{id}#{secret}
+https://relik.link/{id}#{secret}
 ```
 
 The fragment is never sent to a server, so the operator holds ciphertext and
@@ -133,7 +133,7 @@ tarball, so the version can never disagree with itself.
 
 ```bash
 claude mcp add relic \
-  --env RELIC_SERVICE_ORIGIN=https://relic-wh2jw5fg2q-uc.a.run.app \
+  --env RELIC_SERVICE_ORIGIN=https://relik.link \
   -- npx -y relic-mcp@latest
 ```
 
@@ -153,7 +153,7 @@ this. The key names differ; the shape does not.
       "command": "npx",
       "args": ["-y", "relic-mcp@latest"],
       "env": {
-        "RELIC_SERVICE_ORIGIN": "https://relic-wh2jw5fg2q-uc.a.run.app"
+        "RELIC_SERVICE_ORIGIN": "https://relik.link"
       }
     }
   }

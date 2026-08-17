@@ -5,7 +5,7 @@ encryption key is generated on your machine and is never sent to the service.
 
 ```bash
 claude mcp add relic \
-  --env RELIC_SERVICE_ORIGIN=https://your-relic-service \
+  --env RELIC_SERVICE_ORIGIN=https://relik.link \
   -- npx -y relic-mcp@latest
 ```
 
@@ -19,7 +19,7 @@ For any client that takes a JSON config:
     "relic": {
       "command": "npx",
       "args": ["-y", "relic-mcp@latest"],
-      "env": { "RELIC_SERVICE_ORIGIN": "https://your-relic-service" }
+      "env": { "RELIC_SERVICE_ORIGIN": "https://relik.link" }
     }
   }
 }

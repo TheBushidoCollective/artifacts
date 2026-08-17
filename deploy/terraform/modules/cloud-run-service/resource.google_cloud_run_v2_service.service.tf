@@ -3,8 +3,11 @@ resource "google_cloud_run_v2_service" "service" {
   location = var.region
   name     = var.name
 
-  # The whole product is an unauthenticated link that a stranger opens.
-  ingress             = "INGRESS_TRAFFIC_ALL"
+  # The whole product is an unauthenticated link that a stranger opens, so
+  # there is no identity to check. What varies is where the request may come
+  # from: a service behind the owned domain takes only load balancer traffic,
+  # and the IAM binding below stays public either way.
+  ingress             = var.ingress
   deletion_protection = false
 
   template {

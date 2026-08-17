@@ -16,6 +16,29 @@ variable "name" {
   nullable    = false
 }
 
+variable "ingress" {
+  description = <<-EOT
+    Which callers Cloud Run will accept.
+
+    `INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER` makes the run.app host stop
+    answering the internet, so the only way in is the load balancer in front
+    of the owned domain. That is what retires a temporary host: leaving it
+    reachable means the service has two live origins, and only one of them is
+    the one every published link, CORS rule, and CSP header names.
+  EOT
+  type        = string
+  default     = "INGRESS_TRAFFIC_ALL"
+
+  validation {
+    condition = contains([
+      "INGRESS_TRAFFIC_ALL",
+      "INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER",
+      "INGRESS_TRAFFIC_INTERNAL_ONLY",
+    ], var.ingress)
+    error_message = "ingress must be one of the three Cloud Run traffic settings."
+  }
+}
+
 variable "image" {
   description = "Digest-pinned container image."
   type        = string

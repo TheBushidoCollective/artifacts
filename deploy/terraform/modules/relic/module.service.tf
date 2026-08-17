@@ -9,6 +9,12 @@ module "service" {
   image                 = var.image
   service_account_email = google_service_account.app.email
 
+  # The run.app host stops answering the internet. Every published link, the
+  # bucket's CORS list, and the sandbox's frame-ancestors all name the owned
+  # domain, so a second reachable origin serves nobody and is one more name a
+  # recipient could be handed that will not render.
+  ingress = "INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER"
+
   env = merge(local.origin_env, {
     NODE_ENV = "production"
 

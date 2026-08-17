@@ -103,7 +103,7 @@ jobs:
           set -euo pipefail
           SERVICE="$(terraform output -raw service_url)"
           FETCH="$(terraform output -raw service_run_url)"
-          SANDBOX="$(terraform output -raw sandbox_url)"
+          USERCONTENT="$(terraform output -raw usercontent_url)"
           DOMAIN="$(terraform output -raw service_domain)"
           NAMESERVERS="$(terraform output -json service_name_servers | jq -r '.[]')"
           DS_RECORD="$(terraform output -raw service_ds_record)"
@@ -117,7 +117,7 @@ jobs:
           # the deployment is broken and this must say so.
           echo "service=$SERVICE" >> "$GITHUB_OUTPUT"
           echo "run_host=$FETCH" >> "$GITHUB_OUTPUT"
-          echo "sandbox=$SANDBOX" >> "$GITHUB_OUTPUT"
+          echo "usercontent=$USERCONTENT" >> "$GITHUB_OUTPUT"
 
           CERT_STATE="$(gcloud compute ssl-certificates describe "$CERT" --global \
             --format='value(managed.status)' 2>/dev/null || echo UNKNOWN)"
@@ -129,7 +129,7 @@ jobs:
             echo "|---|---|"
             echo "| Service origin | $SERVICE |"
             echo "| Cloud Run host | $FETCH |"
-            echo "| Sandbox origin | $SANDBOX |"
+            echo "| Usercontent origin | $USERCONTENT |"
             echo "| Service domain | $DOMAIN |"
             echo "| Load balancer | $IPV4, $IPV6 |"
             echo "| Certificate | \`$CERT\` ($CERT_STATE) |"
@@ -184,14 +184,15 @@ jobs:
           grep -q 'relic_not_found' /tmp/b
 
       # The two origins have to agree about each other or HTML never renders,
-      # and neither side fails loudly on its own: the sandbox returns a healthy
-      # 200 to curl while every browser refuses the frame. Assert the pair.
+      # and neither side fails loudly on its own: the usercontent origin
+      # returns a healthy 200 to curl while every browser refuses the frame.
+      # Assert the pair.
       - name: Smoke test the origin boundary
         run: |
           set -euo pipefail
           ORIGIN="${{ steps.urls.outputs.service }}"
           SERVICE="${{ steps.urls.outputs.service }}"
-          SANDBOX="${{ steps.urls.outputs.sandbox }}"
+          USERCONTENT="${{ steps.urls.outputs.usercontent }}"
           RUN_HOST="${{ steps.urls.outputs.run_host }}"
 
           # The retired host must actually be retired. A reachable second
@@ -209,32 +210,32 @@ jobs:
               ;;
           esac
 
-          echo "the sandbox serves its page"
+          echo "the usercontent origin serves its page"
           curl -fsS --retry 10 --retry-all-errors --retry-delay 3 \
-            -D/tmp/sh -o/dev/null "$SANDBOX/sandbox.html"
+            -D/tmp/sh -o/dev/null "$USERCONTENT/sandbox.html"
 
           echo "and names the service origin as the only page allowed to frame it"
           grep -qi "^content-security-policy:.*frame-ancestors $ORIGIN\(;\|\$\)" /tmp/sh || {
-            echo "sandbox frame-ancestors does not name $ORIGIN:"
+            echo "usercontent frame-ancestors does not name $ORIGIN:"
             grep -i '^content-security-policy:' /tmp/sh
             exit 1
           }
 
-          echo "and the service allows exactly that sandbox as a frame source"
+          echo "and the service allows exactly that usercontent origin as a frame source"
           curl -fsS -D/tmp/vh -o/dev/null "$SERVICE/aaaaaaaaaaaaaaaaaaaaaaaaaa"
-          grep -qi "^content-security-policy:.*frame-src $SANDBOX\(;\|\$\)" /tmp/vh || {
-            echo "service frame-src does not name $SANDBOX:"
+          grep -qi "^content-security-policy:.*frame-src $USERCONTENT\(;\|\$\)" /tmp/vh || {
+            echo "service frame-src does not name $USERCONTENT:"
             grep -i '^content-security-policy:' /tmp/vh
             exit 1
           }
 
           echo "and the two are different registrable domains, or there is no boundary"
-          test "$(echo "$ORIGIN" | sed 's#https\?://##')" != "$(echo "$SANDBOX" | sed 's#https\?://##')"
+          test "$(echo "$ORIGIN" | sed 's#https\?://##')" != "$(echo "$USERCONTENT" | sed 's#https\?://##')"
 
-          echo "and the sandbox does not sit under the service domain"
-          case "$(echo "$SANDBOX" | sed 's#https\?://##')" in
+          echo "and the usercontent origin does not sit under the service domain"
+          case "$(echo "$USERCONTENT" | sed 's#https\?://##')" in
             *".$(echo "$ORIGIN" | sed 's#https\?://##')")
-              echo "sandbox shares the service registrable domain; the boundary is gone"
+              echo "usercontent shares the service registrable domain; the boundary is gone"
               exit 1
               ;;
           esac
@@ -244,8 +245,8 @@ jobs:
           # null. A linked module script is fetched with CORS and silently
           # refused, which renders as a blank frame and an empty console. The
           # script has to be inline, and this is the only place that can tell.
-          echo "and the sandbox page carries its script inline, fetching nothing"
-          curl -fsS "$SANDBOX/sandbox.html" -o /tmp/sandbox.html
+          echo "and the usercontent page carries its script inline, fetching nothing"
+          curl -fsS "$USERCONTENT/sandbox.html" -o /tmp/sandbox.html
 
           if ! grep -q 'relic:sandbox-ready' /tmp/sandbox.html; then
             echo "sandbox.html does not carry its handler inline; the frame will never render"

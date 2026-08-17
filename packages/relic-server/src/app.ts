@@ -136,8 +136,8 @@ export function createApp(options: AppOptions = {}): RelicApp {
       return serveAsset('manifest.webmanifest');
     if (head === 'favicon.ico') return serveAsset('icon.svg');
     if (head === 'sw.js') return serveAsset('sw.js');
-    // Served on the sandbox origin in production. One binary serves both here,
-    // and the deployment routes by Host.
+    // Served on the usercontent origin in production. One binary serves both
+    // here, and the deployment routes by Host.
     if (head === 'sandbox.html') return serveSandbox();
 
     return new Response('Not found', { status: 404 });
@@ -168,7 +168,7 @@ export function createApp(options: AppOptions = {}): RelicApp {
   }
 
   /**
-   * The sandbox origin's page.
+   * The usercontent origin's page.
    *
    * `frame-ancestors` is the half of the boundary this response owns: only the
    * service origin may frame it, so the page cannot be embedded by a third
@@ -927,8 +927,8 @@ function shell(config: RelicConfig, title: string): Response {
 <link rel="manifest" href="/manifest.webmanifest">
 <link rel="icon" href="/assets/icon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="/assets/styles.css">
-<div id="relic-root" data-relic-id="${escapeHtml(title)}" data-sandbox-origin="${escapeHtml(
-    new URL(config.sandboxOrigin).origin
+<div id="relic-root" data-relic-id="${escapeHtml(title)}" data-usercontent-origin="${escapeHtml(
+    new URL(config.usercontentOrigin).origin
   )}"></div>
 <script type="module" src="/assets/viewer.js"></script>
 <script type="module" src="/assets/register-sw.js"></script>
@@ -945,7 +945,7 @@ function shell(config: RelicConfig, title: string): Response {
         "style-src 'self' 'unsafe-inline'",
         "img-src 'self' blob: data:",
         `connect-src 'self' ${new URL(config.serviceOrigin).origin} https:`,
-        `frame-src ${new URL(config.sandboxOrigin).origin}`,
+        `frame-src ${new URL(config.usercontentOrigin).origin}`,
         "base-uri 'none'",
         "form-action 'none'",
       ].join('; '),
@@ -1228,10 +1228,10 @@ browser's local storage for that relic, until the relic expires, and clears it
 as soon as the relic is gone.
 
 It never leaves your machine, and it is stored under Relic's origin rather than
-the sandbox that renders content. The trade is real and worth stating plainly:
-for as long as the entry lives, anyone using this browser profile can reopen
-that relic without ever having been sent the link. Clearing site data for this
-origin removes every remembered key.
+the usercontent origin that renders content. The trade is real and worth
+stating plainly: for as long as the entry lives, anyone using this browser
+profile can reopen that relic without ever having been sent the link. Clearing
+site data for this origin removes every remembered key.
 
 ## What we do know
 

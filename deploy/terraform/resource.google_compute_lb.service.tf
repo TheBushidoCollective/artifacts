@@ -7,9 +7,9 @@
 # leaves room for Cloud Armor later, which matters for a service whose entire
 # product is an unauthenticated link a stranger opens.
 #
-# The sandbox deliberately gets none of this. It keeps its Cloud Run host,
-# which is its own registrable domain under the *.run.app public suffix, and
-# that separation is the boundary keeping untrusted HTML away from the
+# The usercontent origin deliberately gets none of this. It keeps its Cloud Run
+# host, which is its own registrable domain under the *.run.app public suffix,
+# and that separation is the boundary keeping untrusted HTML away from the
 # fragment.
 
 resource "google_compute_region_network_endpoint_group" "service" {

@@ -10,7 +10,8 @@
  * 1. **Content reaches the DOM through `textContent` or through the escaping
  *    renderer, never through `innerHTML` on raw bytes.**
  * 2. **HTML content is never rendered on this origin.** It goes to the
- *    sandbox origin through an iframe that gets the markup and never the key.
+ *    usercontent origin through an iframe that gets the markup and never the
+ *    key.
  */
 
 import { highlightCode, renderMarkdown } from './markdown.ts';
@@ -300,25 +301,25 @@ function renderImageView(view: ReadyView): HTMLElement {
 }
 
 /**
- * HTML renders on the sandbox origin and nowhere else.
+ * HTML renders on the usercontent origin and nowhere else.
  *
  * The iframe carries `sandbox` without `allow-same-origin`, so the document
- * lands in an opaque origin: it cannot reach this origin, it cannot reach the
- * sandbox origin's storage, and it cannot read `parent.location`. The markup
- * is posted in; the key never is.
+ * lands in an opaque origin: it cannot reach this origin, it cannot reach
+ * the usercontent origin's storage, and it cannot read `parent.location`.
+ * The markup is posted in; the key never is.
  */
 function renderSandboxedHtml(
   view: ReadyView,
-  sandboxOrigin: string
+  usercontentOrigin: string
 ): HTMLElement {
   const wrapper = document.createElement('div');
   wrapper.className = 'doc doc-html';
 
   const frame = document.createElement('iframe');
-  frame.className = 'sandbox-frame';
+  frame.className = 'usercontent-frame';
   frame.setAttribute('sandbox', 'allow-scripts allow-popups allow-forms');
   frame.setAttribute('referrerpolicy', 'no-referrer');
-  frame.src = `${sandboxOrigin}/sandbox.html`;
+  frame.src = `${usercontentOrigin}/sandbox.html`;
   frame.title = view.filename;
 
   const html = decodeText(view.content);
@@ -384,7 +385,7 @@ function renderDownloadView(view: ReadyView): HTMLElement {
 function renderReady(
   view: ReadyView,
   relicId: string,
-  sandboxOrigin: string
+  usercontentOrigin: string
 ): void {
   document.body.replaceChildren(buildBar(view, relicId));
 
@@ -406,7 +407,7 @@ function renderReady(
       main.appendChild(renderImageView(view));
       break;
     case 'sandboxed-html':
-      main.appendChild(renderSandboxedHtml(view, sandboxOrigin));
+      main.appendChild(renderSandboxedHtml(view, usercontentOrigin));
       break;
     default:
       main.appendChild(renderDownloadView(view));
@@ -586,11 +587,12 @@ export function makeBrowserDeps(): ViewerDeps {
 async function main(): Promise<void> {
   const root = document.getElementById('relic-root');
   const relicId = root?.dataset['relicId'] ?? '';
-  const sandboxOrigin = root?.dataset['sandboxOrigin'] ?? '';
+  const usercontentOrigin = root?.dataset['usercontentOrigin'] ?? '';
 
   const state = await load(relicId, makeBrowserDeps());
 
-  if (state.kind === 'ready') renderReady(state.view, relicId, sandboxOrigin);
+  if (state.kind === 'ready')
+    renderReady(state.view, relicId, usercontentOrigin);
   else if (state.kind === 'dead') renderDead(state.dead);
 }
 

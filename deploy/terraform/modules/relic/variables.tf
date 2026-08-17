@@ -33,8 +33,8 @@ variable "service_name" {
   nullable    = false
 }
 
-variable "sandbox_name" {
-  description = "Cloud Run service name for the sandbox origin."
+variable "usercontent_name" {
+  description = "Cloud Run service name for the usercontent origin."
   type        = string
   nullable    = false
 }
@@ -45,8 +45,8 @@ variable "service_url" {
   nullable    = false
 }
 
-variable "sandbox_url" {
-  description = "The sandbox origin, a distinct registrable domain."
+variable "usercontent_url" {
+  description = "The usercontent origin, a distinct registrable domain."
   type        = string
   nullable    = false
 }

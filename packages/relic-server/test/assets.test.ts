@@ -99,12 +99,12 @@ describe('the shell references what is actually served', () => {
     }
   });
 
-  test('the shell tells the viewer which origin the sandbox is on', async () => {
+  test('the shell tells the viewer which origin the content is on', async () => {
     const html = await app()
       .fetch(get('/aaaaaaaaaaaaaaaaaaaaaaaaaa'))
       .then((r) => r.text());
     expect(html).toContain(
-      'data-sandbox-origin="https://relic-sandbox.example"'
+      'data-usercontent-origin="https://relic-usercontent.example"'
     );
   });
 });

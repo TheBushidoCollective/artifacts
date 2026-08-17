@@ -124,8 +124,8 @@ const app = createApp({
   config: {
     serviceOrigin:
       process.env['RELIC_SERVICE_ORIGIN'] ?? 'http://localhost:8080',
-    sandboxOrigin:
-      process.env['RELIC_SANDBOX_ORIGIN'] ?? 'http://localhost:8081',
+    usercontentOrigin:
+      process.env['RELIC_USERCONTENT_ORIGIN'] ?? 'http://localhost:8081',
     killSwitchEngaged: process.env['RELIC_KILL_SWITCH'] === 'true',
   },
   storage: await resolveStorage(),

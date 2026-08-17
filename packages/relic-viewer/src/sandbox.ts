@@ -1,5 +1,5 @@
 /**
- * The sandbox origin's page.
+ * The usercontent origin's page.
  *
  * This runs on a **different registrable domain** from the service. That
  * separation is the control, not a detail: the service origin holds the

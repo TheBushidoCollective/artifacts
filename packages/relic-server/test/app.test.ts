@@ -139,12 +139,12 @@ describe('the shell', () => {
     expect(response.headers.get('x-robots-tag')).toBe('noindex');
   });
 
-  test('frames only the sandbox origin', async () => {
+  test('frames only the usercontent origin', async () => {
     const { id } = await publish();
     const csp = await app
       .fetch(req(`/${id}`))
       .then((r) => r.headers.get('content-security-policy'));
-    expect(csp).toContain('frame-src https://relic-sandbox.example');
+    expect(csp).toContain('frame-src https://relic-usercontent.example');
   });
 });
 
@@ -1203,12 +1203,12 @@ describe('config invariants', () => {
     ).toThrow(/dedup/);
   });
 
-  test('refuses a sandbox origin sharing the service host', () => {
+  test('refuses a usercontent origin sharing the service host', () => {
     expect(() =>
       createApp({
         config: {
           serviceOrigin: 'https://relic.example',
-          sandboxOrigin: 'https://relic.example',
+          usercontentOrigin: 'https://relic.example',
         },
       })
     ).toThrow(/distinct host/);

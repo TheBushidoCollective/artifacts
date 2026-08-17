@@ -58,7 +58,7 @@ restart.
 | Variable | Meaning |
 |---|---|
 | `RELIC_SERVICE_ORIGIN` | The API and the PWA shell. |
-| `RELIC_SANDBOX_ORIGIN` | Where untrusted HTML renders. A **different registrable domain**, never a subdomain. |
+| `RELIC_USERCONTENT_ORIGIN` | Where untrusted HTML renders. A **different registrable domain**, never a subdomain. |
 | `RELIC_GCS_BUCKET`, `RELIC_GCS_CLIENT_EMAIL`, `RELIC_GCS_PRIVATE_KEY` | Service account for V4 signed URLs. |
 | `RELIC_OPERATOR_TOKENS` | `name:secret` pairs. Per-operator, because every delete writes an audit record naming one. |
 | `RELIC_KILL_SWITCH` | Refuses every mint and every publish. |

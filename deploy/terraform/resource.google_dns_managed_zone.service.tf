@@ -1,5 +1,5 @@
 # The service domain is delegated here before any traffic is routed to it.
-# The untrusted rendering sandbox requires its own registrable domain and must
+# The untrusted rendering origin requires its own registrable domain and must
 # never be added beneath this zone.
 resource "google_dns_managed_zone" "service" {
   project     = var.project_id

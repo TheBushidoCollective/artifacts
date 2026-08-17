@@ -11,7 +11,7 @@ variable "region" {
 }
 
 variable "service_domain" {
-  description = "Registrable domain for the Relik service. Never hosts untrusted sandbox content."
+  description = "Registrable domain for the Relik service. Never hosts the untrusted usercontent origin."
   type        = string
   default     = "relik.link"
   nullable    = false

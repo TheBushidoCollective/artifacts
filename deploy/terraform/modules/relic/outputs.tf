@@ -9,9 +9,9 @@ output "service_run_url" {
   value       = module.service.url
 }
 
-output "sandbox_url" {
-  description = "The sandbox origin, a distinct registrable domain."
-  value       = module.sandbox.url
+output "usercontent_url" {
+  description = "The usercontent origin, a distinct registrable domain."
+  value       = module.usercontent.url
 }
 
 output "bucket_name" {

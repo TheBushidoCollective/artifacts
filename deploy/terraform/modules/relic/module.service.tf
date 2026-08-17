@@ -10,9 +10,9 @@ module "service" {
   service_account_email = google_service_account.app.email
 
   # The run.app host stops answering the internet. Every published link, the
-  # bucket's CORS list, and the sandbox's frame-ancestors all name the owned
-  # domain, so a second reachable origin serves nobody and is one more name a
-  # recipient could be handed that will not render.
+  # bucket's CORS list, and the usercontent origin's frame-ancestors all name
+  # the owned domain, so a second reachable origin serves nobody and is one
+  # more name a recipient could be handed that will not render.
   ingress = "INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER"
 
   env = merge(local.origin_env, {
@@ -35,20 +35,20 @@ module "service" {
 # Both origins run the same image. The isolation is the origin boundary, not a
 # different binary: *.run.app is a Public Suffix List wildcard, so a.run.app is
 # the public suffix and each service URL is its own registrable domain.
-# Untrusted HTML rendered on the sandbox therefore cannot reach the service
-# origin, which is the one holding the fragment.
-module "sandbox" {
+# Untrusted HTML rendered on the usercontent origin therefore cannot reach the
+# service origin, which is the one holding the fragment.
+module "usercontent" {
   source = "../cloud-run-service"
 
   project_id            = var.project_id
   region                = var.region
-  name                  = var.sandbox_name
+  name                  = var.usercontent_name
   image                 = var.image
   service_account_email = google_service_account.app.email
 
-  # The sandbox serves two static files. It is given a bucket so the shared
-  # image boots identically, but it never mints, never reads an object, and
-  # never sees a key: nothing routes to those paths on this host.
+  # The usercontent origin serves two static files. It is given a bucket so the
+  # shared image boots identically, but it never mints, never reads an object,
+  # and never sees a key: nothing routes to those paths on this host.
   #
   # Same origin pair as the service, from the same local. See locals.tf for why
   # that is not an oversight.

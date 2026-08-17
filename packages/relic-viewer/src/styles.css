@@ -430,7 +430,7 @@ body {
   max-width: none;
 }
 
-.sandbox-frame {
+.usercontent-frame {
   width: 100%;
   height: calc(100vh - var(--bar-height) - 4rem);
   border: 1px solid var(--rule);
@@ -452,7 +452,7 @@ body {
   padding: 0;
 }
 
-.stage-sandboxed-html .sandbox-frame {
+.stage-sandboxed-html .usercontent-frame {
   /* Block, or the iframe sits on the text baseline and leaves a strip of page
      background under it that reads as one more stray margin. */
   display: block;

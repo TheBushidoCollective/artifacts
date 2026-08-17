@@ -6,6 +6,10 @@ resource "google_project_service" "relic" {
     "artifactregistry.googleapis.com",
     "storage.googleapis.com",
     "dns.googleapis.com",
+    # The load balancer fronting the service domain: addresses, serverless
+    # NEG, backend service, proxies, forwarding rules, and the managed
+    # certificate all sit behind this one API.
+    "compute.googleapis.com",
     # V4 signing goes through signBlob with the ambient identity, so there is
     # no downloaded key anywhere in the deployment.
     "iamcredentials.googleapis.com",

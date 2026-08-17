@@ -1,5 +1,11 @@
-output "service_url" {
-  description = "The service origin."
+output "service_run_url" {
+  description = <<-EOT
+    The host Cloud Run issued for the service.
+
+    Named for what it is rather than for the origin, because the advertised
+    origin is now the owned domain in front of the load balancer. The caller
+    asserts this against its computed value.
+  EOT
   value       = module.service.url
 }
 

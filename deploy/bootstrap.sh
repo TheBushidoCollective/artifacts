@@ -41,6 +41,7 @@ g services enable \
   storage.googleapis.com \
   artifactregistry.googleapis.com \
   dns.googleapis.com \
+  compute.googleapis.com \
   run.googleapis.com
 
 say "Terraform state bucket: gs://${STATE_BUCKET}"
@@ -114,6 +115,8 @@ for ROLE in \
   roles/storage.admin \
   roles/artifactregistry.admin \
   roles/dns.admin \
+  roles/compute.loadBalancerAdmin \
+  roles/compute.networkAdmin \
   roles/iam.serviceAccountAdmin \
   roles/iam.serviceAccountUser \
   roles/resourcemanager.projectIamAdmin \

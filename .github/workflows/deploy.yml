@@ -102,22 +102,44 @@ jobs:
         run: |
           set -euo pipefail
           SERVICE="$(terraform output -raw service_url)"
+          FETCH="$(terraform output -raw service_run_url)"
           SANDBOX="$(terraform output -raw sandbox_url)"
           DOMAIN="$(terraform output -raw service_domain)"
           NAMESERVERS="$(terraform output -json service_name_servers | jq -r '.[]')"
           DS_RECORD="$(terraform output -raw service_ds_record)"
+          CERT="$(terraform output -raw service_certificate)"
+          IPV4="$(terraform output -raw service_lb_ipv4)"
+          IPV6="$(terraform output -raw service_lb_ipv6)"
+
+          # The advertised origin is what headers must name. The Cloud Run host
+          # is what the smoke tests fetch, because a managed certificate is
+          # provisioned asynchronously and is not ready when this step runs.
           echo "service=$SERVICE" >> "$GITHUB_OUTPUT"
+          echo "fetch=$FETCH" >> "$GITHUB_OUTPUT"
           echo "sandbox=$SANDBOX" >> "$GITHUB_OUTPUT"
+
+          CERT_STATE="$(gcloud compute ssl-certificates describe "$CERT" --global \
+            --format='value(managed.status)' 2>/dev/null || echo UNKNOWN)"
+
           {
             echo "### Relik infrastructure is deployed"
             echo ""
             echo "| Resource | Value |"
             echo "|---|---|"
             echo "| Service origin | $SERVICE |"
+            echo "| Cloud Run host | $FETCH |"
             echo "| Sandbox origin | $SANDBOX |"
             echo "| Service domain | $DOMAIN |"
+            echo "| Load balancer | $IPV4, $IPV6 |"
+            echo "| Certificate | \`$CERT\` ($CERT_STATE) |"
             echo "| Bucket | \`$(terraform output -raw bucket_name)\` |"
             echo ""
+            if [ "$CERT_STATE" != "ACTIVE" ]; then
+              echo "The certificate is not ACTIVE yet, so $SERVICE does not serve HTTPS."
+              echo "Google provisions it once the A and AAAA records resolve. Until then the"
+              echo "app is only reachable on the Cloud Run host above."
+              echo ""
+            fi
             echo "Authoritative nameservers for registrar delegation:"
             echo '```text'
             echo "$NAMESERVERS"
@@ -134,7 +156,9 @@ jobs:
       - name: Smoke test the deployment
         run: |
           set -euo pipefail
-          SERVICE="${{ steps.urls.outputs.service }}"
+          # Fetched on the Cloud Run host: the managed certificate for the
+          # advertised origin is still provisioning when this runs.
+          SERVICE="${{ steps.urls.outputs.fetch }}"
 
           echo "health"
           curl -fsS --retry 10 --retry-all-errors --retry-delay 3 "$SERVICE/health" | tee /dev/stderr | grep -q '"ok"'
@@ -164,7 +188,9 @@ jobs:
       - name: Smoke test the origin boundary
         run: |
           set -euo pipefail
-          SERVICE="${{ steps.urls.outputs.service }}"
+          # ORIGIN is what the headers must name. FETCH is what answers today.
+          ORIGIN="${{ steps.urls.outputs.service }}"
+          SERVICE="${{ steps.urls.outputs.fetch }}"
           SANDBOX="${{ steps.urls.outputs.sandbox }}"
 
           echo "the sandbox serves its page"
@@ -172,8 +198,8 @@ jobs:
             -D/tmp/sh -o/dev/null "$SANDBOX/sandbox.html"
 
           echo "and names the service origin as the only page allowed to frame it"
-          grep -qi "^content-security-policy:.*frame-ancestors $SERVICE\(;\|\$\)" /tmp/sh || {
-            echo "sandbox frame-ancestors does not name $SERVICE:"
+          grep -qi "^content-security-policy:.*frame-ancestors $ORIGIN\(;\|\$\)" /tmp/sh || {
+            echo "sandbox frame-ancestors does not name $ORIGIN:"
             grep -i '^content-security-policy:' /tmp/sh
             exit 1
           }
@@ -187,7 +213,15 @@ jobs:
           }
 
           echo "and the two are different registrable domains, or there is no boundary"
-          test "$(echo "$SERVICE" | sed 's#https\?://##')" != "$(echo "$SANDBOX" | sed 's#https\?://##')"
+          test "$(echo "$ORIGIN" | sed 's#https\?://##')" != "$(echo "$SANDBOX" | sed 's#https\?://##')"
+
+          echo "and the sandbox does not sit under the service domain"
+          case "$(echo "$SANDBOX" | sed 's#https\?://##')" in
+            *".$(echo "$ORIGIN" | sed 's#https\?://##')")
+              echo "sandbox shares the service registrable domain; the boundary is gone"
+              exit 1
+              ;;
+          esac
 
           # The frame has no allow-same-origin, so its document is an opaque
           # origin and every request it makes is cross-origin with Origin:

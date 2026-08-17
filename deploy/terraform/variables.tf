@@ -58,24 +58,6 @@ variable "image" {
   nullable    = false
 }
 
-variable "relic_ttl_days" {
-  description = <<-EOT
-    Storage-side lifetime, in days.
-
-    Must match the application TTL in docs/decisions.md. Lifecycle granularity
-    is days rounded to the next UTC midnight, and config changes take up to 24
-    hours to take effect, so this is storage hygiene layered under an
-    application-layer refusal that is exact to the second.
-  EOT
-  type        = number
-  default     = 7
-
-  validation {
-    condition     = var.relic_ttl_days >= 1
-    error_message = "Anything under a day is inexpressible in lifecycle."
-  }
-}
-
 variable "soft_delete_retention_days" {
   description = <<-EOT
     How long deleted objects remain recoverable.

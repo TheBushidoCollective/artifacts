@@ -24,13 +24,6 @@ locals {
   ciphertext_prefix = "r"
   store_prefix      = "m"
 
-  # Metadata that is worthless once the relic it describes is gone, and should
-  # expire on the same schedule as the ciphertext.
-  ephemeral_store_prefixes = [
-    "${local.store_prefix}/relic/",
-    "${local.store_prefix}/mintlog/",
-  ]
-
   # Metadata that must outlive the relic. A tombstone is what makes a removed
   # relic answer "removed" instead of "never existed", and an abuse report is a
   # record of a decision somebody may have to answer for later. Neither gets a

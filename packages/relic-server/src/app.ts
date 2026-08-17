@@ -120,6 +120,8 @@ export function createApp(options: AppOptions = {}): RelicApp {
       });
     }
 
+    if (head === 'install') return installPage(config);
+
     if (head === 'abuse') {
       if (request.method === 'GET') return abuseForm(config);
       if (request.method === 'POST') return abuseSubmit(request, now);
@@ -335,6 +337,24 @@ export function createApp(options: AppOptions = {}): RelicApp {
       });
     }
 
+    // A lifetime is the publisher's choice, not the service's. Absent or
+    // null means the relic never expires. Anything that is not a safe
+    // integer of whole days inside the ceiling is a malformed ask, refused
+    // with the rest of the bad metadata rather than silently defaulted.
+    const ttlDays = body['ttl_days'];
+    let expiresAt: number | undefined;
+    if (ttlDays !== undefined && ttlDays !== null) {
+      if (
+        typeof ttlDays !== 'number' ||
+        !Number.isSafeInteger(ttlDays) ||
+        ttlDays < 1 ||
+        ttlDays > config.maxTtlDays
+      ) {
+        return refuse('invalid_publish_metadata', { relic_id: relicId });
+      }
+      expiresAt = now + ttlDays * 86_400 * 1000;
+    }
+
     // Never overwrite. A collision is astronomical bad luck or a broken RNG,
     // and both should fail loudly.
     if (
@@ -344,7 +364,6 @@ export function createApp(options: AppOptions = {}): RelicApp {
       return refuse('relic_id_collision', { relic_id: relicId });
     }
 
-    const expiresAt = now + config.ttlSeconds * 1000;
     await store.putRelic({
       id: relicId,
       publishIp: ip,
@@ -404,7 +423,7 @@ export function createApp(options: AppOptions = {}): RelicApp {
       upload_method: upload.method,
       upload_headers: upload.headers,
       upload_expires_at: iso(upload.expiresAt),
-      relic_expires_at: iso(expiresAt),
+      relic_expires_at: relicExpiryIso(expiresAt),
       report_url: `${config.serviceOrigin}/abuse`,
       disclosure_url: `${config.serviceOrigin}/policy`,
     });
@@ -452,7 +471,7 @@ export function createApp(options: AppOptions = {}): RelicApp {
       relic_id: relicId,
       object_length: object.length,
       object_crc32c: object.crc32c,
-      relic_expires_at: iso(row.expiresAt),
+      relic_expires_at: relicExpiryIso(row.expiresAt),
     });
   }
 
@@ -511,7 +530,9 @@ export function createApp(options: AppOptions = {}): RelicApp {
 
     const object = await storage.stat(relicId);
 
-    if (now >= row.expiresAt) {
+    // A relic with no publisher-set lifetime cannot land here; its only end
+    // is deletion.
+    if (row.expiresAt !== undefined && now >= row.expiresAt) {
       // Expired and never-published are distinguished, because the ID is
       // unguessable and only somebody handed the link can ask.
       const code =
@@ -568,9 +589,17 @@ export function createApp(options: AppOptions = {}): RelicApp {
     }
 
     // Clamp to min(url_validity, relic_expiry). Accepting the overhang would
-    // extend how long abuse circulates past the TTL.
-    const remainingSeconds = Math.floor((row.expiresAt - now) / 1000);
-    const validity = Math.min(config.urlValiditySeconds, remainingSeconds);
+    // extend how long abuse circulates past the deadline the publisher set.
+    // A relic with no deadline mints at the full window: there is nothing to
+    // clamp against, and inventing one would reinstate the fixed TTL by the
+    // back door.
+    const validity =
+      row.expiresAt === undefined
+        ? config.urlValiditySeconds
+        : Math.min(
+            config.urlValiditySeconds,
+            Math.floor((row.expiresAt - now) / 1000)
+          );
     if (validity < config.minViableValiditySeconds) {
       return logAndRefuse(relicId, ip, now, occurrenceId, 'relic_expired', {
         relic_id: relicId,
@@ -637,7 +666,7 @@ export function createApp(options: AppOptions = {}): RelicApp {
       {
         url,
         url_expires_at: iso(urlExpiresAt),
-        relic_expires_at: iso(row.expiresAt),
+        relic_expires_at: relicExpiryIso(row.expiresAt),
         object_length: object.length,
         object_crc32c: object.crc32c,
         mints_remaining: capRemaining,
@@ -877,6 +906,16 @@ function iso(epochMillis: number): string {
   return new Date(epochMillis).toISOString();
 }
 
+/**
+ * A relic with no publisher-set lifetime never expires, and `null` is how
+ * the wire says so. Any string in this slot would read as a deadline the
+ * server has stopped enforcing, which is a different claim than having none.
+ * Three emissions share this rule, so they cannot drift apart inline.
+ */
+function relicExpiryIso(epochMillis: number | undefined): string | null {
+  return epochMillis === undefined ? null : iso(epochMillis);
+}
+
 function shell(config: RelicConfig, title: string): Response {
   // A static shell. No mint happens here, which is what keeps non-executing
   // link fetchers off the open counter and the download cap.
@@ -907,6 +946,207 @@ function shell(config: RelicConfig, title: string): Response {
         "img-src 'self' blob: data:",
         `connect-src 'self' ${new URL(config.serviceOrigin).origin} https:`,
         `frame-src ${new URL(config.sandboxOrigin).origin}`,
+        "base-uri 'none'",
+        "form-action 'none'",
+      ].join('; '),
+    },
+  });
+}
+
+/**
+ * How to add the MCP server.
+ *
+ * The origin is interpolated from config rather than written into the copy,
+ * because `relic-mcp` has no default origin on purpose: a wrong one turns
+ * "you did not configure me" into a DNS error on the first publish.
+ *
+ * Self-contained CSS. The page carries no script, so the CSP denies scripts
+ * outright instead of allowing a source it does not use.
+ */
+function installPage(config: RelicConfig): Response {
+  const origin = escapeHtml(new URL(config.serviceOrigin).origin);
+  const body = `<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#1f6b64">
+<title>Add the Relik MCP server</title>
+<link rel="icon" href="/assets/icon.svg" type="image/svg+xml">
+<style>
+  :root {
+    color-scheme: light dark;
+    --ground: #f1f2f0;
+    --surface: #fbfbfa;
+    --ink: #16191a;
+    --ink-soft: #5a6163;
+    --rule: #d2d5d2;
+    --rule-strong: #b3b8b4;
+    --patina: #1f6b64;
+    --serif: Charter, "Iowan Old Style", "Source Serif Pro", Palatino, Georgia, serif;
+    --mono: ui-monospace, "SF Mono", SFMono-Regular, "JetBrains Mono", Menlo, Consolas, monospace;
+    --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --ground: #101314;
+      --surface: #171b1c;
+      --ink: #e6e9e7;
+      --ink-soft: #969e9d;
+      --rule: #2a3032;
+      --rule-strong: #3b4345;
+      --patina: #4fb3a6;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 16px;
+    line-height: 1.55;
+  }
+  .bar {
+    display: flex;
+    align-items: stretch;
+    min-height: 3.25rem;
+    background: var(--surface);
+    border-bottom: 1px solid var(--rule-strong);
+  }
+  .mark {
+    display: flex;
+    align-items: center;
+    padding: 0 1rem;
+    font-family: var(--mono);
+    font-size: 0.78rem;
+    font-weight: 600;
+    border-right: 1px solid var(--rule);
+    white-space: nowrap;
+  }
+  .bar-note {
+    display: flex;
+    align-items: center;
+    padding: 0 1rem;
+    font-size: 0.8rem;
+    color: var(--ink-soft);
+  }
+  main { max-width: 46rem; margin: 0 auto; padding: 3rem 1.25rem 4rem; }
+  h1 {
+    font-family: var(--serif);
+    font-size: 2rem;
+    line-height: 1.15;
+    font-weight: 600;
+    margin: 0 0 0.5rem;
+  }
+  .lede { font-size: 1.05rem; color: var(--ink-soft); margin: 0 0 2.5rem; }
+  h2 {
+    font-family: var(--mono);
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--patina);
+    margin: 2.5rem 0 0.75rem;
+    padding-bottom: 0.4rem;
+    border-bottom: 1px solid var(--rule);
+  }
+  p { margin: 0 0 1rem; }
+  pre {
+    margin: 0 0 1rem;
+    padding: 0.9rem 1rem;
+    overflow-x: auto;
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-left: 2px solid var(--patina);
+  }
+  code { font-family: var(--mono); font-size: 0.85rem; }
+  .note {
+    padding: 1rem 1.15rem;
+    background: var(--surface);
+    border: 1px solid var(--rule);
+  }
+  .note p:last-child { margin: 0; }
+  footer {
+    margin-top: 3rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--rule);
+    font-size: 0.85rem;
+    color: var(--ink-soft);
+  }
+  a { color: var(--patina); }
+</style>
+<header class="bar">
+  <div class="mark">relik.link</div>
+  <div class="bar-note">Publish a file as an encrypted link</div>
+</header>
+<main>
+  <h1>Add the Relik MCP server</h1>
+  <p class="lede">Then tell your agent: <em>publish ./report.md as a relic</em>.
+  It returns one link you can hand to anybody.</p>
+
+  <h2>Claude Code</h2>
+  <p>One command. <code>npx</code> fetches the server on first use and caches it.</p>
+  <pre><code>claude mcp add relic \\
+  --env RELIC_SERVICE_ORIGIN=${origin} \\
+  -- npx -y relic-mcp@latest</code></pre>
+
+  <h2>Claude Code, as a plugin</h2>
+  <p>The npm package is the plugin, so the version can never disagree with
+  itself. This also installs the publishing skill.</p>
+  <pre><code>npm i -g relic-mcp
+claude plugin marketplace add "$(npm root -g)/relic-mcp"
+claude plugin install relic@relic</code></pre>
+
+  <h2>Any client that takes JSON</h2>
+  <p>Claude Desktop, Cursor, Windsurf, Cline, and most others read a variant of
+  this. The key names differ. The shape does not.</p>
+  <pre><code>{
+  "mcpServers": {
+    "relic": {
+      "command": "npx",
+      "args": ["-y", "relic-mcp@latest"],
+      "env": {
+        "RELIC_SERVICE_ORIGIN": "${origin}"
+      }
+    }
+  }
+}</code></pre>
+
+  <h2>Why the origin is required</h2>
+  <p>The server ships with no default origin. An unset value fails at startup
+  and names the variable, instead of surfacing later as a DNS error on your
+  first publish.</p>
+
+  <h2>What leaves your machine</h2>
+  <div class="note">
+    <p>The server generates the key on your machine and encrypts in-process.
+    Only ciphertext is uploaded. The key lives in the link fragment, and
+    browsers never send a fragment to a server.</p>
+    <p>Being straight about the limit: the page that decrypts is served by us,
+    so that half rests on our intent rather than on something you can verify.
+    The half that is structural is that we never receive the key.</p>
+  </div>
+
+  <h2>Links stay until deleted</h2>
+  <p>A relic is kept until it is deleted. The publisher can ask for a
+  lifetime when creating it; without one, the link does not age out.</p>
+
+  <footer>
+    <a href="/policy">What we store and what we can see</a> &middot;
+    <a href="/abuse">Report a relic</a>
+  </footer>
+</main>
+`;
+  return new Response(body, {
+    headers: {
+      'content-type': 'text/html; charset=utf-8',
+      'referrer-policy': 'no-referrer',
+      // robots.txt already disallows everything on this origin. The header is
+      // the per-response half of the same control.
+      'x-robots-tag': 'noindex',
+      'content-security-policy': [
+        "default-src 'none'",
+        "style-src 'unsafe-inline'",
+        "img-src 'self'",
         "base-uri 'none'",
         "form-action 'none'",
       ].join('; '),
@@ -967,7 +1207,6 @@ function escapeHtml(value: string): string {
 }
 
 function disclosureStatement(config: RelicConfig): string {
-  const days = Math.round(config.ttlSeconds / 86_400);
   const retention = Math.round(config.retentionSeconds / 86_400);
   return `# What Relic knows about your relic
 
@@ -1049,9 +1288,11 @@ further retention period, and we never promise erasure.
 
 ## Lifetime
 
-Every relic expires after ${days} days. There is no configuration for this and
-no way to extend it. Each relic can be opened ${config.downloadCap} times
-before the link stops working.
+A relic is kept until it is deleted. The publisher can set a lifetime when
+creating it, and once that lifetime has passed the link is dead; without one,
+time alone never retires a relic. Deletion still is not erasure, as the
+retention section above says. Each relic can be opened ${config.downloadCap}
+times before the link stops working.
 
 ## Reporting abuse
 

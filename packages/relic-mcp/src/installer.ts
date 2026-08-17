@@ -13,6 +13,7 @@ import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
+  DEFAULT_SERVER_SPEC,
   ExistingEntryError,
   HARNESSES,
   planFor,
@@ -99,12 +100,11 @@ export async function runInstall(argv: readonly string[]): Promise<void> {
     process.exit(2);
   }
 
-  const spec: ServerSpec = {
-    name: options.name,
-    command: 'npx',
-    args: ['-y', 'relic-mcp'],
-    env: {},
-  };
+  // The command comes from the shared default so the versioned npx spec
+  // lives in exactly one place; the name stays the caller's, and the origin
+  // is resolved only on paths that write or print, so a bare `install` can
+  // still just list what it detected.
+  const spec: ServerSpec = { ...DEFAULT_SERVER_SPEC, name: options.name };
 
   if (options.print && options.client === undefined) {
     process.stdout.write(snippetFor(withOrigin(spec, options)));

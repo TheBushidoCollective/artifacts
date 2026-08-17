@@ -8,25 +8,13 @@ resource "google_storage_bucket" "relics" {
   uniform_bucket_level_access = true
   public_access_prevention    = "enforced"
 
-  # Storage hygiene under the application-layer refusal, which is exact to the
-  # second. Granularity here is days rounded to the next UTC midnight, and a
-  # config change takes up to 24 hours to take effect, so nothing is ever
-  # served on the strength of an object still existing.
-  # Ciphertext, and the metadata that only describes it.
-  #
-  # Scoped by prefix rather than applied to the whole bucket, because the
-  # bucket now also holds records that must outlive the relic: tombstones, the
-  # blocklist, and abuse reports. An unscoped rule would delete a report of
-  # abuse on the same schedule as the thing reported.
-  lifecycle_rule {
-    action {
-      type = "Delete"
-    }
-    condition {
-      age            = var.relic_ttl_days
-      matches_prefix = concat(["${local.ciphertext_prefix}/"], local.ephemeral_store_prefixes)
-    }
-  }
+  # Storage-side expiry is gone. A lifecycle rule acts by age across
+  # everything its condition matches, so it cannot express a per-relic
+  # lifetime: scoped to the ciphertext prefix or not, it would delete
+  # ciphertext for relics the publisher asked to keep. Expiry is enforced
+  # only by the application, at mint. A relic with no publisher-set lifetime
+  # is never deleted by storage, and an expired relic's bytes stay until
+  # something explicitly deletes them.
 
   # Challenges and mint dedup entries. Live for minutes, expire at the coarsest
   # granularity a lifecycle rule offers, and are refused on age by the

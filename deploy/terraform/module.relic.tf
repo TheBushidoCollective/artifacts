@@ -11,7 +11,6 @@ module "relic" {
   service_url  = local.service_url
   sandbox_url  = local.sandbox_url
 
-  relic_ttl_days             = var.relic_ttl_days
   soft_delete_retention_days = var.soft_delete_retention_days
   kill_switch_engaged        = var.kill_switch_engaged
   operator_tokens            = var.operator_tokens

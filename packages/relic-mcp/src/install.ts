@@ -82,6 +82,19 @@ export interface ServerSpec {
   readonly env: Readonly<Record<string, string>>;
 }
 
+/**
+ * What `relic-mcp install` writes when the caller supplies no command of
+ * their own. The spec carries a version: `npx -y relic-mcp` bare resolves to
+ * "command not found" on current npx, so a spec without an `@` reproduces a
+ * broken install on every machine that trusts this default.
+ */
+export const DEFAULT_SERVER_SPEC: ServerSpec = {
+  name: 'relic',
+  command: 'npx',
+  args: ['-y', 'relic-mcp@latest'],
+  env: {},
+};
+
 export interface Plan {
   readonly harness: Harness;
   /** The file to write, absent for harnesses driven by their own CLI. */

@@ -30,6 +30,9 @@ A bare `publish` collides with incumbent publishing MCP servers, and the consequ
 |---|---|---|---|
 | `path` | string | yes | Filesystem path to the file to publish |
 | `filename` | string | no | Overrides the name written into the encrypted envelope header |
+| `ttl_days` | integer | no | Publisher-requested lifetime in days, 1 to 3650. Absent means the relic never expires |
+
+**`ttl_days` is the publisher's lifetime and passes through to the grant request.** An integer from 1 to 3650, or absent, and absent is the default: the relic never expires. The tool does not invent a value and does not clamp one. A value outside the range is the server's to refuse, with `invalid_publish_metadata` (`service.md` 1.1 case 12), because the range is publish policy rather than client validation, and the grant response's `relic_expires_at` (1.3) is what actually happened.
 
 **Inline content is not accepted, and there is no `content` member.** A path keeps the plaintext out of the model's context entirely, so only the key leaks upward. Inline content puts the plaintext in the transcript too, compounding the leak from "the key leaks" to "the key and the file leak." Accepting both without a stated preference is the worst option available, because a model already holding the bytes inlines by default and the safe path becomes the one nobody takes. A caller holding generated content in context writes it to disk first. In that case the plaintext was already in the transcript, so the rule loses nothing there and wins the common case, where an agent publishes a file it produced with a tool rather than in its own output.
 
@@ -51,7 +54,7 @@ Success returns `structuredContent` with seven members, all required:
 
 - **`url`** the full URL including the fragment. Without the fragment the model can't produce a usable link, which is the product.
 - **`relic_id`** the normalized canonical ID, separately. Every operator-facing workflow takes the ID with the fragment already stripped: abuse reports, takedown requests, support tickets. Making a caller slice it out of a URL means somebody eventually slices wrong.
-- **`relic_expires_at`** RFC 3339, UTC, taken from the grant response and never computed locally, because `service.md` section 3 makes the app server's clock authoritative for every TTL-bearing timestamp. A CI job needs this to know whether the link outlives the pipeline that mailed it.
+- **`relic_expires_at`** RFC 3339, UTC, or `null` when the relic has no publisher-set lifetime and never expires. Taken from the grant response and never computed locally, because `service.md` section 3 makes the app server's clock authoritative for every lifetime-bearing timestamp. A CI job reads it to know whether the link outlives the pipeline that mailed it; `null` says it does.
 - **`renderer_class`** the derived class, echoed as disclosure of what was reported.
 - **`filename`** the string written into the envelope header, echoed because the caller may have overridden it.
 - **`report_url`** the stable `/abuse` URL.
@@ -97,7 +100,7 @@ The spec names three protocol-error categories, not two, and the split has to be
 
 **The tool emits `notifications/progress` for the whole publish, from before the first byte moves through the last.** The first notification goes out at grant time, not at first byte, and notifications continue on a bounded interval for the duration of the upload. Progress is only possible when the caller asked for it: a client "includes a `progressToken` in the request metadata", and a server holding no token has nothing to reference ([MCP progress](https://modelcontextprotocol.io/specification/2026-07-28/basic/utilities/progress)). Notifications "stop after completion", and the server may "Send notifications at whatever frequency they deem appropriate", which is what makes the interval this document's to set rather than the spec's.
 
-**The failure this prevents is an orphaned relic.** Without progress the client aborts the call, the model reports failure to the human, the upload completes anyway, and the result is a relic that consumed publish quota and storage, that nobody holds the URL for, and that sits there until the TTL reaps it. The publisher gets a failure message about a file that published fine.
+**The failure this prevents is an orphaned relic.** Without progress the client aborts the call, the model reports failure to the human, the upload completes anyway, and the result is a relic that consumed publish quota and storage, that nobody holds the URL for, and that sits there until somebody deletes it, since nothing reaps by age any more. The publisher gets a failure message about a file that published fine.
 
 **The numbers, stated for the transport Relic actually uses.** Claude Code's 60-second time-to-first-byte default and its five-minute idle window are HTTP-side figures, and the publishing client is a local stdio binary. Per the client's own documentation, "Stdio and WebSocket servers have no per-request timer", and the idle window defaults to five minutes for HTTP, SSE, WebSocket, and connector servers "and to 30 minutes for stdio servers". So the pressure is real and weaker than the HTTP case: no first-byte timer at all, and a half-hour of silence before an abort. It isn't absent, because `CLAUDE_CODE_MCP_TOOL_IDLE_TIMEOUT` is user-settable to anything including much lower, because a cap-sized upload on a poor link can genuinely exceed the window, and because the 60-second timer binds immediately if a remote surface ever ships. Design to the tighter figure and the looser one costs nothing.
 
@@ -111,7 +114,7 @@ One property is load-bearing and easy to get backwards: **progress defeats the i
 
 **A publisher cannot delete their own relic in the first release, and that's what forecloses a delete tool.** The non-goals forbid a dashboard and a relic list rather than a per-relic delete, so this needed deciding rather than assuming. With no accounts, a delete has to be authorized by something the publisher holds, and there are exactly two candidates. Authorizing on anything derivable from the URL means every recipient can delete the relic, which hands a link-holder a destructive capability the publisher never granted and reproduces the burn-after-reading failure the frame ruled out for the first release. Authorizing on a separately stored token means the client keeps durable per-relic state on disk, which is a relic list under another name and which no locked surface provides a home for.
 
-So deletion stays operator-only through `/abuse` (`service.md` section 4), which already works on the ID alone and needs no key. A publisher who wants their own relic gone reports it with its ID. The mandatory TTL bounds the exposure in the meantime, which is why this is deferrable rather than a hole. If a later station adds publisher self-delete, the delete tool becomes specifiable and this section is what it reopens.
+So deletion stays operator-only through `/abuse` (`service.md` section 4), which already works on the ID alone and needs no key. A publisher who wants their own relic gone reports it with its ID. The mandatory TTL used to bound the exposure in the meantime, which was why this was deferrable rather than a hole; that bound is gone, and what bounds exposure now is the per-object download cap and operator delete. The gap that leaves is named rather than papered over: a publisher who wants their own never-expiring relic gone waits on an operator. If a later station adds publisher self-delete, the delete tool becomes specifiable and this section is what it reopens.
 
 ## 2. Error mapping, and the two legs the app server is not in
 
@@ -123,7 +126,7 @@ Every one of these maps onto a status and code `service.md` already fixed. **Thi
 |---|---|---|---|
 | Declared size over cap at grant time | `413` | `size_over_cap` | `size_limit_bytes`, `declared_size_bytes`, `size_basis`, `relic_id` |
 | Publish rate limited | `429` | `publish_rate_limited` | `retry_after_seconds` |
-| Malformed renderer class or client name | `400` | `invalid_publish_metadata` | none |
+| Malformed renderer class, client name, or `ttl_days` | `400` | `invalid_publish_metadata` | none |
 | Egress kill switch engaged | `503` | `service_paused` | `retry_after_seconds` |
 | Client-supplied ID fails alphabet, length, or reserved table | `400` | `invalid_relic_id` | `id_validation_failure`, `relic_id` |
 | Grant requested for an ID that already exists | `409` | `relic_id_collision` | `relic_id` |
@@ -211,6 +214,7 @@ The challenge is subject to the publish rate limiter and the kill switch, so its
 
 - **`relic_id`**, generated client-side before the grant request per `format.md` 1.3, drawn from the platform CSPRNG independently of the key.
 - **`declared_size_bytes` with `size_basis` of `plaintext`.** The client always declares the plaintext number. It's the number it knows exactly, having just stat'd the file, and it's the number `format.md` 3.11 fixes as the one a user can check with `ls`. The server converts to the enforced side when it needs to. Sending the ciphertext number instead would make the grant-time refusal compare against a figure the publisher can't reproduce.
+- **`ttl_days`, optional.** The publisher's requested lifetime in days, 1 to 3650, passed through unmodified. Absent means the relic never expires, and absent is what the tool sends unless the caller set one. It describes the request rather than the content, which is the bar `format.md` 3.2 sets for anything crossing, and a value outside the range is refused by the server with `invalid_publish_metadata` rather than silently corrected.
 - **`renderer_class`**, one of the frame's seven values, derived by the binary per 1.2.
 - **`client_name`** and **`client_version`**, as two members.
 - **`idempotency_key`**, per 4.3.
@@ -234,7 +238,7 @@ For idempotency it's the wrong instrument for the same reason. A content hash co
 
 ### 3.4 Two clocks
 
-**Grant expiry and relic TTL are separate clocks, both set by the app server, both returned in the grant response.** Collapsing them kills slow uploads at the TTL boundary, since a grant that lives until the TTL ends produces relics that expire the moment they finish uploading. The grant expiry is sized to a slow upload of a cap-sized object and is always shorter than the TTL. `relic_expires_at` is what reaches the caller in 1.3; `grant_expires_at` stays internal.
+**Grant expiry and the relic's lifetime are separate clocks.** The relic's lifetime is the publisher's, set through `ttl_days`, or absent; the grant expiry is the app server's. Collapsing them kills slow uploads at the boundary, since a grant that lives until a short lifetime ends produces relics that expire the moment they finish uploading. The grant expiry is sized to a slow upload of a cap-sized object and is always shorter than the relic's lifetime when one is set. `relic_expires_at`, a timestamp or `null`, is what reaches the caller in 1.3; `grant_expires_at` stays internal.
 
 **Grant expiry has to be enforced on the storage leg, because the app server isn't in it.** That's a constraint on the grant shape rather than a preference. Under a signed-URL shape, the signature's own expiry does it, bounded above because "The longest expiration value is 604800 seconds (7 days)" ([signed URLs](https://docs.cloud.google.com/storage/docs/access-control/signed-urls)). Under a resumable session it doesn't come free: "A session URI expires after one week but can be cancelled prior to expiring" ([resumable uploads](https://docs.cloud.google.com/storage/docs/resumable-uploads)), so a shape choosing that form either accepts a one-week upload window or cancels the session at grant expiry.
 
@@ -248,7 +252,7 @@ The trade behind it gets named too, because `shape` is otherwise choosing blind.
 
 ### 3.5 The response never contains the fragment
 
-**The grant response carries no key, no fragment, and no assembled URL.** It carries the echoed `relic_id`, the upload target and its constraints, `grant_expires_at`, and `relic_expires_at`. The client assembles `https://<relic-domain>/{id}#{secret}` locally from the domain, the ID, and the key that never left the process.
+**The grant response carries no key, no fragment, and no assembled URL.** It carries the echoed `relic_id`, the upload target and its constraints, `grant_expires_at`, and `relic_expires_at`, which is a timestamp or `null` for a relic that never expires. The client assembles `https://<relic-domain>/{id}#{secret}` locally from the domain, the ID, and the key that never left the process.
 
 Named as a standing guard, because the pressure here is a convenience feature rather than an attack: **no endpoint may ever accept a key in order to build or shorten a share URL.** The frame concedes that the decrypting JavaScript is served by the party the claim is made against, so that half of zero-knowledge rests on operator intent. The server never receiving the key is the half that's structural, and a share-URL builder trades the structural half for a nicety. It's drift routing back to `frame`, never a `shape` decision.
 
@@ -362,7 +366,7 @@ Two honesty rules bound what the tool may claim:
 
 **The tool never reports failure in language implying nothing was uploaded when it cannot know that.** For `upload_network_failed`, `upload_storage_error`, and `upload_retries_exhausted`, whether the object landed is genuinely unknown from the client's seat.
 
-So those three codes carry **`completion: "unknown"`** and, with it, **`relic_id` and `url`**. Emitting the URL on a failure is a deliberate trade and it goes the way it does because the alternative is worse. The key exists only in the tool's memory; discarding it on an ambiguous failure means that if the object did land, the ciphertext sits in storage consuming quota and egress budget until the TTL reaps it, permanently unreadable by anyone including the publisher. That's a worse orphan than the one 1.5 is about. Emitting the URL costs nothing new in transcript exposure, because a successful publish puts the same key in the same transcript, and it gives the publisher a link to test and an ID to hand the operator for deletion.
+So those three codes carry **`completion: "unknown"`** and, with it, **`relic_id` and `url`**. Emitting the URL on a failure is a deliberate trade and it goes the way it does because the alternative is worse. The key exists only in the tool's memory; discarding it on an ambiguous failure means that if the object did land, the ciphertext sits in storage consuming quota and egress budget indefinitely, since nothing reaps by age any more, permanently unreadable by anyone including the publisher. That's a worse orphan than the one 1.5 is about. Emitting the URL costs nothing new in transcript exposure, because a successful publish puts the same key in the same transcript, and it gives the publisher a link to test and an ID to hand the operator for deletion.
 
 **The objection, that this may hand a human a dead link, is already answered by a sibling rather than merely outweighed.** `service.md` 1.6 gives an ID whose grant is live and whose object hasn't landed `409 relic_not_yet_published` with `retry_after_seconds`, its case 6 gives an ID whose grant expired with nothing there `410 relic_never_published`, and 1.6 fixes the viewer wording: the relic is still uploading, never anything that reads as a dead link. So a link emitted under `completion: "unknown"` renders as a specific labeled state on Relic's own viewer, either still uploading or never published, and both tell the publisher what actually happened. The dead link the objection is about doesn't exist here.
 
@@ -380,7 +384,7 @@ Every other failure carries no URL and none is emitted: `source_*` and `local_*`
 
 ### 4.9 Double publish
 
-**Publishing the same file twice produces two relics: two IDs, two keys, two URLs, two TTLs.** No deduplication, and the tool doesn't notice the repeat, because recognizing it would need a local record of what was published, which is a relic list under another name and durable state the binary deliberately doesn't keep.
+**Publishing the same file twice produces two relics: two IDs, two keys, two URLs, two independently chosen lifetimes.** No deduplication, and the tool doesn't notice the repeat, because recognizing it would need a local record of what was published, which is a relic list under another name and durable state the binary deliberately doesn't keep.
 
 **Deduplication isn't a storage optimization here.** `format.md` 3.10 gives every relic a fresh key, so identical plaintext yields entirely different ciphertext and there's nothing for a deduplicator to match. The only construction that would change that is convergent encryption, and `format.md` 3.10 already rules it drift routing back to `frame` rather than an optimization available to `shape` or `build`, because deriving the key from the plaintext would let the operator confirm two publishers uploaded the same file and test whether any given file is on the service.
 

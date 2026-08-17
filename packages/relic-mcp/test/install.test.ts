@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import {
+  DEFAULT_SERVER_SPEC,
   ExistingEntryError,
   HARNESSES,
   planFor,
@@ -17,6 +18,18 @@ const SPEC: ServerSpec = {
 
 const parse = (plan: { contents: string }): unknown =>
   JSON.parse(plan.contents);
+
+describe('the default spec the installer writes', () => {
+  // A bare `npx -y relic-mcp` resolves to "command not found" on current
+  // npx, so every config generated from this default would install a server
+  // that cannot start. Asserting the shape rather than a literal keeps this
+  // from being a fixture quoting its own input back.
+  test('carries a version specifier', () => {
+    expect(DEFAULT_SERVER_SPEC.command).toBe('npx');
+    expect(DEFAULT_SERVER_SPEC.args[0]).toBe('-y');
+    expect(DEFAULT_SERVER_SPEC.args[1]).toMatch(/^relic-mcp@/);
+  });
+});
 
 describe('planFor', () => {
   test('an unknown harness names the ones that exist', () => {

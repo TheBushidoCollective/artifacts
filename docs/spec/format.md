@@ -58,7 +58,7 @@ Under full bearer-token entropy a collision is astronomical bad luck or a broken
 
 ### 1.5 Reserved path segments
 
-IDs sit at the root, so root-level service paths are reserved words. **The reserved set is `abuse`, `policy`, `robots.txt`, `favicon.ico`, `sitemap.xml`, `manifest.webmanifest`, `sw.js`, `assets`, `api`, `health`, and `.well-known`.**
+IDs sit at the root, so root-level service paths are reserved words. **The reserved set is `abuse`, `policy`, `robots.txt`, `favicon.ico`, `sitemap.xml`, `manifest.webmanifest`, `sw.js`, `assets`, `api`, `health`, `.well-known`, `sandbox.html`, and `install`.**
 
 **No reserved word is ever issuable as an ID.** Two independent guards enforce that, and they are not equally strong.
 

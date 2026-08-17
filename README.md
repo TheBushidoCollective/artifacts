@@ -70,7 +70,7 @@ content, and `relic_describe_client`, which explains what the client does with
 your file without reading it or contacting anything.
 
 ```bash
-npx -y relic-mcp   # nothing to clone, nothing to build
+npx -y relic-mcp@latest   # nothing to clone, nothing to build
 ```
 
 ### Any harness, one command
@@ -79,8 +79,8 @@ The npm package installs itself. It knows where each harness keeps its config,
 merges into what is already there, and backs the file up first.
 
 ```bash
-npx relic-mcp install                    # what is installed on this machine
-npx relic-mcp install --client cursor    # add it there
+npx -y relic-mcp@latest install                 # what is installed on this machine
+npx -y relic-mcp@latest install --client cursor # add it there
 ```
 
 | `--client` | Writes |
@@ -109,7 +109,7 @@ The plugin is the packaged version: it wires the server, points at the hosted
 service, and adds a skill telling the agent when publishing is the right move
 and what to disclose when it hands over a link.
 
-`npx relic-mcp install --client claude-code` does this for you. By hand, from
+`npx -y relic-mcp@latest install --client claude-code` does this for you. By hand, from
 the repo:
 
 ```bash
@@ -134,7 +134,7 @@ tarball, so the version can never disagree with itself.
 ```bash
 claude mcp add relic \
   --env RELIC_SERVICE_ORIGIN=https://relic-wh2jw5fg2q-uc.a.run.app \
-  -- npx -y relic-mcp
+  -- npx -y relic-mcp@latest
 ```
 
 No clone and no build step. `npx` fetches on first use and caches.
@@ -151,7 +151,7 @@ this. The key names differ; the shape does not.
   "mcpServers": {
     "relic": {
       "command": "npx",
-      "args": ["-y", "relic-mcp"],
+      "args": ["-y", "relic-mcp@latest"],
       "env": {
         "RELIC_SERVICE_ORIGIN": "https://relic-wh2jw5fg2q-uc.a.run.app"
       }
@@ -163,7 +163,7 @@ this. The key names differ; the shape does not.
 ### Over HTTP instead of stdio
 
 ```bash
-RELIC_MCP_HTTP=1 RELIC_SERVICE_ORIGIN=https://... npx -y relic-mcp
+RELIC_MCP_HTTP=1 RELIC_SERVICE_ORIGIN=https://... npx -y relic-mcp@latest
 # -> http://127.0.0.1:7333/mcp
 ```
 

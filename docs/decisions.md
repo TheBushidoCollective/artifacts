@@ -119,15 +119,23 @@ forwarded once without dying.
 Worst-case egress per relic is 200 x 100 MiB, which is 20 GiB, or $2.40 at
 $0.12/GB. That is the number the kill-switch ceiling is set against.
 
-### 3. TTL ceiling
+### 3. Expiry
 
-**7 days.** It lands inside the lifecycle regime, so the storage-side rule is
-expressible as `{"action":{"type":"Delete"},"condition":{"age":7}}` and the
-application-layer refusal stays exact to the second on top of it
-(`service.md` 3.1).
+**No operator TTL. A publisher may set a lifetime, capped at 3650 days;
+absent one, the relic never expires.** This reverses the original 7-day pick
+and the locked rule it rode in on, and the reversal is recorded rather than
+absorbed. The storage-side Delete rule is gone because a bucket-wide rule
+cannot express a per-relic lifetime and would have deleted ciphertext the
+publisher asked to keep, so expiry is enforced only by the application, at
+mint, exact to the second (`service.md` 3.1).
 
-7 days also matches the GCS signed-URL ceiling, so no clamp is ever driven by
-the storage limit rather than by policy.
+The cap is `config.maxTtlDays`, the accepted ceiling for a publisher-supplied
+`ttl_days` in the grant request rather than a recommendation. A relic with no
+lifetime has no expiry arithmetic at all: the mint path performs no expiry
+refusal and the signed URL validity runs unclamped. The cost of the reversal
+is the old rule's whole value: no storage-side reaping exists, an expired
+relic's bytes outlive its refusal until explicitly deleted, and the abuse
+controls that remain are delete-by-ID, the download cap, and the kill switch.
 
 ### 4. Signed-URL validity
 
@@ -138,14 +146,18 @@ URLs.
 
 A mint that would clamp below 60 seconds is refused with `relic_expired`
 rather than issuing a URL that dies mid-transfer (`service.md` section 3).
+Clamping only exists on a relic with a publisher-set lifetime; one without
+never clamps and never returns `relic_expired`.
 
 ### 5. Retention window
 
-**30 days**, set deliberately longer than the 7-day TTL. `service.md` 7.5
-names the failure a shorter window causes: the metric's publishing-IP filter
-silently stops firing on older relics. It also bounds how long the tombstone
-and the mint log's `code` survive, which the cap-exhaustion cost in 1.2
-depends on.
+**30 days.** `service.md` 7.5 names the failure a shorter window causes: the
+metric's publishing-IP filter silently stops firing on older relics. It also
+bounds how long the tombstone and the mint log's `code` survive, which the
+cap-exhaustion cost in 1.2 depends on. It was originally set longer than a
+7-day TTL; with no TTL, a relic that never expires can outlive the window,
+and the accepted consequence is that the relic row keeps serving after its
+mint-log history has aged out.
 
 ### 6. Published SLA
 

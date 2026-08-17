@@ -27,8 +27,9 @@ context and pass its text; pass where it lives.
 Optional arguments worth knowing:
 
 - `filename` overrides the display name shown to the recipient.
-- `ttl_days` shortens the life of the link. Shorter is better for anything
-  sensitive; the default is the service maximum.
+- `ttl_days` gives the link a lifetime in days, 1 to 3650. A relic is kept
+  until it is deleted unless you set one. Shorter is better for anything
+  sensitive: when the content should stop being available, say when.
 
 ## Say this when you hand over the link
 
@@ -44,7 +45,8 @@ all, it should not go through an agent.
 
 Also worth one line, unprompted, the first time in a session:
 
-- links expire (the tool returns the exact date)
+- a relic is kept until it is deleted, unless it was published with a
+  `ttl_days` lifetime, in which case the tool returns the exact date
 - opens are capped, and the tool's mint response reports how many remain
 - anyone with the link can read it; there are no per-recipient permissions
 
@@ -61,11 +63,11 @@ fails: chat clients and ticket systems sometimes cut fragments.
 
 ## When not to use it
 
-- **Something that belongs in the repo.** Commit it. A relic expires; a commit
-  does not.
-- **A client deliverable.** Those have a durable home, and a link that dies in
-  a week is not it. Publish a relic in addition if someone needs to look at it
-  now, never instead.
+- **Something that belongs in the repo.** Commit it. A relic is a link you
+  hand someone, not a place work lives; the repo is.
+- **A client deliverable.** Those have a durable home, and a share link is
+  not it, even one with no expiry. Publish a relic in addition if someone
+  needs to look at it now, never instead.
 - **Credentials, keys, or tokens.** Encrypted in transit and at rest still ends
   with a secret sitting in a URL in a transcript.
 

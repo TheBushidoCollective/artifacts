@@ -6,7 +6,7 @@ encryption key is generated on your machine and is never sent to the service.
 ```bash
 claude mcp add relic \
   --env RELIC_SERVICE_ORIGIN=https://your-relic-service \
-  -- npx -y relic-mcp
+  -- npx -y relic-mcp@latest
 ```
 
 Then: *"publish ./report.md as a relic."*
@@ -18,7 +18,7 @@ For any client that takes a JSON config:
   "mcpServers": {
     "relic": {
       "command": "npx",
-      "args": ["-y", "relic-mcp"],
+      "args": ["-y", "relic-mcp@latest"],
       "env": { "RELIC_SERVICE_ORIGIN": "https://your-relic-service" }
     }
   }
@@ -65,7 +65,7 @@ binding the tarball to a specific commit and workflow.
 
 | Tool | Input | Notes |
 |---|---|---|
-| `relic_publish` | `path`, optional `filename` | A filesystem path. Inline content is deliberately not accepted, so the plaintext never joins the key in your transcript. |
+| `relic_publish` | `path`, optional `filename`, `ttl_days` | A filesystem path. Inline content is deliberately not accepted, so the plaintext never joins the key in your transcript. A relic is kept until it is deleted; `ttl_days` (an integer, 1 to 3650) gives it a lifetime. |
 | `relic_describe_client` | none | Explains the encryption path. Reads nothing, sends nothing. |
 
 ## Environment

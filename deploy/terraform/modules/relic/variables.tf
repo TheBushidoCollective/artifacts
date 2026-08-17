@@ -51,12 +51,6 @@ variable "sandbox_url" {
   nullable    = false
 }
 
-variable "relic_ttl_days" {
-  description = "Storage-side lifetime, in days."
-  type        = number
-  nullable    = false
-}
-
 variable "soft_delete_retention_days" {
   description = "How long deleted objects stay recoverable."
   type        = number

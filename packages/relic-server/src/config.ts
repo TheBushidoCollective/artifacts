@@ -21,8 +21,12 @@ export interface RelicConfig {
   /** The signed grant's ciphertext constraint, derived from the above. */
   readonly ciphertextCapBytes: number;
 
-  /** Relic lifetime. Lands inside the GCS lifecycle regime. */
-  readonly ttlSeconds: number;
+  /**
+   * The largest publisher-supplied lifetime, in days, that a grant will
+   * record. Bounds the opt-in so a lifetime stays a commitment inside the
+   * storage arithmetic the operator already pays for, not an open-ended one.
+   */
+  readonly maxTtlDays: number;
   /** Signed download URL validity. */
   readonly urlValiditySeconds: number;
   /** Below this, a clamped mint is refused rather than issuing a dying URL. */
@@ -33,7 +37,10 @@ export interface RelicConfig {
   readonly mintDedupSeconds: number;
   /** Opens inside this window of publish are dropped from the metric. */
   readonly postPublishWindowSeconds: number;
-  /** How long the mint log and tombstones live. Longer than the TTL. */
+  /**
+   * How long the mint log and tombstones live. Relics with a publisher-set
+   * lifetime can outlive this; `assertConfig` says why that is allowed.
+   */
   readonly retentionSeconds: number;
   /** How long a publish challenge nonce stays valid. */
   readonly challengeTtlSeconds: number;
@@ -61,7 +68,7 @@ export const DEFAULT_CONFIG: RelicConfig = {
   plaintextCapBytes: PLAINTEXT_CAP_BYTES,
   ciphertextCapBytes: ciphertextCapBytes(),
 
-  ttlSeconds: 7 * DAY,
+  maxTtlDays: 3650,
   urlValiditySeconds: 15 * 60,
   minViableValiditySeconds: 60,
   downloadCap: 200,
@@ -92,12 +99,12 @@ export function assertConfig(config: RelicConfig): void {
   if (config.minViableValiditySeconds > config.urlValiditySeconds) {
     throw new Error('minimum viable validity exceeds the validity window');
   }
-  // `service.md` 7.5: a retention window shorter than the TTL silently stops
-  // the metric's publishing-IP filter firing on older relics, and neither
-  // locked document contains a number that would catch it. This does.
-  if (config.retentionSeconds < config.ttlSeconds) {
-    throw new Error('retention window is shorter than the relic TTL');
-  }
+  // `service.md` 7.5 wanted the mint log to outlive every relic, so the
+  // metric's publishing-IP filter could still fire on an old relic's self
+  // opens. That was expressible only while every relic's life was a single
+  // number fixed here. A relic may now outlive any retention window, or
+  // never die at all, so no ordering of these two values can promise it, and
+  // the check is gone rather than quietly comparing against the wrong life.
   if (config.mintDedupSeconds <= config.postPublishWindowSeconds) {
     throw new Error(
       'mint dedup interval must exceed the post-publish window, or the two ' +

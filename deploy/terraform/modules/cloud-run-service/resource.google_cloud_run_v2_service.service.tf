@@ -72,7 +72,7 @@ resource "google_cloud_run_v2_service" "service" {
 }
 
 # Public. Relic has no accounts by design, so there is no identity to check
-# and the download cap plus the TTL are the controls instead.
+# and the download cap plus the kill switch are the controls instead.
 resource "google_cloud_run_v2_service_iam_member" "public" {
   project  = google_cloud_run_v2_service.service.project
   location = google_cloud_run_v2_service.service.location

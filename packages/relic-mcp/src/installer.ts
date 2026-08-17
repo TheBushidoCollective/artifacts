@@ -230,7 +230,7 @@ function withOrigin(spec: ServerSpec, options: Options): ServerSpec {
     origin = requiredOrigin('--origin', raw);
   } catch (error) {
     process.stderr.write(
-      `${(error as Error).message}\n\nPass --origin https://your-relic-service\n`
+      `${(error as Error).message}\n\nPass --origin https://relik.link\n`
     );
     process.exit(2);
   }

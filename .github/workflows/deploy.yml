@@ -111,11 +111,12 @@ jobs:
           IPV4="$(terraform output -raw service_lb_ipv4)"
           IPV6="$(terraform output -raw service_lb_ipv6)"
 
-          # The advertised origin is what headers must name. The Cloud Run host
-          # is what the smoke tests fetch, because a managed certificate is
-          # provisioned asynchronously and is not ready when this step runs.
+          # One origin, and the smoke tests use it. The Cloud Run host no
+          # longer accepts internet traffic, so there is nothing to fall back
+          # to and nothing that should want to: if the domain does not serve,
+          # the deployment is broken and this must say so.
           echo "service=$SERVICE" >> "$GITHUB_OUTPUT"
-          echo "fetch=$FETCH" >> "$GITHUB_OUTPUT"
+          echo "run_host=$FETCH" >> "$GITHUB_OUTPUT"
           echo "sandbox=$SANDBOX" >> "$GITHUB_OUTPUT"
 
           CERT_STATE="$(gcloud compute ssl-certificates describe "$CERT" --global \
@@ -156,9 +157,9 @@ jobs:
       - name: Smoke test the deployment
         run: |
           set -euo pipefail
-          # Fetched on the Cloud Run host: the managed certificate for the
-          # advertised origin is still provisioning when this runs.
-          SERVICE="${{ steps.urls.outputs.fetch }}"
+          # The owned domain, through the load balancer. The run.app host is no
+          # longer reachable from here, which is the point.
+          SERVICE="${{ steps.urls.outputs.service }}"
 
           echo "health"
           curl -fsS --retry 10 --retry-all-errors --retry-delay 3 "$SERVICE/health" | tee /dev/stderr | grep -q '"ok"'
@@ -188,10 +189,25 @@ jobs:
       - name: Smoke test the origin boundary
         run: |
           set -euo pipefail
-          # ORIGIN is what the headers must name. FETCH is what answers today.
           ORIGIN="${{ steps.urls.outputs.service }}"
-          SERVICE="${{ steps.urls.outputs.fetch }}"
+          SERVICE="${{ steps.urls.outputs.service }}"
           SANDBOX="${{ steps.urls.outputs.sandbox }}"
+          RUN_HOST="${{ steps.urls.outputs.run_host }}"
+
+          # The retired host must actually be retired. A reachable second
+          # origin is a name somebody can be handed that will not render, and
+          # nothing else in this pipeline would notice it came back.
+          echo "the run.app host no longer answers the internet"
+          CODE="$(curl -sS -o/dev/null -m 20 -w '%{http_code}' "$RUN_HOST/health" || echo 000)"
+          case "$CODE" in
+            200)
+              echo "$RUN_HOST still serves; ingress is not restricted"
+              exit 1
+              ;;
+            *)
+              echo "  refused with $CODE"
+              ;;
+          esac
 
           echo "the sandbox serves its page"
           curl -fsS --retry 10 --retry-all-errors --retry-delay 3 \

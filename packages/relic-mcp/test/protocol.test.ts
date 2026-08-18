@@ -172,6 +172,34 @@ describe('server/discover', () => {
   });
 });
 
+describe('the version the server reports', () => {
+  test('is a build stamp, not a literal that goes stale', async () => {
+    // The published 0.2.0 tarball introduced itself to every client as
+    // 0.1.0, because the version was written into the source by hand. An
+    // unbuilt run reports a dev marker rather than claiming a release.
+    const { SERVER_VERSION } = await import('../src/server.ts');
+    expect(SERVER_VERSION).toBe('0.0.0-dev');
+  });
+
+  test('is stamped from package.json when the bundle is built', async () => {
+    const root = new URL('../', import.meta.url).pathname;
+    const pkg = (await Bun.file(`${root}package.json`).json()) as {
+      version: string;
+    };
+
+    const build = Bun.spawn(['bun', 'run', 'build.ts'], {
+      cwd: root,
+      stdout: 'pipe',
+      stderr: 'pipe',
+    });
+    expect(await build.exited).toBe(0);
+
+    const bundle = await Bun.file(`${root}dist/relic-mcp.js`).text();
+    expect(bundle).toContain(pkg.version);
+    expect(bundle).not.toContain('process.env.RELIC_MCP_VERSION');
+  });
+});
+
 describe('the legacy handshake still works', () => {
   test('initialize is answered, which makes this a dual-era server', async () => {
     const response = await handleMessage(

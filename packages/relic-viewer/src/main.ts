@@ -127,15 +127,6 @@ function toast(message: string): void {
   window.setTimeout(() => element.remove(), 4000);
 }
 
-function notice(text: string): HTMLElement {
-  const element = document.createElement('div');
-  element.className = 'notice';
-  element.appendChild(icon(ICONS.flag));
-  const span = document.createElement('span');
-  span.textContent = text;
-  element.appendChild(span);
-  return element;
-}
 
 function downloadContent(view: ReadyView): void {
   const blob = new Blob([view.content as unknown as BlobPart], {
@@ -184,6 +175,16 @@ function buildBar(view: ReadyView, relicId: string): HTMLElement {
 
   const actions = document.createElement('div');
   actions.className = 'actions';
+
+  const marker = document.createElement('a');
+  marker.className = 'action marker';
+  marker.href = `${SERVICE_ORIGIN}/policy`;
+  marker.rel = 'noopener noreferrer';
+  marker.appendChild(icon(ICONS.source));
+  const markerText = document.createElement('span');
+  markerText.textContent = 'Runs author code, isolated';
+  marker.appendChild(markerText);
+  actions.appendChild(marker);
 
   // The fragment was stripped from the address bar, so re-sharing has to come
   // from somewhere. This is that affordance, backed by the in-memory key.
@@ -471,27 +472,6 @@ function renderReady(
 
   if (view.downgradeNotice !== undefined) {
     main.appendChild(notice(view.downgradeNotice));
-  }
-
-  // Said before the recipient has reason to trust what is in the frame, and
-  // not buried: both frame routes run the author's code, and the frame's
-  // policy permits no remote source, so that code cannot reach the network
-  // or contact its author. The notice still has to say what that costs the
-  // recipient, because isolation is not safety: the code runs in their
-  // browser, and stating the isolation without its limits would read as a
-  // promise the isolation does not make.
-  if (view.route === 'sandboxed-html' || view.route === 'sandboxed-jsx') {
-    main.appendChild(
-      notice(
-        'This relic runs its author\u2019s code in this page. That code is ' +
-          'isolated: it cannot reach the network, contact its author, or ' +
-          'touch anything outside its frame, and a page that expects ' +
-          'external images, fonts, or scripts renders without them. The ' +
-          'isolation is about network and cross-origin reach, not safety: ' +
-          'the code runs in your browser, can use your CPU, and can render ' +
-          'whatever it wants.'
-      )
-    );
   }
 
   switch (view.route) {

@@ -184,7 +184,7 @@ body {
 }
 
 @media (max-width: 34rem) {
-  .action span {
+  .action:not(.marker) span {
     display: none;
   }
   .action {

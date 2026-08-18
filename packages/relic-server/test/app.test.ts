@@ -179,6 +179,18 @@ describe('the shell', () => {
       .then((r) => r.headers.get('content-security-policy'));
     expect(csp).toContain('frame-src https://relic-usercontent.example');
   });
+
+  test('permits the manifest it links, which default-src none refused', async () => {
+    // The shell has always linked a manifest and the server has always served
+    // it, but a manifest fetch falls back to default-src when manifest-src is
+    // absent. Production reported a csp-blocked request of type Manifest, so
+    // the install path never worked. Any relic path serves the same shell.
+    const { id } = await publish();
+    const csp = await app
+      .fetch(req(`/${id}`))
+      .then((r) => r.headers.get('content-security-policy'));
+    expect(csp).toContain("manifest-src 'self'");
+  });
 });
 
 describe('reserved segments beat ids at the router', () => {

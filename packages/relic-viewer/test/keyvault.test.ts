@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { localStorageKeyVault } from '../src/main.ts';
 
 /** Enough of the Storage interface for the vault, with no browser involved. */
-function memoryStorage(): Storage {
+export function keyvaultMemoryStorage(): Storage {
   const map = new Map<string, string>();
   return {
     get length() {
@@ -19,6 +19,9 @@ function memoryStorage(): Storage {
     clear: () => map.clear(),
   } as Storage;
 }
+
+/** The same helper under the name this file's older tests were written to. */
+const memoryStorage = keyvaultMemoryStorage;
 
 /** Storage that refuses every write, as a full quota or blocked site data does. */
 function refusingStorage(): Storage {
@@ -100,6 +103,49 @@ describe('localStorageKeyVault', () => {
 
     vault.remember('relic1', '#r1abc', Number.NaN);
     expect(storage.length).toBe(0);
+  });
+
+  test('Infinity means never expires and survives any clock', () => {
+    // The regression, found in the field: a relic with no lifetime mints
+    // relic_expires_at null, the viewer maps that to Infinity, and the vault
+    // has to keep the key rather than refusing it like NaN.
+    const storage = keyvaultMemoryStorage();
+    let clock = 1000;
+    const vault = localStorageKeyVault(storage, () => clock);
+
+    vault.remember('forever', '#r1abc', Number.POSITIVE_INFINITY);
+    clock = 1000 + 10 * 365 * 24 * 60 * 60 * 1000;
+    expect(vault.recall('forever')).toBe('#r1abc');
+  });
+
+  test('a never-expires entry round-trips through persisted storage', () => {
+    // JSON has no Infinity, so it persists as null. A fresh vault over the
+    // same storage, which is what a page reload is, must read null as
+    // never-expires rather than as already gone.
+    const storage = keyvaultMemoryStorage();
+    localStorageKeyVault(storage, () => 1000).remember(
+      'forever',
+      '#r1abc',
+      Number.POSITIVE_INFINITY
+    );
+
+    const reloaded = localStorageKeyVault(storage, () => 9_000_000_000_000);
+    expect(reloaded.recall('forever')).toBe('#r1abc');
+  });
+
+  test('the sweep keeps never-expires entries and still drops expired ones', () => {
+    const storage = keyvaultMemoryStorage();
+    let clock = 1000;
+    const vault = localStorageKeyVault(storage, () => clock);
+
+    vault.remember('expired', '#r1aaa', 1000 + HOUR);
+    vault.remember('forever', '#r1bbb', Number.POSITIVE_INFINITY);
+
+    clock = 1000 + 2 * HOUR;
+    vault.recall('anything');
+
+    expect(vault.recall('forever')).toBe('#r1bbb');
+    expect(vault.recall('expired')).toBeUndefined();
   });
 
   // Otherwise storage fills with keys to relics that stopped existing.

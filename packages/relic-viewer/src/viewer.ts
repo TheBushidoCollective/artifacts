@@ -94,7 +94,12 @@ export interface MintResponse {
  * stated in the disclosure rather than done quietly.
  */
 export interface KeyVault {
-  /** Remember a key against a relic, until the relic expires. */
+  /**
+   * Remember a key against a relic, until the relic expires.
+   *
+   * `Number.POSITIVE_INFINITY` means the relic has no lifetime, so the key is
+   * kept until the relic is deleted; the forget-on-dead path evicts it then.
+   */
   remember(relicId: string, fragment: string, expiresAt: number): void;
   recall(relicId: string): string | undefined;
   forget(relicId: string): void;
@@ -219,11 +224,15 @@ export async function load(
 
   // The relic is real and this key reached it, so it is worth remembering
   // until the relic itself expires. Done after the mint rather than before,
-  // so a key for a relic that does not exist is never written down.
+  // so a key for a relic that does not exist is never written down. A relic
+  // with no lifetime never expires, and Date.parse(null) is NaN, which the
+  // vault would rightly refuse: map it to the explicit never-expires value.
   deps.keyVault.remember(
     relicId,
     fragment,
-    Date.parse(mintResponse.relic_expires_at)
+    mintResponse.relic_expires_at === null
+      ? Number.POSITIVE_INFINITY
+      : Date.parse(mintResponse.relic_expires_at)
   );
 
   // Refuse before allocating, using a bound computed from the object length

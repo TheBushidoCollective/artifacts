@@ -26,7 +26,11 @@ import {
   readSource,
   reportComplete,
 } from './publish.ts';
-import { type PublishState, loadPublishState, savePublishState } from './state.ts';
+import {
+  loadPublishState,
+  type PublishState,
+  savePublishState,
+} from './state.ts';
 
 export interface RepublishInput {
   readonly relic_id: string;

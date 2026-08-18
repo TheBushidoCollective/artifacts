@@ -19,6 +19,8 @@
  * on the second request.
  */
 
+import type { RendererClass } from '@relic/format';
+
 import type {
   AbuseReport,
   DedupEntry,
@@ -192,6 +194,27 @@ export function gcsStore(options: GcsStoreOptions): RelicStore {
         publishedAt: at,
         objectLength,
         objectCrc32c: crc32c,
+      }));
+    },
+
+    /**
+     * Opening a version is a read-modify-write like any other, so it rides
+     * the same generation-checked retry. Two instances granting a
+     * republish concurrently must not both hand out the same `v{n}`.
+     */
+    async beginVersion(
+      id: string,
+      rendererClass: RendererClass,
+      declaredSizeBytes: number
+    ): Promise<RelicRow | undefined> {
+      return mutateRelic(id, (row) => ({
+        ...row,
+        version: row.version + 1,
+        rendererClass,
+        declaredSizeBytes,
+        publishedAt: undefined,
+        objectLength: undefined,
+        objectCrc32c: undefined,
       }));
     },
 

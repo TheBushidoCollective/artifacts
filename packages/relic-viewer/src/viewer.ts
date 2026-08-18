@@ -29,6 +29,7 @@ import {
   UnknownVersionError,
   VersionMismatchError,
 } from '@relic/format';
+import { isComponentSource } from './jsx.ts';
 
 /** Refuse before allocating anything this large. */
 export const MAX_RENDER_BYTES = 100 * 1024 * 1024;
@@ -59,6 +60,7 @@ export type RenderRoute =
   | 'code'
   | 'image'
   | 'sandboxed-html'
+  | 'sandboxed-jsx'
   | 'download';
 
 export interface DeadView {
@@ -452,7 +454,26 @@ export function routeFor(
   // Content only. Feeding the filename into the sniff would make this
   // comparison measure the declared name against itself, and it would agree
   // in exactly the case the rule exists to catch.
-  const sniffed = sniffContentClass(content);
+  let sniffed = sniffContentClass(content);
+
+  // JSX is the one class the byte sniffer cannot see: telling a component
+  // from prose takes a parser, `@relic/format` stays dependency-free, and no
+  // cheap prefix separates the two. So the question is asked here, with the
+  // compiler, and only when the declared class already says `jsx`.
+  //
+  // The gate is the declared class rather than content alone, and that is
+  // deliberate. Asking it of every textual relic would sniff every valid
+  // JavaScript file as `jsx` and downgrade it with a spurious notice, so the
+  // parse is spent only where the answer can change the route. The answer
+  // itself is content-truth the publisher cannot influence: prose fails to
+  // parse and falls back to `code`, and the only route the upgrade can
+  // produce is the sandboxed frame, never inline rendering on this origin.
+  // A component that does not parse is shown as source, which is the
+  // least-privileged telling of a lie.
+  if (declared === 'jsx' && sniffed === 'code') {
+    const source = new TextDecoder('utf-8', { fatal: false }).decode(content);
+    if (isComponentSource(source, filename)) sniffed = 'jsx';
+  }
 
   // Tiers, not classes. `markdown` and `code` are both escaped text and
   // carry identical privilege, and the sniffer cannot tell them apart, so
@@ -480,6 +501,10 @@ function routeForClass(cls: RendererClass): RenderRoute {
       return 'image';
     case 'html':
       return 'sandboxed-html';
+    case 'jsx':
+      // Same frame as HTML, different payload: transpiled text posted in
+      // rather than markup. Never inline on this origin.
+      return 'sandboxed-jsx';
     default:
       // Media, archives, and arbitrary binaries are download-only in the
       // first release. The framing keeps range decryption available so this
@@ -494,6 +519,7 @@ function classFromMimetype(mimetype: string, filename: string): RendererClass {
   if (type === 'text/markdown') return 'markdown';
   if (type === 'text/html' || type === 'application/xhtml+xml') return 'html';
   if (type === 'image/svg+xml') return 'html'; // SVG carries script
+  if (type === 'text/jsx' || type === 'text/tsx') return 'jsx';
   if (type.startsWith('image/')) return 'image';
   if (type.startsWith('video/') || type.startsWith('audio/')) return 'media';
   if (
@@ -520,6 +546,8 @@ function describe(cls: RendererClass): string {
       return 'a text or code file';
     case 'html':
       return 'a web page';
+    case 'jsx':
+      return 'a React component';
     case 'image':
       return 'an image';
     case 'media':

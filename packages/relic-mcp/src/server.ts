@@ -165,19 +165,19 @@ export const REPUBLISH_TOOL_DEFINITION = {
   description:
     'Publish a new version of a relic this machine originally published, ' +
     'encrypting under the same key so the existing share URL keeps working. ' +
-    'Only possible from the machine that holds the relic\'s key and publish ' +
+    "Only possible from the machine that holds the relic's key and publish " +
     'token; a relic that was taken down can never be revived.',
   inputSchema: {
     type: 'object',
     properties: {
       relic_id: {
         type: 'string',
-        description:
-          'The 26-character relic id the original publish returned.',
+        description: 'The 26-character relic id the original publish returned.',
       },
       path: {
         type: 'string',
-        description: 'Filesystem path to the file that becomes the new version.',
+        description:
+          'Filesystem path to the file that becomes the new version.',
       },
       filename: {
         type: 'string',
@@ -191,7 +191,7 @@ export const REPUBLISH_TOOL_DEFINITION = {
         maximum: MAX_TTL_DAYS,
         description:
           'Optional. A lifetime in days, forwarded on the republish ' +
-          'request. The service fixes a relic\'s lifetime at its first ' +
+          "request. The service fixes a relic's lifetime at its first " +
           'publish, so treat this as reserved.',
       },
     },
@@ -541,7 +541,7 @@ const REFUSAL_GUIDANCE: Readonly<Record<string, string>> = {
   invalid_publish_token:
     'The publish token this machine holds for that relic was rejected. It ' +
     'is issued once, at first publish, and never changes, so a rejection ' +
-    'means the local record no longer matches the service\'s. The relic can ' +
+    "means the local record no longer matches the service's. The relic can " +
     'still be read at its existing link, but it cannot be republished from ' +
     'here.',
   relic_removed:

@@ -1,6 +1,10 @@
 import { describe, expect, test } from 'bun:test';
 import { safeDownloadName, sniffImageType } from '../src/main.ts';
-import { createSandboxHandler, isRenderMessage } from '../src/sandbox.ts';
+import {
+  createSandboxHandler,
+  isRenderJsxMessage,
+  isRenderMessage,
+} from '../src/sandbox.ts';
 import { isCacheable } from '../src/sw.ts';
 
 describe('safeDownloadName', () => {
@@ -57,21 +61,60 @@ describe('sniffImageType', () => {
 });
 
 describe('the sandbox handler', () => {
-  test('renders a well-formed message once', () => {
-    const written: string[] = [];
-    const handle = createSandboxHandler((html) => written.push(html));
+  const makeHandler = () => {
+    const html: string[] = [];
+    const jsx: string[] = [];
+    return {
+      html,
+      jsx,
+      handle: createSandboxHandler(
+        (markup) => html.push(markup),
+        (code) => jsx.push(code)
+      ),
+    };
+  };
+
+  test('renders a well-formed html message once', () => {
+    const { html, jsx, handle } = makeHandler();
 
     expect(handle({ type: 'relic:render', html: '<p>hi</p>' })).toBe(true);
-    expect(written).toEqual(['<p>hi</p>']);
+    expect(html).toEqual(['<p>hi</p>']);
+    expect(jsx).toEqual([]);
+  });
+
+  test('renders a well-formed jsx message once', () => {
+    const { html, jsx, handle } = makeHandler();
+
+    expect(
+      handle({ type: 'relic:render-jsx', code: 'export default App;' })
+    ).toBe(true);
+    expect(jsx).toEqual(['export default App;']);
+    expect(html).toEqual([]);
   });
 
   test('refuses a second render, so content cannot be swapped after trust', () => {
-    const written: string[] = [];
-    const handle = createSandboxHandler((html) => written.push(html));
+    const { html, jsx, handle } = makeHandler();
 
     handle({ type: 'relic:render', html: 'first' });
     expect(handle({ type: 'relic:render', html: 'second' })).toBe(false);
-    expect(written).toEqual(['first']);
+    expect(html).toEqual(['first']);
+  });
+
+  test('the one render covers both types: jsx cannot follow html', () => {
+    const { jsx, handle } = makeHandler();
+
+    handle({ type: 'relic:render', html: 'first' });
+    expect(handle({ type: 'relic:render-jsx', code: 'second' })).toBe(false);
+    expect(jsx).toEqual([]);
+  });
+
+  test('the one render covers both types: html cannot follow jsx', () => {
+    const { html, handle } = makeHandler();
+
+    handle({ type: 'relic:render-jsx', code: 'first' });
+    expect(handle({ type: 'relic:render', html: 'second' })).toBe(false);
+    expect(handle({ type: 'relic:render-jsx', code: 'third' })).toBe(false);
+    expect(html).toEqual([]);
   });
 
   const junk = [
@@ -83,28 +126,42 @@ describe('the sandbox handler', () => {
     { type: 'relic:render' },
     { type: 'other', html: 'x' },
     { type: 'relic:render', html: 123 },
+    { type: 'relic:render-jsx' },
+    { type: 'relic:render-jsx', code: 123 },
+    { type: 'relic:render-jsx', html: 'wrong field' },
   ];
 
   for (const data of junk) {
     test(`ignores ${JSON.stringify(data) ?? 'undefined'}`, () => {
-      const written: string[] = [];
-      const handle = createSandboxHandler((html) => written.push(html));
+      const { html, jsx, handle } = makeHandler();
       expect(handle(data)).toBe(false);
-      expect(written).toEqual([]);
+      expect(html).toEqual([]);
+      expect(jsx).toEqual([]);
     });
   }
 
   test('junk does not consume the single render', () => {
-    const written: string[] = [];
-    const handle = createSandboxHandler((html) => written.push(html));
+    const { html, handle } = makeHandler();
     handle({ type: 'nope' });
+    handle({ type: 'relic:render-jsx', code: 42 });
     expect(handle({ type: 'relic:render', html: 'real' })).toBe(true);
-    expect(written).toEqual(['real']);
+    expect(html).toEqual(['real']);
   });
 
   test('isRenderMessage is strict about both fields', () => {
     expect(isRenderMessage({ type: 'relic:render', html: '' })).toBe(true);
     expect(isRenderMessage({ type: 'relic:render' })).toBe(false);
+    expect(isRenderMessage({ type: 'relic:render-jsx', code: 'x' })).toBe(
+      false
+    );
+  });
+
+  test('isRenderJsxMessage is strict about both fields', () => {
+    expect(isRenderJsxMessage({ type: 'relic:render-jsx', code: '' })).toBe(
+      true
+    );
+    expect(isRenderJsxMessage({ type: 'relic:render-jsx' })).toBe(false);
+    expect(isRenderJsxMessage({ type: 'relic:render', html: 'x' })).toBe(false);
   });
 });
 

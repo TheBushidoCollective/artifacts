@@ -1,8 +1,4 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
-import { encodeKey, openRelic, parseFragment, parseRelicId } from '@relic/format';
-import { createApp } from '@relic/server/src/app.ts';
-import { MemoryStorage } from '@relic/server/src/storage.ts';
-import { MemoryStore } from '@relic/server/src/store.ts';
 import {
   mkdir,
   mkdtemp,
@@ -13,6 +9,15 @@ import {
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
+  encodeKey,
+  openRelic,
+  parseFragment,
+  parseRelicId,
+} from '@relic/format';
+import { createApp } from '@relic/server/src/app.ts';
+import { MemoryStorage } from '@relic/server/src/storage.ts';
+import { MemoryStore } from '@relic/server/src/store.ts';
+import {
   type FileReader,
   guessMimetype,
   type PublishDeps,
@@ -21,7 +26,6 @@ import {
   ServerRefusal,
 } from '../src/publish.ts';
 import { republish } from '../src/republish.ts';
-import { publishStateModes, publishStatePath } from '../src/state.ts';
 import {
   handleMessage,
   REPUBLISH_TOOL_DEFINITION,
@@ -29,6 +33,7 @@ import {
   TOOL_DEFINITION,
   TOOL_NAME,
 } from '../src/server.ts';
+import { publishStateModes, publishStatePath } from '../src/state.ts';
 
 const SERVICE = 'https://relic.example';
 
@@ -166,7 +171,6 @@ function writeFile(path: string, content: string | Uint8Array): void {
     typeof content === 'string' ? new TextEncoder().encode(content) : content
   );
 }
-
 
 /** The parsed publish state file, read from the path the client itself uses. */
 async function readStoredState(): Promise<{
@@ -1010,7 +1014,9 @@ describe('local publish state', () => {
     }
 
     expect(refusal?.code).toBe('local_state_write_failed');
-    expect(refusal?.message).toContain('cannot be republished from this machine');
+    expect(refusal?.message).toContain(
+      'cannot be republished from this machine'
+    );
     // The relic is live; handing its URL over in the failure is what keeps
     // a state problem from becoming a lost link.
     expect(String(refusal?.details['url'])).toContain('#r1');
@@ -1125,7 +1131,9 @@ describe('republish refusals', () => {
 
     // The publish result prints the URL, key in its fragment, by product
     // design and with its disclosure. The token has no such license.
-    expect(JSON.stringify(published?.result)).not.toContain(entry.publish_token);
+    expect(JSON.stringify(published?.result)).not.toContain(
+      entry.publish_token
+    );
 
     // The republish result prints neither secret, and no fragment either.
     writeFile('/work/notes.md', 'second');

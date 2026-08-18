@@ -28,7 +28,12 @@ export type ProblemCode =
   | 'invalid_relic_id'
   | 'relic_id_collision'
   | 'relic_not_yet_published'
-  | 'invalid_challenge_nonce';
+  | 'invalid_challenge_nonce'
+  // The one bearer credential the public surface ever checks. Republishing
+  // is authorized by possession of the publish token, not by an account,
+  // and a wrong or missing token is an authorization failure rather than a
+  // malformed request.
+  | 'invalid_publish_token';
 
 const STATUS: Readonly<Record<ProblemCode, number>> = {
   relic_not_found: 404,
@@ -45,6 +50,7 @@ const STATUS: Readonly<Record<ProblemCode, number>> = {
   relic_id_collision: 409,
   relic_not_yet_published: 409,
   invalid_challenge_nonce: 409,
+  invalid_publish_token: 403,
 };
 
 /** `title` SHOULD NOT change from occurrence to occurrence, per RFC 9457. */
@@ -63,6 +69,7 @@ const TITLE: Readonly<Record<ProblemCode, string>> = {
   relic_id_collision: 'Relic id already exists',
   relic_not_yet_published: 'Relic is still uploading',
   invalid_challenge_nonce: 'Challenge nonce is dead',
+  invalid_publish_token: 'Publish token is missing or wrong',
 };
 
 export interface ProblemExtensions {

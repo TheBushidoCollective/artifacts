@@ -14,8 +14,8 @@ import {
 const utf8 = (text: string): Uint8Array => new TextEncoder().encode(text);
 
 describe('the taxonomy', () => {
-  test('has exactly seven values', () => {
-    expect(RENDERER_CLASSES).toHaveLength(7);
+  test('has exactly eight values', () => {
+    expect(RENDERER_CLASSES).toHaveLength(8);
   });
 
   test('cuts on the wedge boundary, so the second clause is unambiguous', () => {
@@ -23,15 +23,17 @@ describe('the taxonomy', () => {
       'code',
       'html',
       'image',
+      'jsx',
       'markdown',
     ]);
     const downloadOnly = RENDERER_CLASSES.filter((c) => !isRenderable(c));
     expect([...downloadOnly].sort()).toEqual(['archive', 'binary', 'media']);
   });
 
-  test('rejects a value outside the seven', () => {
+  test('rejects a value outside the eight', () => {
     expect(isRendererClass('spreadsheet')).toBe(false);
     expect(isRendererClass('markdown')).toBe(true);
+    expect(isRendererClass('jsx')).toBe(true);
   });
 });
 
@@ -80,6 +82,8 @@ describe('the extension fallback', () => {
     ['README.markdown', 'markdown'],
     ['index.html', 'html'],
     ['page.HTM', 'html'],
+    ['App.jsx', 'jsx'],
+    ['Widget.tsx', 'jsx'],
     ['main.ts', 'code'],
     ['server.go', 'code'],
     ['config.yaml', 'code'],
@@ -156,10 +160,13 @@ describe('sniffContentClass ignores the filename entirely', () => {
 });
 
 describe('privilegeTier', () => {
-  test('only html executes', () => {
+  test('only html and jsx execute, and they share the top tier', () => {
     expect(privilegeTier('html')).toBe(3);
+    expect(privilegeTier('jsx')).toBe(3);
     for (const cls of RENDERER_CLASSES) {
-      if (cls !== 'html') expect(privilegeTier(cls)).toBeLessThan(3);
+      if (cls !== 'html' && cls !== 'jsx') {
+        expect(privilegeTier(cls)).toBeLessThan(3);
+      }
     }
   });
 
@@ -192,10 +199,34 @@ describe('declared versus sniffed disagreement', () => {
     }
   });
 
-  test('html never wins against anything', () => {
+  test('html never wins against anything outside the executing tier', () => {
     for (const cls of RENDERER_CLASSES) {
-      if (cls === 'html') continue;
+      if (cls === 'html' || cls === 'jsx') continue;
       expect(leastPrivileged('html', cls)).not.toBe('html');
     }
+  });
+
+  test('jsx against image resolves to image, never jsx', () => {
+    expect(leastPrivileged('jsx', 'image')).toBe('image');
+    expect(leastPrivileged('image', 'jsx')).toBe('image');
+  });
+
+  test('jsx against binary resolves to binary', () => {
+    expect(leastPrivileged('jsx', 'binary')).toBe('binary');
+  });
+
+  test('jsx never wins against anything outside the executing tier', () => {
+    for (const cls of RENDERER_CLASSES) {
+      if (cls === 'jsx' || cls === 'html') continue;
+      expect(leastPrivileged('jsx', cls)).not.toBe('jsx');
+    }
+  });
+
+  test('jsx and html share the top rank, so between them either may resolve', () => {
+    // Both execute in the frame, so the rule has no safer side to pick
+    // between them; what matters is that nothing less privileged ever loses
+    // to either, which the tests above hold.
+    expect(['html', 'jsx']).toContain(leastPrivileged('jsx', 'html'));
+    expect(['html', 'jsx']).toContain(leastPrivileged('html', 'jsx'));
   });
 });

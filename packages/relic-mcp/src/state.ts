@@ -125,10 +125,7 @@ export async function savePublishState(
   await run;
 }
 
-async function writeEntry(
-  relicId: string,
-  state: PublishState
-): Promise<void> {
+async function writeEntry(relicId: string, state: PublishState): Promise<void> {
   const path = publishStatePath();
   const dir = dirname(path);
 
@@ -186,4 +183,3 @@ export async function publishStateModes(): Promise<{
   ]);
   return { file: file.mode & 0o777, directory: directory.mode & 0o777 };
 }
-

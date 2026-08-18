@@ -381,10 +381,14 @@ export async function putContainer(
     body: container as unknown as BodyInit,
   });
   if (!upload.ok) {
-    throw new PublishError('upload_failed', `upload returned ${upload.status}`, {
-      relic_id: relicId,
-      status: upload.status,
-    });
+    throw new PublishError(
+      'upload_failed',
+      `upload returned ${upload.status}`,
+      {
+        relic_id: relicId,
+        status: upload.status,
+      }
+    );
   }
 }
 
@@ -401,7 +405,11 @@ export async function reportComplete(
   relicId: string
 ): Promise<void> {
   try {
-    await postJson(deps, `${deps.serviceOrigin}/api/relics/${relicId}/complete`, {});
+    await postJson(
+      deps,
+      `${deps.serviceOrigin}/api/relics/${relicId}/complete`,
+      {}
+    );
   } catch {
     // Deliberately swallowed. The object is uploaded and the link is valid.
   }

@@ -52,7 +52,7 @@ The server validates a client-supplied ID at mint against the alphabet, the fixe
 
 ### 1.4 Collisions
 
-**The server refuses to mint a grant for an ID that already exists. It never overwrites.** An overwrite silently replaces someone else's relic and its owner has no way to notice.
+**The server refuses to mint a grant for an ID that already exists. It never overwrites.** An overwrite silently replaces someone else's relic and its owner has no way to notice. Republish does not relax this, because a republish writes a fresh versioned path (3.12) under its own existence refusal rather than replacing the live object, so no path is ever written twice, at any version.
 
 Under full bearer-token entropy a collision is astronomical bad luck or a broken RNG, and both should fail loudly. The client draws a new ID and retries. Repeated collisions from one source are worth logging, because that's what a fixed seed looks like from outside. Refusal is an existence oracle in principle, harmless here only because the ID space isn't walkable.
 
@@ -83,7 +83,7 @@ The fork is fragment versus the container's plaintext header, where RFC 8188 off
 
 **It goes in the fragment.** The viewer then knows the format before fetching anything, so an unknown version is refused without minting a signed URL, without consuming a per-object download cap, and without a byte of egress. The marker is visible only to people who already hold the key, so it adds nothing to the operator's metadata set, whereas `keyid` is plaintext and operator-visible by construction. The cost is two characters of URL and telling every channel the link crosses which Relic format version was used, which says nothing about the content.
 
-One version number governs the whole envelope, fragment and container together. There's no second, independent container version. It versions the *format*, never the relic: republish-to-same-URL and relic versioning stay non-goals, and a new relic is still a new URL.
+One version number governs the whole envelope, fragment and container together. There's no second, independent container version. It versions the *format*, which is a different axis from the relic's own version: republish-to-same-URL now exists and a relic's version counts its publishes (3.12), while this marker counts revisions of the container. A relic at version 7 and a relic at version 1 can both carry format version 1, and bumping the format version changes nothing about relic versioning.
 
 ### 2.3 Key encoding and the terminal-character rule
 
@@ -143,9 +143,9 @@ Four placements were available for filename, mimetype, and size: the encrypted h
 | Version marker | Fragment |
 | Renderer class | Server-side record, only (3.6) |
 
-**The filename is content, not a category.** `Q3-layoffs-final.xlsx` is not a coarse class, so server-side placement exceeds the leakage the frame conceded and routes back to `frame` as drift. The declared mimetype fails the same test: `application/vnd.openxmlformats-officedocument.spreadsheetml.sheet` is finer than a seven-value taxonomy by a wide margin.
+**The filename is content, not a category.** `Q3-layoffs-final.xlsx` is not a coarse class, so server-side placement exceeds the leakage the frame conceded and routes back to `frame` as drift. The declared mimetype fails the same test: `application/vnd.openxmlformats-officedocument.spreadsheetml.sheet` is finer than an eight-value taxonomy by a wide margin.
 
-**This is the most likely quiet frame violation in the build**, because putting the filename in the grant response or in object metadata is the obvious way to make the taskbar show a name before decryption finishes. Name the check now: the publish request body and the object's custom metadata are both directly inspectable, and the assertion is that neither carries anything finer than the seven-value class and the client name.
+**This is the most likely quiet frame violation in the build**, because putting the filename in the grant response or in object metadata is the obvious way to make the taskbar show a name before decryption finishes. Name the check now: the publish request body and the object's custom metadata are both directly inspectable, and the assertion is that neither carries anything finer than the eight-value class and the client name.
 
 ### 3.3 Plaintext size is derived, never declared
 
@@ -182,7 +182,7 @@ The class has one job, telemetry, and the record the client declares to the serv
 
 **The class never routes the viewer, and publisher-attestation doesn't make it safe.** Attestation defeats *operator* forgery. It does nothing about a publisher lying, and the publisher is the threat: declaring `image` on an HTML payload wins inline rendering on the viewing origin, which is the origin holding the fragment secret, and that content reads `location.hash`. Fragment theft in one step. Routing comes from magic-byte sniffing after decryption, treated as a hint that can only reach a *less* privileged path. What the viewer does with that is `spec-viewer`'s.
 
-**Excluding the class doesn't disarm the declared-versus-sniffed disagreement rule, because that rule's declared input was never the class.** The rule is: when the declared type and the sniffed type disagree, route to the least privileged path either type would allow and tell the recipient you did so. It needs a declared type at render time and it has one, the declared mimetype and filename in the envelope header (3.1), decrypted out of record 0 before a byte of content renders. That copy is the better input on both axes. It sits inside the AEAD, so it's tamper-evident, where anything arriving alongside the signed URL is operator-mutable. And it's finer than a seven-value class, so a declared `.png` against HTML magic bytes is a sharper disagreement than `image` against HTML. The class isn't needed at the viewer and must not be sent there, because a publisher-asserted routing input on the viewing origin is the shape the paragraph above forbids, and a value present in the viewer is a value some later implementer routes on. `spec-viewer` implements the rule against the envelope header.
+**Excluding the class doesn't disarm the declared-versus-sniffed disagreement rule, because that rule's declared input was never the class.** The rule is: when the declared type and the sniffed type disagree, route to the least privileged path either type would allow and tell the recipient you did so. It needs a declared type at render time and it has one, the declared mimetype and filename in the envelope header (3.1), decrypted out of record 0 before a byte of content renders. That copy is the better input on both axes. It sits inside the AEAD, so it's tamper-evident, where anything arriving alongside the signed URL is operator-mutable. And it's finer than an eight-value class, so a declared `.png` against HTML magic bytes is a sharper disagreement than `image` against HTML. The class isn't needed at the viewer and must not be sent there, because a publisher-asserted routing input on the viewing origin is the shape the paragraph above forbids, and a value present in the viewer is a value some later implementer routes on. `spec-viewer` implements the rule against the envelope header.
 
 The residual: a publisher can declare a class that doesn't match their own content. That corrupts telemetry and nothing else, and a publisher misreporting the type of a file they wrote themselves is a metric-quality problem rather than a security one.
 
@@ -208,6 +208,8 @@ Ciphertext length reveals plaintext length to within a record. With the class al
 
 **Every relic gets a fresh key from the publishing machine's CSPRNG.** RFC 8188 §4.3 requires it structurally: the framing uses a fixed nonce progression, so "a new content-encryption key is needed for every application of the content coding."
 
+**The unit of freshness is the relic, not the version.** A republished version encrypts new plaintext under the same relic key, because the shared URL carries that key and a version that needed a new fragment would be a new relic. That is safe because the RFC's requirement is a fresh *content-encryption* key per application of the coding, not a fresh input key: every object draws a fresh random salt, HKDF derives a new content-encryption key from it, and the fixed nonce progression restarts per object against a key it has never been used with.
+
 Two consequences, and the second is a boundary:
 
 - The nonce budget is per file rather than global, so the counter-derived per-record nonce is safe with no birthday-bound concern.
@@ -223,6 +225,21 @@ Two consequences, and the second is a boundary:
 
 The failure that prevents is specific. Framing adds known overhead, so a plaintext file exactly at a plaintext-stated cap yields a ciphertext over a ciphertext-enforced cap, and it fails at upload for a reason the user can't see, can't reproduce, and can't fix. If the container pads to buckets, `encryptedSize` runs on the padded size or the same off-by-a-bucket failure comes straight back.
 
+### 3.12 The versioned object layout
+
+Republish-to-same-URL exists, so a relic id names a sequence of objects rather than one. The layout rule: **version 1's ciphertext stays at the existing path `{ciphertext_prefix}/{id}`, and versions 2 and up live at `{ciphertext_prefix}/{id}/v{n}`.**
+
+This is a layout rule rather than a migration because production already holds objects at the un-suffixed path and they must keep resolving. Re-pointing version 1 to a suffixed path would orphan every link already shared, which is the one failure this document exists to prevent: content is encrypted once under a key the URL carries forever, so the URL is the product and cannot be broken retroactively.
+
+Four consequences:
+
+- **Each version path gets its own existence refusal.** A grant or a republish targeting `{id}/v{n}` is refused if that path already holds an object, which is 1.4 applied per version. No path is ever overwritten, at any version, including by the relic's own publisher.
+- **Opening a relic serves the current version, and there is no way to request an older one.** The version number on the row picks the object, and no endpoint accepts a version selector. Serving history would multiply servable egress per id for nothing the recipient asked for.
+- **The per-object download cap counts opens per relic id across all versions**, so the egress ceiling per id keeps its meaning under republishing. What versions multiply is stored bytes, never servable mints.
+- **A delete removes every version's object**, v1 through current, and the tombstone refuses any future version (`spec-service-surface` section 4). Takedown is terminal across versions by construction: the refusal keys on the id, and no version number is an argument against it.
+
+The version counter is 1-based and counts publishes: the initial publish is version 1, each republish increments it. It lives on the server's relic row and never enters the URL, the fragment, or the container, so it adds nothing to what a recipient or the operator can read from a link, and it cannot collide with the format's own version marker (2.2), which counts container revisions on a different axis.
+
 ## 4. Routed to `shape`
 
 Six items, and only these six. Each names what `shape` picks and what becomes specifiable once it does. Constraints established above are cited here rather than restated.
@@ -237,5 +254,7 @@ Six items, and only these six. Each names what `shape` picks and what becomes sp
 ## 5. What the sibling units inherit
 
 - **`spec-service-surface`:** the ID is unguessable (1.2), so an expired relic **may** be distinguished from one that never existed. Reserved paths (1.5) beat IDs at the router, the table is append-only, and appends compare normalized forms. The length-leak disclosure (3.8) belongs in the published statement. Two rules about redirects. **The first splits on where the redirect lands, not on whether the origin changes.** Leaving the service, an explicit, possibly empty, fragment in `Location` is **mandatory**: a fragment-less `Location` inherits the original request's fragment, and RFC 9110 §17.11 scopes its remedy to ensuring that "redirects to other sites include a (possibly empty) fragment component in order to block that inheritance" ([RFC 9110](https://www.rfc-editor.org/rfc/rfc9110.html)). The case that matters is the service origin redirecting to the usercontent origin, which would hand the key to the one origin the two-domain split exists to keep it from, along with any CDN or load-balancer redirect the application doesn't author that lands off the service domain, which is the one nobody audits. Staying inside the service, the fragment is **deliberately omitted** so inheritance carries the key through, and that gets said out loud because a blanket MUST reads as forbidding it. That half covers legacy or renamed paths, trailing-slash normalization, apex to `www`, and HTTP to HTTPS; the last two change origin without leaving Relic, and an empty fragment on any of them is a deleted key and a recipient on the "missing its key" screen. **The test is the destination's trust boundary, not its origin tuple.** The preferred form is that no inside-the-service redirect exists on the relic path at all, with HSTS preload on both registrable domains moving the scheme upgrade into the user agent. Second, because 1.1 issues no canonicalizing redirect, a relic is served on every accepted spelling of its ID. Cache keys, per-object download-cap accounting, and log correlation all normalize before keying, or they fragment across spellings and the cap stops being a cap.
+- **`spec-service-surface`, on versions:** the mint serves the current version against the layout in 3.12, the per-object cap counts across versions, delete removes every version, and the republish endpoint's refusals (missing or wrong token, tombstone outranking a valid token) are that document's 1.7.
 - **`spec-viewer`:** the fragment is stripped via `history.replaceState` (2.5), which obliges a copy-link affordance and a dead-page state after reload. The viewing origin sends `Referrer-Policy: no-referrer` (section 0). The class never routes (3.6), and the declared-versus-sniffed disagreement rule runs against the envelope header's declared mimetype and filename (3.6). Unknown versions refuse in both places (3.7), and `idlen != 0` refuses after the fetch (3.4). A decrypt failure doesn't mean "wrong key" (3.5).
-- **`spec-publish-contract`:** the client generates the ID and the key independently before requesting a grant (1.3), the server validates and refuses on collision (1.4), and **nothing finer than the seven-value class and the client name crosses to the server** (3.2). The class does cross, it is telemetry item 1 in the frame, and the metric's second clause is computed from it.
+- **`spec-publish-contract`:** the client generates the ID and the key independently before requesting a grant (1.3), the server validates and refuses on collision (1.4), and **nothing finer than the eight-value class and the client name crosses to the server** (3.2). The class does cross, it is telemetry item 1 in the frame, and the metric's second clause is computed from it.
+- **`spec-publish-contract`, on republish:** the client re-encrypts under the persisted relic key with a fresh salt (3.10), the publish token crosses once in the first grant response while the server keeps only its hash, and the durable key-plus-token state that makes republish possible is that contract's to specify.

@@ -14,6 +14,7 @@
  *    key.
  */
 
+import { transpileJsx } from './jsx.ts';
 import { highlightCode, renderMarkdown } from './markdown.ts';
 import {
   type DeadView,
@@ -351,6 +352,76 @@ function renderSandboxedHtml(
   return wrapper;
 }
 
+/**
+ * A component renders on the usercontent origin and nowhere else, exactly
+ * like HTML, but what crosses the frame boundary is different: the source is
+ * transpiled here, on the service origin, into plain JavaScript first.
+ *
+ * The service origin must never execute relic content, and the transform
+ * never does: it is a text-to-text rewrite, and its output is posted as a
+ * string. The frame turns that string back into running code by importing it
+ * as a module, and supplies React from a CDN because an opaque origin cannot
+ * fetch same-origin assets.
+ */
+function renderSandboxedJsx(
+  view: ReadyView,
+  usercontentOrigin: string
+): HTMLElement {
+  const wrapper = document.createElement('div');
+  wrapper.className = 'doc doc-jsx';
+
+  let code: string;
+  try {
+    code = transpileJsx(decodeText(view.content), view.filename);
+  } catch {
+    // Routing already established the bytes parse, so landing here means a
+    // path the route decision could not see. Source view is the honest
+    // fallback: it shows exactly what was published without running it.
+    wrapper.appendChild(
+      notice(
+        'This file is named like a React component, but its contents do not ' +
+          'compile as one. It is shown as source.'
+      )
+    );
+    wrapper.appendChild(renderCodeView(view));
+    return wrapper;
+  }
+
+  const frame = document.createElement('iframe');
+  frame.className = 'usercontent-frame';
+  frame.setAttribute('sandbox', 'allow-scripts allow-popups allow-forms');
+  frame.setAttribute('referrerpolicy', 'no-referrer');
+  frame.src = `${usercontentOrigin}/sandbox.html`;
+  frame.title = view.filename;
+
+  // An opaque-origin frame has no origin to target, so '*' is the only option
+  // the platform offers, for the same reason as the HTML route: the payload
+  // is the content that frame is about to display anyway, and the key is
+  // never in it.
+  const post = (): void => {
+    frame.contentWindow?.postMessage({ type: 'relic:render-jsx', code }, '*');
+  };
+
+  // Both paths, as with HTML: `load` can fire before the frame's script
+  // attaches its listener, and the ready message can arrive before `load`.
+  // The frame renders at most once, so posting twice is harmless and losing
+  // the message is not.
+  const onReady = (event: MessageEvent): void => {
+    if (
+      event.source === frame.contentWindow &&
+      (event.data as { type?: unknown } | null)?.type === 'relic:sandbox-ready'
+    ) {
+      post();
+      window.removeEventListener('message', onReady);
+    }
+  };
+  window.addEventListener('message', onReady);
+  frame.addEventListener('load', post);
+
+  wrapper.appendChild(frame);
+  return wrapper;
+}
+
 function renderDownloadView(view: ReadyView): HTMLElement {
   const wrapper = document.createElement('div');
   wrapper.className = 'doc doc-download';
@@ -396,6 +467,21 @@ function renderReady(
     main.appendChild(notice(view.downgradeNotice));
   }
 
+  // Said before the recipient has reason to trust what is in the frame, and
+  // not buried: both frame routes run the author's code, that code can
+  // contact the network, and the author can learn the recipient's IP
+  // address, user agent, and open time from it. Leaving this unstated would
+  // turn the published policy into an overclaim.
+  if (view.route === 'sandboxed-html' || view.route === 'sandboxed-jsx') {
+    main.appendChild(
+      notice(
+        'This relic runs its author\u2019s code in this page. That code can ' +
+          'contact the network, and its author can learn your IP address, ' +
+          'your browser, and when you opened it.'
+      )
+    );
+  }
+
   switch (view.route) {
     case 'markdown':
       main.appendChild(renderMarkdownView(view));
@@ -408,6 +494,9 @@ function renderReady(
       break;
     case 'sandboxed-html':
       main.appendChild(renderSandboxedHtml(view, usercontentOrigin));
+      break;
+    case 'sandboxed-jsx':
+      main.appendChild(renderSandboxedJsx(view, usercontentOrigin));
       break;
     default:
       main.appendChild(renderDownloadView(view));

@@ -2,7 +2,7 @@
 
 What the publishing client exposes to an agent, what it sends the app server, what it does when any leg of the publish fails, and what it tells the publisher about the key it's about to put in a transcript.
 
-`docs/frame.md` and `docs/preconditions.md` are locked inputs. `docs/spec/format.md` and `docs/spec/service.md` are siblings whose decisions are inputs here, cited where they bind. Nothing in this document reopens any of them. `service.md` section 1.6 was written for this unit and is consumed verbatim, never restated with different values. Items belonging to `shape` are routed in section 6, and only those five.
+`docs/frame.md` and `docs/preconditions.md` are locked inputs. `docs/spec/format.md` and `docs/spec/service.md` are siblings whose decisions are inputs here, cited where they bind. Nothing in this document reopens any of them. `service.md` section 1.6 was written for this unit and is consumed verbatim, never restated with different values, and section 1.7's republish refusals are consumed the same way. Items belonging to `shape` are routed in section 6, and only those five.
 
 ## 0. The protocol revision, pinned
 
@@ -21,6 +21,8 @@ The pin isn't housekeeping. Tool-result semantics are revision-dependent, so a d
 The spec allows a wide field: names run "between 1 and 128 characters in length (inclusive)", are case-sensitive, and are limited to ASCII letters, digits, underscore, hyphen, and dot ([MCP tools](https://modelcontextprotocol.io/specification/2026-07-28/server/tools)). Uniqueness is only guaranteed inside one server. The spec then names the hazard directly: clients that aggregate tools from multiple servers may hit collisions and should implement "a disambiguation strategy such as prefixing tool names with a server identifier", and the server's own `name` "is not guaranteed to be unique across servers" so it can't be leaned on for that.
 
 A bare `publish` collides with incumbent publishing MCP servers, and the consequence is a security outcome produced by a naming decision. The model asks for `publish`, the client disambiguates to whichever server it prefers, and the file lands on a service with different encryption or none. The publisher sees a URL come back and has no way to tell which service produced it. Prefixing with the product name makes that collision essentially impossible, and it's the spec's own remedy taken literally rather than a house convention: a prefix is the leading segment, so "prefixing tool names with a server identifier" puts the identifier first, which is what `relic_publish` spells. Putting the product first also groups every Relic tool together in an aggregated list, which is what a human scanning `/mcp` actually reads.
+
+`relic_republish` follows the same naming rule for the same reason: an aggregated client asked for `republish` disambiguates to whichever server it prefers, and every argument this section makes against a bare `publish` is the same argument against a bare `republish`.
 
 ### 1.2 The input schema
 
@@ -50,7 +52,7 @@ A bare `publish` collides with incumbent publishing MCP servers, and the consequ
 
 ### 1.3 The result shape
 
-Success returns `structuredContent` with seven members, all required:
+Success returns `structuredContent` with eight members, all required:
 
 - **`url`** the full URL including the fragment. Without the fragment the model can't produce a usable link, which is the product.
 - **`relic_id`** the normalized canonical ID, separately. Every operator-facing workflow takes the ID with the fragment already stripped: abuse reports, takedown requests, support tickets. Making a caller slice it out of a URL means somebody eventually slices wrong.
@@ -59,8 +61,11 @@ Success returns `structuredContent` with seven members, all required:
 - **`filename`** the string written into the envelope header, echoed because the caller may have overridden it.
 - **`report_url`** the stable `/abuse` URL.
 - **`disclosure_url`** the published statement `service.md` section 5 specifies.
+- **`version`** the relic's version, `1` on a first publish. The row counts publishes (`format.md` 3.12); a republish result carries the new number. It counts relic versions, never format revisions, which live in the fragment marker on a different axis (`format.md` 2.2).
 
 **No expiry for the grant, no signed URL, no object length, and no key as a separate field.** The grant's clock is internal to section 3, and a key in its own member is a second copy of something already in `url`.
+
+**The publish token is returned by the grant exactly once and never by this tool.** The grant response carries `publish_token`, 32 random bytes in base64url; the server stores only its SHA-256 and cannot produce it again. The client persists it beside the relic's key as durable secret state on the publishing machine, a 0600 file under the user config dir, because republishing needs both and nothing else can reissue either. It never appears in any tool result, so unlike the key inside `url` it never enters the model's context or the transcript: the transcript already costs the key, and stacking a write credential beside it would spend exposure the product does not require. A lost token is unrecoverable by design, by the operator as much as the publisher.
 
 **The tool returns no `resource_link` content block and no embedded `resource`.** A resource link is "a URI that can be subscribed to or fetched by the client" ([MCP tools](https://modelcontextprotocol.io/specification/2026-07-28/server/tools)), and a client that helpfully fetches it is doing something nobody in this flow asked for. The precise hazard is narrower than it first looks and it still lands on the same rule: under `service.md` section 2, fetching `/{id}` returns a static shell and mints nothing, so a plain fetch doesn't touch the open counter. What isn't safe is a client that renders the link in a real browser engine, or one that follows the shell's own mint request, either of which produces a phantom open against the frame's primary metric. The tool can't tell those clients apart from the safe ones, and a `resource_link` carrying the fragment also hands the key to whatever the client does with links it decides to preview. The URL travels as a string field and as text, and nowhere else.
 
@@ -72,7 +77,7 @@ That gives `disclosure_url` and `report_url` two sources, so they get a reconcil
 
 These interact, so they're one decision.
 
-**`outputSchema` is declared, strict, with all seven members of 1.3 required. `structuredContent` appears on success only. Every failure returns `isError: true` with no `structuredContent` at all.**
+**`outputSchema` is declared, strict, with all eight members of 1.3 required. `structuredContent` appears on success only. Every failure returns `isError: true` with no `structuredContent` at all.**
 
 The spec's requirement is conditional, and reading it precisely is what makes this shape legal rather than clever: where an output schema is provided, servers must "provide structured results that conform to this schema" ([MCP tools](https://modelcontextprotocol.io/specification/2026-07-28/server/tools)). It binds the structured results a server provides. It doesn't oblige a server to provide structured results on every call. An error result that carries no structured content provides none, conforms to nothing, and violates nothing.
 
@@ -108,11 +113,11 @@ One property is load-bearing and easy to get backwards: **progress defeats the i
 
 **When no progress token is supplied, the server can't keep the call warm and doesn't try.** The orphan risk returns in full, and the mitigation is section 4.7: the client generated the ID and the key before anything left the machine, so the URL exists in the tool's own hands regardless of what happens to the response.
 
-### 1.6 One tool, and why there's no delete tool
+### 1.6 Two tools, and why there's still no delete tool
 
-**`relic_publish` is the only tool.** Every additional name is another entry in an aggregated namespace and another chance for a model to pick the wrong server (1.1), and the product has nothing else to offer: no accounts, no relic list, no dashboard, no republish.
+**`relic_publish` and `relic_republish` are the whole surface.** The second name arrived with the reversal recorded in the frame's non-goals: republish-to-same-URL now exists, authorized by a bearer publish token rather than identity. The naming rule of 1.1 applies unchanged, product prefix first, so an aggregated client that disambiguates `republish` lands on Relic's rather than on whichever other server answers to the bare word.
 
-**A publisher cannot delete their own relic in the first release, and that's what forecloses a delete tool.** The non-goals forbid a dashboard and a relic list rather than a per-relic delete, so this needed deciding rather than assuming. With no accounts, a delete has to be authorized by something the publisher holds, and there are exactly two candidates. Authorizing on anything derivable from the URL means every recipient can delete the relic, which hands a link-holder a destructive capability the publisher never granted and reproduces the burn-after-reading failure the frame ruled out for the first release. Authorizing on a separately stored token means the client keeps durable per-relic state on disk, which is a relic list under another name and which no locked surface provides a home for.
+**A publisher still cannot delete their own relic, and the reasoning had to be restated rather than left where it was, because the reversal broke half of it.** With no accounts, a publisher-side delete has to be authorized by something the publisher holds, and there were exactly two candidates. Authorizing on anything derivable from the URL means every recipient can delete the relic, which hands a link-holder a destructive capability the publisher never granted and reproduces the burn-after-reading failure the frame ruled out for the first release. That candidate is dead on arrival and nothing reversed it. The other was a separately stored token, and the old objection was that keeping durable per-relic state on disk is a relic list under another name with no locked surface to house it. That objection is spent: republish pays exactly that cost, the key and token persisted on the publishing machine, so the state exists and the token is in hand. What keeps self-delete out of this change is not architecture but the abuse posture: deletion is the takedown primitive, it is operator-audited end to end (section 4 of `service.md`), and a publisher-side path through the same machinery would sit beside the audit trail rather than inside it. The token makes a self-delete tool specifiable where it used to be foreclosed; if a later station adds one, that station owns the audit question, and this paragraph is what it reopens.
 
 So deletion stays operator-only through `/abuse` (`service.md` section 4), which already works on the ID alone and needs no key. A publisher who wants their own relic gone reports it with its ID. The mandatory TTL used to bound the exposure in the meantime, which was why this was deferrable rather than a hole; that bound is gone, and what bounds exposure now is the per-object download cap and operator delete. The gap that leaves is named rather than papered over: a publisher who wants their own never-expiring relic gone waits on an operator. If a later station adds publisher self-delete, the delete tool becomes specifiable and this section is what it reopens.
 
@@ -133,6 +138,8 @@ Every one of these maps onto a status and code `service.md` already fixed. **Thi
 | Grant presenting a challenge nonce that expired or was never issued | `409` | `invalid_challenge_nonce` | none |
 | Mint on an ID whose grant is live and whose object hasn't landed | `409` | `relic_not_yet_published` | `retry_after_seconds`, `relic_id` |
 | Grant expired with no object ever landing | `410` | `relic_never_published` | `relic_id` |
+| Republish presenting a missing or wrong `publish_token` | `403` | `invalid_publish_token` | `relic_id` |
+| Republish on a tombstoned id, whatever token is presented | `410` | `relic_removed` | `report_url`, `relic_id` |
 
 **`409 relic_id_collision` is the code the client keys redraw-and-retry on.** `format.md` 1.4 obliges the client to draw a new ID and retry, and `service.md` 1.6 is where that retry hangs. On this code and no other, the client draws three fresh values from the platform CSPRNG and sends a new grant request: a fresh relic ID, a fresh relic key drawn independently of it, and **a fresh idempotency key**. The third is not optional and 4.3 is where the trace lives; reusing the key turns the redraw into a replay of the collision it's trying to escape. It never surfaces a collision to the model as a failure on the first occurrence, because there's nothing for a model to correct. It does surface one after the retry cap (4.6), because repeated collisions under full bearer-token entropy mean a broken RNG and should fail loudly instead of spinning.
 
@@ -215,14 +222,14 @@ The challenge is subject to the publish rate limiter and the kill switch, so its
 - **`relic_id`**, generated client-side before the grant request per `format.md` 1.3, drawn from the platform CSPRNG independently of the key.
 - **`declared_size_bytes` with `size_basis` of `plaintext`.** The client always declares the plaintext number. It's the number it knows exactly, having just stat'd the file, and it's the number `format.md` 3.11 fixes as the one a user can check with `ls`. The server converts to the enforced side when it needs to. Sending the ciphertext number instead would make the grant-time refusal compare against a figure the publisher can't reproduce.
 - **`ttl_days`, optional.** The publisher's requested lifetime in days, 1 to 3650, passed through unmodified. Absent means the relic never expires, and absent is what the tool sends unless the caller set one. It describes the request rather than the content, which is the bar `format.md` 3.2 sets for anything crossing, and a value outside the range is refused by the server with `invalid_publish_metadata` rather than silently corrected.
-- **`renderer_class`**, one of the frame's seven values, derived by the binary per 1.2.
+- **`renderer_class`**, one of the frame's eight values, derived by the binary per 1.2. A republish declares it again with the new ciphertext, because the class describes content and the content moved.
 - **`client_name`** and **`client_version`**, as two members.
 - **`idempotency_key`**, per 4.3.
 - **The challenge nonce and solution**, per 3.1.
 
 **Nothing else crosses.** `format.md` 3.2 bars anything content-descriptive from the publish request, and names this as the most likely quiet frame violation in the build: the filename and the declared mimetype live in the encrypted envelope header and nowhere else, and putting either in the grant request is the obvious way to make a taskbar show a name early. The assertion is directly checkable, because the publish request body is inspectable in full.
 
-**`client_version` is a judgment call and gets stated as one.** `format.md` section 5 says nothing finer than the seven-value class and the client name crosses to the server, and a version string is a third thing.
+**`client_version` is a judgment call and gets stated as one.** `format.md` section 5 says nothing finer than the eight-value class and the client name crosses to the server, and a version string is a third thing.
 
 That sentence is a content-leakage bar rather than a two-item whitelist, and a sibling settles it without any argument from this document. `service.md` 1.5 fixes `declared_size_bytes` as a named extension member on `size_over_cap`, and the server can only echo that number because the client declared it in the grant request. So a decided sibling already has a third value crossing, and it crosses because it describes the request rather than the content. `format.md` 3.2 names the test the bar was written for, that neither the publish request body nor the object's custom metadata carries anything content-descriptive, and a version describes the client. It clears the bar on the bar's own test.
 
@@ -254,7 +261,7 @@ The trade behind it gets named too, because `shape` is otherwise choosing blind.
 
 **The grant response carries no key, no fragment, and no assembled URL.** It carries the echoed `relic_id`, the upload target and its constraints, `grant_expires_at`, and `relic_expires_at`, which is a timestamp or `null` for a relic that never expires. The client assembles `https://<relic-domain>/{id}#{secret}` locally from the domain, the ID, and the key that never left the process.
 
-Named as a standing guard, because the pressure here is a convenience feature rather than an attack: **no endpoint may ever accept a key in order to build or shorten a share URL.** The frame concedes that the decrypting JavaScript is served by the party the claim is made against, so that half of zero-knowledge rests on operator intent. The server never receiving the key is the half that's structural, and a share-URL builder trades the structural half for a nicety. It's drift routing back to `frame`, never a `shape` decision.
+Named as a standing guard, because the pressure here is a convenience feature rather than an attack: **no endpoint may ever accept a key in order to build or shorten a share URL.** The publish token is not an exception and not a near-miss: it crosses once, in the first grant response, it authorizes writes to one relic id, it decrypts nothing, and the server verifies it as a hash. The guard is about the key, and the token is not the key. The frame concedes that the decrypting JavaScript is served by the party the claim is made against, so that half of zero-knowledge rests on operator intent. The server never receiving the key is the half that's structural, and a share-URL builder trades the structural half for a nicety. It's drift routing back to `frame`, never a `shape` decision.
 
 ### 3.6 The grant carries a signed size constraint
 
@@ -278,7 +285,7 @@ So the conflict is real and no closer reading resolves it: the construction with
 
 **Every grant carries the precondition that the object does not already exist.** In Cloud Storage terms a generation-match precondition of zero means "the request only proceeds if no object with the specified name exists in the bucket or if there are only noncurrent versions of the object in the bucket", and "If there is a live version with the specified name, the request fails with a status code of 412 Precondition Failed" ([request preconditions](https://docs.cloud.google.com/storage/docs/request-preconditions)). It's the right instrument for exactly this: "The 0 value should only be used when writing object data: no other requests can succeed with a 0 precondition."
 
-Without it, anyone holding the grant can replace the ciphertext under a URL that's already been shared, and the recipient who clicks a link they were sent gets whatever was substituted, decrypting cleanly under the same key if the substituted object was encrypted with it. **The locked republish non-goal supplies this for free.** A new relic is a new URL, so no legitimate flow ever overwrites, so the precondition costs nothing and closes the substitution completely.
+Without it, anyone holding the grant can replace the ciphertext under a URL that's already been shared, and the recipient who clicks a link they were sent gets whatever was substituted, decrypting cleanly under the same key if the substituted object was encrypted with it. **The republish reversal is what makes this precondition load-bearing rather than free.** The old non-goal supplied it for free, because no legitimate flow ever overwrote; now one does, and it writes a fresh versioned path (`format.md` 3.12) under this same precondition rather than replacing the live object, so a version, once landed, is immutable and a recipient mid-fetch is never served different bytes under the transfer. Substitution under a shared URL now requires the app server to mint a version grant, that mint requires the publish token, and the server holds the token only as a hash. The storage-layer precondition and the token are two locks on the same door, and the reversal is what made the second one necessary.
 
 It also bounds a residual `format.md` 3.5 leaves open. The container's header sits outside every AEAD tag, so anyone who can write the object can mis-frame it or change the derived key, which is denial of service rather than forgery. The size of that residual is entirely "who can write the object", and this precondition holds it at one successful write.
 
@@ -287,6 +294,18 @@ It also bounds a residual `format.md` 3.5 leaves open. The container's header si
 **The per-IP publish quota is charged when the grant is issued, never at upload completion.** Charging at completion lets an attacker mint unlimited grants for free, and the app server can't observe completion anyway without a separate data source, since it sees the mint and whether an object materialized, never the upload itself.
 
 The cost is that an honest publisher whose upload fails still spent quota, and a naive retry that re-mints spends again. That's precisely what the idempotency key fixes: a retried grant under the same key returns the original grant and charges once (4.3). The two decisions only work together, and charging at mint without idempotency would make a flaky network into a self-inflicted quota ban.
+
+### 3.9 The republish hop
+
+**Republish is a grant hop with the token standing where the challenge stood.** The endpoint is `POST /api/relics/{id}/republish`, the body is `{ publish_token, renderer_class, declared_size_bytes, declared_ciphertext_bytes }`, plus `ttl_days` when the caller set one. That last member is carried, not read: a relic's lifetime is fixed at its first grant, and the body says what the publisher asked for rather than letting a version silently re-decide it. A publisher who wants a different lifetime publishes a new relic. The response mirrors the grant: a signed upload target and its constraints. There is no challenge round trip, because the challenge exists to price an anonymous grant and this one is not anonymous; the bearer token is the authorization, and the per-IP publish quota applies at the mint of the version grant exactly as at a first publish.
+
+**The result mirrors `relic_publish` with one omission: no `url`.** The URL is unchanged by a new version, and reprinting it would reprint the key into a transcript that needed no second copy. The text says the existing link now serves the new content, and `version` carries the number just landed.
+
+**The server derives the version; the client never names one.** The row's version increments, the object lands at `{ciphertext_prefix}/{id}/v{n}` under that path's own existence refusal (`format.md` 3.12, `format.md` 1.4), and the relic id comes from the path rather than being redrawn. A collision redraw is a publish concept with no republish analogue, because the id is not being claimed here, only re-used.
+
+**The client re-encrypts under the persisted key, with a fresh salt.** The shared URL carries the relic's key, so the new version has to decrypt under it, and `format.md` 3.10 is why that is safe: the fresh salt derives a fresh content-encryption key, and the fixed nonce progression restarts against a key it has never been used with. The upload leg, the retry rules (4.4, 4.6), and the crash rules (4.8) are the publish flow's and are reused unchanged; a version is an object with a path, nothing more.
+
+**No local state, no republish, and the refusal is local.** Republishing an id this machine holds no key and token for is refused client-side, in this document's Group B shape, with a message that says the relic was published from another machine. That is a fact rather than a policy: without the key, a new version could not decrypt under the URL everyone was sent, and without the token the server refuses it anyway (2.1). The server refusals carry distinct copy of their own: `invalid_publish_token` says the credential was wrong or lost, `relic_removed` says the relic was taken down, and the takedown copy states that it is permanent across every future version, because a publisher told "try again later" about a terminal state will try again later.
 
 ## 4. Completion, retry, and failure
 

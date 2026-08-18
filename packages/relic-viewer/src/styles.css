@@ -426,7 +426,8 @@ body {
   background: var(--surface);
 }
 
-.doc-html {
+.doc-html,
+.doc-jsx {
   max-width: none;
 }
 
@@ -444,15 +445,17 @@ body {
  * document that already decided how it wants to sit, and frames somebody's
  * design in a border they did not ask for.
  *
- * So the HTML route gets the whole surface. Markdown and code keep the gutter,
- * because that markup is generated here from a plain file and has no opinion
- * of its own to respect.
+ * So the HTML and component routes get the whole surface. Markdown and code
+ * keep the gutter, because that markup is generated here from a plain file
+ * and has no opinion of its own to respect.
  */
-.stage-sandboxed-html {
+.stage-sandboxed-html,
+.stage-sandboxed-jsx {
   padding: 0;
 }
 
-.stage-sandboxed-html .usercontent-frame {
+.stage-sandboxed-html .usercontent-frame,
+.stage-sandboxed-jsx .usercontent-frame {
   /* Block, or the iframe sits on the text baseline and leaves a strip of page
      background under it that reads as one more stray margin. */
   display: block;
@@ -460,9 +463,11 @@ body {
   border: 0;
 }
 
-/* Routing rules mean a downgrade notice cannot currently reach this route, but
-   if one ever does it should not be jammed against the window edge. */
-.stage-sandboxed-html .notice {
+/* The network notice sits above every frame, and a downgrade notice would
+   too if routing ever changed; either way it must not be jammed against the
+   window edge. */
+.stage-sandboxed-html .notice,
+.stage-sandboxed-jsx .notice {
   margin: 1rem 1.25rem;
 }
 

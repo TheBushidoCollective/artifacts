@@ -28,10 +28,10 @@ export function transpileJsx(source: string, filename: string): string {
       ? ['jsx', 'typescript']
       : ['jsx'],
     // Classic runtime: the output references the `React` binding directly,
-    // and the frame supplies that binding by prepending its own CDN import
-    // of the same React instance it mounts with. The automatic runtime would
-    // emit a bare `react/jsx-runtime` specifier, which nothing inside an
-    // opaque-origin frame can resolve.
+    // and the frame supplies that binding as `globalThis.React`, set to the
+    // one React instance bundled into the sandbox page. The automatic
+    // runtime would emit a bare `react/jsx-runtime` specifier, which nothing
+    // inside an opaque-origin frame can resolve or fetch.
     jsxRuntime: 'classic',
     // Dev-mode output decorates every element with `__source`/`__self` for
     // stack traces. This is somebody else's component, not a debugging

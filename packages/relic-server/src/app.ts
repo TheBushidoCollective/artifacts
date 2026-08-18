@@ -131,85 +131,135 @@ export function createApp(options: AppOptions = {}): RelicApp {
     if (head === 'api')
       return apiRoute(segments.slice(1), request, url, ip, now);
 
-    if (head === 'assets') return serveAsset(segments.slice(1).join('/'));
+    if (head === 'assets')
+      return serveAsset(segments.slice(1).join('/'), request);
     if (head === 'manifest.webmanifest')
-      return serveAsset('manifest.webmanifest');
-    if (head === 'favicon.ico') return serveAsset('icon.svg');
-    if (head === 'sw.js') return serveAsset('sw.js');
+      return serveAsset('manifest.webmanifest', request);
+    if (head === 'favicon.ico') return serveAsset('icon.svg', request);
+    if (head === 'sw.js') return serveAsset('sw.js', request);
     // Served on the usercontent origin in production. One binary serves both
     // here, and the deployment routes by Host.
-    if (head === 'sandbox.html') return serveSandbox();
+    if (head === 'sandbox.html') return serveSandbox(request);
 
     return new Response('Not found', { status: 404 });
   }
 
-  async function serveAsset(name: string): Promise<Response> {
+  /**
+   * Gzips a text response when the client offered it.
+   *
+   * Everything this server sends with `no-store` now pays its full size on
+   * every view, and the frame's page carries its whole dependency bundle
+   * inline, because an opaque origin cannot fetch even its own assets. That
+   * put the page near 190 KB, where the wire cost stops being a rounding
+   * error. Nothing upstream compresses: Cloud Run does not, and the live
+   * response carried no `content-encoding` before this.
+   *
+   * Safe here because no response this touches mixes a secret with
+   * attacker-supplied input, which is the condition compression side
+   * channels need. These are static build artifacts. Ciphertext is never
+   * served by this process; it goes straight from the bucket to the browser.
+   */
+  function textResponse(
+    body: Uint8Array | string,
+    request: Request,
+    headers: Record<string, string>
+  ): Response {
+    const offered = request.headers.get('accept-encoding') ?? '';
+    if (!offered.toLowerCase().includes('gzip')) {
+      return new Response(body as unknown as BodyInit, { headers });
+    }
+
+    // Assets are read from disk or encoded from a string literal, so the view
+    // is never backed by a SharedArrayBuffer. The cast states that, since the
+    // ambient Uint8Array type admits one and gzipSync does not.
+    const bytes =
+      typeof body === 'string' ? body : (body as Uint8Array<ArrayBuffer>);
+
+    return new Response(Bun.gzipSync(bytes) as unknown as BodyInit, {
+      headers: {
+        ...headers,
+        'content-encoding': 'gzip',
+        // Any cache keying this response must key the encoding with it.
+        vary: 'accept-encoding',
+      },
+    });
+  }
+
+  async function serveAsset(name: string, request: Request): Promise<Response> {
     if (name === 'register-sw.js') {
-      return new Response(REGISTER_SW_JS, {
-        headers: {
-          'content-type': 'text/javascript; charset=utf-8',
-          'cache-control': 'no-store',
-        },
+      return textResponse(REGISTER_SW_JS, request, {
+        'content-type': 'text/javascript; charset=utf-8',
+        'cache-control': 'no-store',
       });
     }
 
     const asset = await assets.get(name);
     if (asset === undefined) return new Response('Not found', { status: 404 });
 
-    return new Response(asset.body as unknown as BodyInit, {
-      headers: {
-        'content-type': asset.contentType,
-        // The shell and its assets are all no-store. The build emits stable
-        // filenames, so an HTTP cache would serve the previous deploy's code
-        // against the new server for its whole TTL; measured in the field as
-        // a shipped fix that did not run for up to an hour. Repeat visits are
-        // cached by the service worker, which revalidates per navigation.
-        'cache-control': 'no-store',
-        'referrer-policy': 'no-referrer',
-        'x-content-type-options': 'nosniff',
-      },
+    return textResponse(asset.body, request, {
+      'content-type': asset.contentType,
+      // The shell and its assets are all no-store. The build emits stable
+      // filenames, so an HTTP cache would serve the previous deploy's code
+      // against the new server for its whole TTL; measured in the field as
+      // a shipped fix that did not run for up to an hour. Repeat visits are
+      // cached by the service worker, which revalidates per navigation.
+      'cache-control': 'no-store',
+      'referrer-policy': 'no-referrer',
+      'x-content-type-options': 'nosniff',
     });
   }
 
   /**
    * The usercontent origin's page.
    *
-   * `frame-ancestors` is the half of the boundary this response owns: only the
-   * service origin may frame it, so the page cannot be embedded by a third
-   * party to borrow the rendering path.
+   * `frame-ancestors` is the half of the boundary this response owns: only
+   * the service origin may frame it, so the page cannot be embedded by a
+   * third party to borrow the rendering path.
    *
-   * Rendered content in this frame can reach the network, and that is
-   * deliberate. The JSX route depends on it: the frame, an opaque origin,
-   * imports React and ReactDOM from a CDN because it cannot fetch
-   * same-origin assets, and a component may fetch whatever its author wrote.
-   * The cost lands on the recipient and is stated to them on the page that
-   * frames this one: whoever authored the relic can learn their IP address,
-   * user agent, and when they opened it. `frame-ancestors` and `base-uri`
-   * stay exactly as they are, because embedding and base hijacking are the
-   * boundary; `script-src` is written out only so the deliberate posture is
-   * visible and a future tightening cannot silently break rendering.
+   * The other half is that the frame cannot reach the network at all. The
+   * iframe sandbox omits `allow-same-origin`, so the document runs in an
+   * opaque origin where `'self'` matches nothing, which makes "only our
+   * host" mean "only what is inlined in this response": the frame's own
+   * scripts and the bundle it carries. Every fetch directive is closed.
+   * `blob:` remains in `script-src` for one reason: the JSX mount imports a
+   * module built from posted code, and that import is local.
+   *
+   * Measured against a collector server under this exact policy: `fetch`,
+   * `<img>`, `sendBeacon`, `WebSocket`, and `EventSource` produced zero
+   * arrivals. `sendBeacon` returned `true` while delivering nothing, so its
+   * return value is not evidence of delivery. A form with `target=_blank`
+   * submitted and never arrived. `window.open` was blocked in the probe,
+   * but no user gesture preceded it, so CSP is not what stopped it; popups
+   * are closed by the sandbox attribute in the viewer, which is where that
+   * guarantee has to live.
    */
-  async function serveSandbox(): Promise<Response> {
+  async function serveSandbox(request: Request): Promise<Response> {
     const asset = await assets.get('sandbox.html');
     if (asset === undefined) return new Response('Not found', { status: 404 });
 
-    return new Response(asset.body as unknown as BodyInit, {
-      headers: {
-        'content-type': 'text/html; charset=utf-8',
-        'referrer-policy': 'no-referrer',
-        'x-robots-tag': 'noindex',
-        'cache-control': 'no-store',
-        'content-security-policy': [
-          `frame-ancestors ${new URL(config.serviceOrigin).origin}`,
-          "base-uri 'none'",
-          // 'unsafe-inline' is the document.write path both render routes
-          // use; blob: is the module the JSX mount builds from posted code;
-          // https: is the CDN React comes from and any module a component
-          // imports. Every other fetch directive is deliberately absent:
-          // pages and components keep the network reach HTML has always had.
-          "script-src 'unsafe-inline' blob: https:",
-        ].join('; '),
-      },
+    return textResponse(asset.body, request, {
+      'content-type': 'text/html; charset=utf-8',
+      'referrer-policy': 'no-referrer',
+      'x-robots-tag': 'noindex',
+      'cache-control': 'no-store',
+      // The directive list and its order are the contract; the test suite
+      // asserts this exact string so a loosening fails instead of shipping.
+      'content-security-policy': [
+        "default-src 'none'",
+        // 'unsafe-inline' is the document.write path both render routes
+        // use; blob: is the module the JSX mount builds from posted code.
+        // No scheme source remains, so no CDN or remote module can load.
+        "script-src 'unsafe-inline' blob:",
+        "style-src 'unsafe-inline'",
+        'img-src data: blob:',
+        'font-src data:',
+        'media-src data: blob:',
+        "worker-src 'none'",
+        "form-action 'none'",
+        "base-uri 'none'",
+        `frame-ancestors ${new URL(config.serviceOrigin).origin}`,
+        "webrtc 'block'",
+      ].join('; '),
     });
   }
 
@@ -1530,6 +1580,19 @@ The code that decrypts your relic in the browser is served by us, the same
 party this promise is made against, and we could serve different code
 tomorrow. This is a statement about our intent, not a property you can verify.
 Anyone claiming otherwise about a service of this shape is overclaiming.
+
+## What rendered content can do
+
+A relic that renders as HTML or JSX runs its author's code in your browser.
+The frame that hosts it is served a policy that permits no remote source, so
+that code cannot make an outbound request: it cannot reach the network, and
+it cannot contact its author. A page that expects external images, fonts, or
+scripts renders without them, because nothing is fetched.
+
+**The isolation is about network and cross-origin reach, not safety.** The
+code still runs locally in your browser, can consume your CPU, and can
+render whatever its author wrote. The isolation does not mean the content
+is safe or has been reviewed.
 
 ## The key can leave without us doing anything wrong
 

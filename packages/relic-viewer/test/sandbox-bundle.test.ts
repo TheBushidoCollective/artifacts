@@ -1,0 +1,38 @@
+import { describe, expect, test } from 'bun:test';
+
+/**
+ * The shipped sandbox page must carry everything it runs.
+ *
+ * The frame is not allowed to reach the network, and an opaque origin could
+ * not fetch its own origin's assets even if it were, so the build inlines
+ * the whole sandbox bundle, React and ReactDOM included, into sandbox.html.
+ * These checks read the artifact the build actually emits, so a CDN import
+ * reintroduced in the source fails here instead of shipping silently.
+ */
+
+const pkgDir = new URL('..', import.meta.url).pathname;
+
+describe('the built sandbox.html', () => {
+  test('inlines the bundle with React inside and no external script', async () => {
+    // Build for real rather than trusting a dist/ that may predate the
+    // change under test.
+    const built = Bun.spawnSync([process.execPath, 'build.ts'], {
+      cwd: pkgDir,
+    });
+    expect(built.exitCode).toBe(0);
+
+    const html = await Bun.file(`${pkgDir}dist/sandbox.html`).text();
+
+    // The inline script must be present, or the assertions below would
+    // pass vacuously against an empty page.
+    expect(html).toContain('<script type="module">');
+    // The viewer's own code landed inside...
+    expect(html).toContain('relic-root');
+    // ...and React came with it, at the pinned version.
+    expect(html).toContain('19.2.0');
+
+    // No CDN reference and no script that the frame would have to fetch.
+    expect(html).not.toContain('https://esm.sh');
+    expect(html).not.toMatch(/<script\b[^>]*\bsrc\s*=/i);
+  });
+});

@@ -19,7 +19,7 @@ describe('transpileJsx', () => {
   });
 
   test('emits classic runtime, because the frame supplies one React binding', () => {
-    // The frame prepends its own CDN import of React to the module it builds;
+    // The frame binds its bundled React as a global for the module to see;
     // an automatic-runtime import of `react/jsx-runtime` would be a bare
     // specifier that nothing inside an opaque-origin frame can resolve.
     const output = transpileJsx(COMPONENT, 'App.jsx');

@@ -309,7 +309,7 @@ function renderImageView(view: ReadyView): HTMLElement {
  * the usercontent origin's storage, and it cannot read `parent.location`.
  * The markup is posted in; the key never is.
  */
-function renderSandboxedHtml(
+export function renderSandboxedHtml(
   view: ReadyView,
   usercontentOrigin: string
 ): HTMLElement {
@@ -318,7 +318,10 @@ function renderSandboxedHtml(
 
   const frame = document.createElement('iframe');
   frame.className = 'usercontent-frame';
-  frame.setAttribute('sandbox', 'allow-scripts allow-popups allow-forms');
+  // Scripts and nothing else. Popups are removed by dropping the flag, not
+  // by CSP: a popup opens a new top-level context this frame's policy does
+  // not govern.
+  frame.setAttribute('sandbox', 'allow-scripts');
   frame.setAttribute('referrerpolicy', 'no-referrer');
   frame.src = `${usercontentOrigin}/sandbox.html`;
   frame.title = view.filename;
@@ -363,7 +366,7 @@ function renderSandboxedHtml(
  * as a module, and supplies React from a CDN because an opaque origin cannot
  * fetch same-origin assets.
  */
-function renderSandboxedJsx(
+export function renderSandboxedJsx(
   view: ReadyView,
   usercontentOrigin: string
 ): HTMLElement {
@@ -389,7 +392,10 @@ function renderSandboxedJsx(
 
   const frame = document.createElement('iframe');
   frame.className = 'usercontent-frame';
-  frame.setAttribute('sandbox', 'allow-scripts allow-popups allow-forms');
+  // Scripts and nothing else, as with the HTML route: a popup would open a
+  // top-level context this frame's policy does not govern, so the flag is
+  // dropped rather than left to CSP.
+  frame.setAttribute('sandbox', 'allow-scripts');
   frame.setAttribute('referrerpolicy', 'no-referrer');
   frame.src = `${usercontentOrigin}/sandbox.html`;
   frame.title = view.filename;
@@ -468,16 +474,22 @@ function renderReady(
   }
 
   // Said before the recipient has reason to trust what is in the frame, and
-  // not buried: both frame routes run the author's code, that code can
-  // contact the network, and the author can learn the recipient's IP
-  // address, user agent, and open time from it. Leaving this unstated would
-  // turn the published policy into an overclaim.
+  // not buried: both frame routes run the author's code, and the frame's
+  // policy permits no remote source, so that code cannot reach the network
+  // or contact its author. The notice still has to say what that costs the
+  // recipient, because isolation is not safety: the code runs in their
+  // browser, and stating the isolation without its limits would read as a
+  // promise the isolation does not make.
   if (view.route === 'sandboxed-html' || view.route === 'sandboxed-jsx') {
     main.appendChild(
       notice(
-        'This relic runs its author\u2019s code in this page. That code can ' +
-          'contact the network, and its author can learn your IP address, ' +
-          'your browser, and when you opened it.'
+        'This relic runs its author\u2019s code in this page. That code is ' +
+          'isolated: it cannot reach the network, contact its author, or ' +
+          'touch anything outside its frame, and a page that expects ' +
+          'external images, fonts, or scripts renders without them. The ' +
+          'isolation is about network and cross-origin reach, not safety: ' +
+          'the code runs in your browser, can use your CPU, and can render ' +
+          'whatever it wants.'
       )
     );
   }

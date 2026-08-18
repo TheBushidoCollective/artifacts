@@ -16,15 +16,22 @@
  * key, and there is deliberately no code in this bundle that could do
  * anything with one.
  *
- * Rendered content here may reach the network. The JSX path depends on it:
- * React and ReactDOM are imported from a CDN because the frame, being an
- * opaque origin, cannot fetch same-origin assets, and a permissive CDN is the
- * one kind of source that answers `Origin: null` with
- * `Access-Control-Allow-Origin: *`. Whatever a component or page fetches in
- * return is the cost the service-origin notice states plainly: the relic's
- * author can learn the recipient's IP address, user agent, and when the relic
- * was opened.
+ * Rendered content here cannot reach the network. The page's CSP names no
+ * remote source, so nothing a relic's author writes can make a request
+ * leave this frame. The JSX path carries its own dependencies for the same
+ * reason: React and ReactDOM are bundled into this script, and the build
+ * inlines that script into the page. An opaque origin cannot fetch even
+ * its own origin's assets, so inlining is the only channel through which
+ * the frame can receive code at all.
  */
+// React and ReactDOM are bundled into this file rather than fetched: the
+// frame is not allowed to reach the network, and an opaque origin cannot
+// fetch same-origin assets even when they are offered. One bundled copy
+// also settles the instance question hooks depend on: the `React` global
+// the component resolves and the `createRoot` that mounts it are the same
+// module by construction.
+import * as React from 'react';
+import { createRoot } from 'react-dom/client';
 
 export interface RenderMessage {
   readonly type: 'relic:render';
@@ -93,16 +100,6 @@ export function createSandboxHandler(
   };
 }
 
-/**
- * React and ReactDOM come from esm.sh, pinned to one exact version so the
- * frame's React and the component's React are the same module instance, which
- * hooks require. The `deps` parameter makes react-dom resolve its internal
- * `react` to that same build rather than whatever it would pick on its own.
- */
-const REACT_URL = 'https://esm.sh/react@19.2.0';
-const REACT_DOM_CLIENT_URL =
-  'https://esm.sh/react-dom@19.2.0/client?deps=react@19.2.0';
-
 async function mountComponent(code: string): Promise<void> {
   const root = document.createElement('div');
   root.id = 'relic-root';
@@ -110,28 +107,28 @@ async function mountComponent(code: string): Promise<void> {
 
   try {
     // The posted code is a module body whose only ambient binding is
-    // `React`, which the transpile emits calls to. Prepending the import
-    // here, rather than transpiling it in on the service origin, keeps the
-    // service origin's output free of URLs and keeps the React instance a
-    // decision of the frame that executes it.
-    const source = `import * as React from '${REACT_URL}';\n${code}`;
+    // `React`, which the transpile emits calls to. Binding the bundled
+    // React as a global means the module needs no import statement of its
+    // own: there is no URL left that it could import from, since the frame
+    // may not reach the network.
+    // Sucrase's classic runtime resolves a bare `React` against the global
+    // object; the cast exists only because no type declares that property.
+    const sandboxGlobal = globalThis as { React?: typeof React };
+    sandboxGlobal.React = React;
     // A blob module rather than `document.write`, because the component has
-    // to be imported as a module for its default export to be readable, and a
-    // same-origin fetch is the one thing an opaque origin cannot do. The blob
-    // never leaves this frame.
+    // to be imported as a module for its default export to be readable. The
+    // specifier is the blob URL built below, so no static import can name
+    // it, and a same-origin fetch is the one thing an opaque origin cannot
+    // do anyway. The blob never leaves this frame.
     const url = URL.createObjectURL(
-      new Blob([source], { type: 'text/javascript' })
+      new Blob([code], { type: 'text/javascript' })
     );
-    const [module, react, client] = await Promise.all([
-      import(url),
-      import(REACT_URL),
-      import(REACT_DOM_CLIENT_URL),
-    ]);
+    const module = await import(url);
     const component = module.default;
     if (typeof component !== 'function') {
       throw new Error('module has no default export to mount');
     }
-    client.createRoot(root).render(react.createElement(component));
+    createRoot(root).render(React.createElement(component));
   } catch {
     // Compilation was checked on the service origin, so landing here means
     // the module threw while running, or exported nothing mountable. Either

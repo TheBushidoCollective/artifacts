@@ -27,13 +27,15 @@ against the Relic operator. It does not hold against your model provider or
 whoever stores your transcripts, and that is structural rather than a defect
 on a schedule.
 
-Rendered content is not inert. A relic that renders as HTML or JSX runs in a
-sandboxed frame that may reach the network, so whoever authored it can learn
-your IP, your user agent, and when you opened the link, by pointing that reach
-at a host they control. The sandbox keeps that content away from the decryption
-key, which never leaves the link and your browser. It does not keep the content
-away from the internet, the viewer says so on the page before the content
-renders, and so does `/policy`.
+Rendered content is not inert. A relic that renders as HTML or JSX runs its
+author's code in a sandboxed frame whose policy permits no remote source, so
+the code cannot reach the network or contact its author, and a page that
+expects external images, fonts, or scripts renders without them. The sandbox
+keeps that content away from the decryption key, which never leaves the link
+and your browser. The isolation is about network reach, not safety: the code
+runs in your browser, can use your CPU, and can render whatever it wants.
+The viewer says so on the page before the content renders, and so does
+`/policy`.
 
 `/policy` states the whole trade, and the frame conditions the telemetry on
 that statement being readable before anybody publishes.

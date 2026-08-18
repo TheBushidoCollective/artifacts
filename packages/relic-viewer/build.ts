@@ -20,6 +20,11 @@ const built = await Bun.build({
   format: 'esm',
   minify: true,
   naming: '[name].js',
+  // React picks its development or production build by reading
+  // `process.env.NODE_ENV`; with no define the bundler keeps the development
+  // branch, which roughly doubles the sandbox page the build then inlines.
+  // Nothing in this repo branches on NODE_ENV itself.
+  define: { 'process.env.NODE_ENV': '"production"' },
 });
 
 if (!built.success) {
@@ -75,7 +80,13 @@ await Bun.write(
     // A `</script` anywhere in the bundle would close the tag early. Minified
     // output has no reason to contain one, which is exactly why it would go
     // unnoticed if it ever did.
-    `<script type="module">${sandboxJs.replace(/<\/script/gi, '<\\/script')}</script>`
+    //
+    // The replacement is a function, not a string, because the bundle now
+    // carries React and minified React contains `$&`. In a string
+    // replacement that expands to the matched script tag, splicing tag
+    // fragments into the code and shipping a bundle that cannot parse.
+    () =>
+      `<script type="module">${sandboxJs.replace(/<\/script/gi, '<\\/script')}</script>`
   )
 );
 

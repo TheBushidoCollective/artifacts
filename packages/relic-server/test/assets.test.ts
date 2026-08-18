@@ -30,6 +30,23 @@ describe('asset serving', () => {
     });
   }
 
+  test('gzips when the client offers it, and says so', async () => {
+    // Every response here is no-store, so its full size is paid on every
+    // view, and the frame's page carries its whole bundle inline. Nothing
+    // upstream compresses.
+    const request = new Request('https://relic.example/assets/viewer.js', {
+      headers: { 'accept-encoding': 'gzip, br' },
+    });
+    const response = await app().fetch(request);
+    expect(response.headers.get('content-encoding')).toBe('gzip');
+    expect(response.headers.get('vary')).toBe('accept-encoding');
+  });
+
+  test('sends identity to a client that offered no encoding', async () => {
+    const response = await app().fetch(get('/assets/viewer.js'));
+    expect(response.headers.get('content-encoding')).toBeNull();
+  });
+
   test('serves the service worker registration without inline script', async () => {
     // The shell's CSP is script-src 'self'; adding 'unsafe-inline' for three
     // lines of registration would weaken the directive that matters most on
@@ -115,6 +132,54 @@ describe('the sandbox page', () => {
     expect(response.status).toBe(200);
     expect(response.headers.get('content-security-policy')).toContain(
       'frame-ancestors https://relic.example'
+    );
+  });
+
+  const sandboxPolicy = async (): Promise<string> =>
+    (await app().fetch(get('/sandbox.html'))).headers.get(
+      'content-security-policy'
+    ) ?? '';
+
+  test('cuts the frame off from the network entirely', async () => {
+    const csp = await sandboxPolicy();
+    expect(csp).toContain("default-src 'none'");
+    expect(csp).toContain("worker-src 'none'");
+    expect(csp).toContain("form-action 'none'");
+    expect(csp).toContain("base-uri 'none'");
+    expect(csp).toContain("webrtc 'block'");
+  });
+
+  test('lets script come only from the document and a local blob', async () => {
+    const csp = await sandboxPolicy();
+    // Directive-scoped because frame-ancestors legitimately carries an
+    // https:// origin. The script-src token must be exactly this pair: any
+    // scheme source (a CDN import, a component fetch) lands here.
+    const scriptSrc = csp
+      .split(';')
+      .map((directive) => directive.trim())
+      .find((directive) => directive.startsWith('script-src '));
+    expect(scriptSrc).toBe("script-src 'unsafe-inline' blob:");
+    expect(scriptSrc).not.toContain('https:');
+    expect(scriptSrc).not.toContain('http:');
+  });
+
+  test('is the exact policy, order included', async () => {
+    // The directive list and its order are the contract; anything else is a
+    // loosening or a drift, and both fail here before they ship.
+    expect(await sandboxPolicy()).toBe(
+      [
+        "default-src 'none'",
+        "script-src 'unsafe-inline' blob:",
+        "style-src 'unsafe-inline'",
+        'img-src data: blob:',
+        'font-src data:',
+        'media-src data: blob:',
+        "worker-src 'none'",
+        "form-action 'none'",
+        "base-uri 'none'",
+        'frame-ancestors https://relic.example',
+        "webrtc 'block'",
+      ].join('; ')
     );
   });
 

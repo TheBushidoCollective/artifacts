@@ -208,6 +208,9 @@ describe('reserved segments beat ids at the router', () => {
     expect(body).toContain('Your browser never sends the');
     expect(body).toContain('enters the model');
     expect(body).toContain('Deleted does not mean erased');
+    expect(body).toContain('permits no remote source');
+    expect(body).toContain('renders without them');
+    expect(body).toContain('not safety');
   });
 
   test('/install carries the configured origin, since the server has no default', async () => {

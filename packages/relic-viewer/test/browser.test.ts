@@ -1,11 +1,17 @@
-import { describe, expect, test } from 'bun:test';
-import { safeDownloadName, sniffImageType } from '../src/main.ts';
+import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
+import {
+  renderSandboxedHtml,
+  renderSandboxedJsx,
+  safeDownloadName,
+  sniffImageType,
+} from '../src/main.ts';
 import {
   createSandboxHandler,
   isRenderJsxMessage,
   isRenderMessage,
 } from '../src/sandbox.ts';
 import { isCacheable } from '../src/sw.ts';
+import type { ReadyView } from '../src/viewer.ts';
 
 describe('safeDownloadName', () => {
   // The filename is untrusted display text used here as a lookup key, which
@@ -196,5 +202,111 @@ describe('the service worker caches the shell and nothing else', () => {
     expect(isCacheable(origin('/aaaaaaaaaaaaaaaaaaaaaaaaaa'), true)).toBe(
       false
     );
+  });
+});
+
+describe('the usercontent frame the render routes build', () => {
+  // The frame's sandbox attribute is the popup boundary: CSP cannot govern
+  // a top-level context a popup opens, so the flag must simply be absent.
+  // These tests pin the attribute at both call sites so a future edit
+  // cannot quietly restore allow-popups or allow-forms.
+  class ElementStub {
+    readonly tagName: string;
+    className = '';
+    textContent = '';
+    readonly children: ElementStub[] = [];
+    readonly attributes = new Map<string, string>();
+    readonly classList = { add: (_name: string): void => {} };
+
+    constructor(tag: string) {
+      // The DOM reports tag names uppercase; match it so a tagName search
+      // behaves as it would in a browser.
+      this.tagName = tag.toUpperCase();
+    }
+
+    setAttribute(name: string, value: string): void {
+      this.attributes.set(name, value);
+    }
+
+    appendChild(child: ElementStub): ElementStub {
+      this.children.push(child);
+      return child;
+    }
+
+    append(...kids: ElementStub[]): void {
+      this.children.push(...kids);
+    }
+
+    addEventListener(): void {}
+  }
+
+  /** Bun tests run without a DOM; the render routes only need createElement
+   * and window message listeners, so a local stub is enough. Defined here,
+   * never imported from another test file: that re-runs its describes. */
+  let created: ElementStub[];
+
+  beforeEach(() => {
+    created = [];
+    (globalThis as { document?: unknown }).document = {
+      createElement: (tag: string) => {
+        const element = new ElementStub(tag);
+        created.push(element);
+        return element;
+      },
+    };
+    (globalThis as { window?: unknown }).window = {
+      addEventListener: () => {},
+      removeEventListener: () => {},
+    };
+  });
+
+  afterEach(() => {
+    delete (globalThis as { document?: unknown }).document;
+    delete (globalThis as { window?: unknown }).window;
+  });
+
+  const USERCONTENT_ORIGIN = 'https://relik-usercontent.example';
+
+  const view = (
+    route: 'sandboxed-html' | 'sandboxed-jsx',
+    source: string
+  ): ReadyView => ({
+    filename: route === 'sandboxed-jsx' ? 'Widget.tsx' : 'page.html',
+    declaredMimetype: 'text/html',
+    content: new TextEncoder().encode(source),
+    route,
+    downgradeNotice: undefined,
+    shareUrl: 'https://relik.example/aaaaaaaaaaaaaaaaaaaaaaaaaa#k',
+  });
+
+  const sandboxAttributeOf = (wrapper: HTMLElement): string => {
+    const frame = created.find((element) => element.tagName === 'IFRAME');
+    // A throw rather than an assertion, so the rest of this helper reads a
+    // defined frame instead of threading an optional through it.
+    if (frame === undefined) throw new Error('the render path built no iframe');
+    // The render functions return HTMLElement but build with this file's
+    // stubs, so the children read needs one unchecked cast to the stub type.
+    const wrapperChildren = (wrapper as unknown as ElementStub).children;
+    expect(wrapperChildren).toContain(frame);
+    return frame.attributes.get('sandbox') ?? '';
+  };
+
+  test('the html route allows scripts and nothing else', () => {
+    const wrapper = renderSandboxedHtml(
+      view('sandboxed-html', '<p>hi</p>'),
+      USERCONTENT_ORIGIN
+    );
+    expect(sandboxAttributeOf(wrapper)).toBe('allow-scripts');
+  });
+
+  test('the jsx route allows scripts and nothing else', () => {
+    const wrapper = renderSandboxedJsx(
+      view(
+        'sandboxed-jsx',
+        'export default function App() {\n  return <p>hi</p>;\n}'
+      ),
+      USERCONTENT_ORIGIN
+    );
+    expect(sandboxAttributeOf(wrapper)).toBe('allow-scripts');
   });
 });

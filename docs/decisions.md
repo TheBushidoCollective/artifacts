@@ -180,6 +180,45 @@ never coverage.
 or the two rules interact, and it has to be short enough that a recipient
 returning to a relic later in the day counts as the distinct open it is.
 
+## From the owner, on the usercontent frame's egress
+
+### 1. No network reach for rendered content
+
+**2026-08-18: reversed. The usercontent frame has no network reach,
+enforced by the frame's response policy rather than disclosed as a
+capability.** The earlier decision, recorded in `spec/viewer.md` 3.5 and 4
+and in the frame's second honesty constraint, was parity: rendered content
+kept the network reach HTML has always had, a component could fetch
+whatever its author wrote, and the recipient was told their IP address,
+user agent, and open time could be learned that way. The owner reversed
+it: bundle those assets and never fetch them from a CDN, and nothing
+outside Relic's own host is allowed.
+
+The mechanism is a CSP on the frame's served response that permits no
+remote source of any kind, an iframe carrying `allow-scripts` and nothing
+else, and React bundled into the frame's inlined bundle. Inlining is the
+only option for that last part, and the reason is structural: the frame is
+sandboxed without `allow-same-origin`, so it runs in an opaque origin, and
+in an opaque origin `'self'` matches nothing. The frame cannot fetch even
+its own assets, so "bundled from our host" can only mean inlined into the
+`sandbox.html` response Relic already serves. There is no fetchable middle
+ground.
+
+What was traded away, named: a published page that references a CDN
+stylesheet, a CDN script, an external font, or a remote image renders
+without it, and publishers must inline what their page needs. A component
+that reads from an API at render time is no longer expressible. That is a
+real reduction in what a relic can be, and it was chosen anyway.
+
+The enforcement is measured, not argued. With the policy in place, `fetch`,
+`<img>`, `sendBeacon`, `WebSocket`, and `EventSource` all produced zero
+arrivals at a collector server. `sendBeacon` returned `true` while
+delivering nothing, so its return value is not evidence. A form with
+`target=_blank` submitted and never arrived, blocked by `form-action
+'none'`. `window.open` was blocked in the probe, but no user gesture was
+present, so the policy is not what stopped it; popups are removed by
+dropping the `allow-popups` sandbox flag instead.
+
 ## What is not decided here
 
 These are launch obligations, not build decisions, and the build does not

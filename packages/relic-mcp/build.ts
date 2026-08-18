@@ -16,6 +16,19 @@ import { chmod, mkdir } from 'node:fs/promises';
 const out = new URL('./dist/', import.meta.url).pathname;
 await mkdir(out, { recursive: true });
 
+// Read before the build, not after, because the bundle is stamped with this
+// version and the manifests are generated from the same value. The release
+// workflow rewrites package.json before invoking this, so what gets stamped
+// is exactly what gets published.
+const pkg = (await Bun.file('./package.json').json()) as {
+  version: string;
+  name: string;
+  description: string;
+  author?: unknown;
+  homepage?: string;
+  repository?: unknown;
+};
+
 const built = await Bun.build({
   entrypoints: ['./src/index.ts'],
   outdir: out,
@@ -24,6 +37,11 @@ const built = await Bun.build({
   minify: false,
   splitting: false,
   naming: 'relic-mcp.js',
+  // The version the server reports to clients. Substituted here so it cannot
+  // drift from the tarball the way a literal in the source did.
+  define: {
+    'process.env.RELIC_MCP_VERSION': JSON.stringify(pkg.version),
+  },
   // No banner: Bun preserves the entrypoint's own shebang, and adding a
   // second one puts `#!` on line 2, which is a syntax error rather than a
   // comment.
@@ -58,13 +76,7 @@ console.log(
  * matching. Generating them means package.json is the one source of truth, and
  * a stale manifest cannot be committed because it is not committed at all.
  */
-const pkg = (await Bun.file('./package.json').json()) as {
-  version: string;
-  description: string;
-  author?: unknown;
-  homepage?: string;
-  repository?: unknown;
-};
+// Read above, before the build, because the bundle is stamped from it too.
 
 const PLUGIN_DESCRIPTION =
   'Publish a file from your machine as an encrypted, shareable link. The ' +

@@ -609,6 +609,45 @@ describe('the MCP surface', () => {
     expect(result.content[0]?.text).not.toContain('Expires null');
   });
 
+  test('tells the publisher of a page that external resources will not load', async () => {
+    // The publisher is the only party who can act on it, by inlining what the
+    // page needs, and the publish call is the only moment they are looking.
+    writeFile('/work/page.html', '<!doctype html><h1>hi</h1>');
+    const response = await handleMessage(
+      {
+        jsonrpc: '2.0',
+        id: 121,
+        method: 'tools/call',
+        params: { name: TOOL_NAME, arguments: { path: 'page.html' } },
+      },
+      deps
+    );
+
+    const result = response?.result as {
+      structuredContent: { renderer_class: string };
+      content: { text: string }[];
+    };
+    expect(result.structuredContent.renderer_class).toBe('html');
+    expect(result.content[0]?.text).toContain('no network access');
+    expect(result.content[0]?.text).toContain('Inline whatever the page needs');
+  });
+
+  test('spares a markdown publisher a note it cannot act on', async () => {
+    writeFile('/work/notes.md', '# hello');
+    const response = await handleMessage(
+      {
+        jsonrpc: '2.0',
+        id: 122,
+        method: 'tools/call',
+        params: { name: TOOL_NAME, arguments: { path: 'notes.md' } },
+      },
+      deps
+    );
+
+    const result = response?.result as { content: { text: string }[] };
+    expect(result.content[0]?.text).not.toContain('no network access');
+  });
+
   test('a ttl_days publish reports the expiry date in the same breath', async () => {
     writeFile('/work/notes.md', '# hello');
     const response = await handleMessage(

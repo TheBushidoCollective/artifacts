@@ -242,10 +242,22 @@ export const DESCRIBE_TOOL_DEFINITION = {
   },
 } as const;
 
+/**
+ * The build stamps the published version in, from package.json, which the
+ * release workflow rewrites before it builds. It used to be a literal, and it
+ * went stale immediately: the tarball published as 0.2.0 introduced itself to
+ * every client as 0.1.0.
+ *
+ * An unbuilt run says so rather than guessing at a release number, because a
+ * dev process claiming a version somebody could look up is worse than one
+ * admitting it has none.
+ */
+export const SERVER_VERSION = process.env.RELIC_MCP_VERSION ?? '0.0.0-dev';
+
 export const SERVER_INFO = {
   name: 'relic',
   title: 'Relic',
-  version: '0.1.0',
+  version: SERVER_VERSION,
 } as const;
 
 export const CAPABILITIES = { tools: {} } as const;
@@ -330,6 +342,26 @@ export async function handleMessage(
         `unknown method: ${message.method}`
       );
   }
+}
+
+/**
+ * What a publisher of executable content needs to know, and nobody else can
+ * use.
+ *
+ * `html` and `jsx` are the two classes that render author-written code, and
+ * that code now runs in a frame served a policy with no remote source, so a
+ * page built against a CDN comes out bare. The recipient cannot fix that; the
+ * person publishing can, by inlining what the page needs.
+ *
+ * Every other class is inert markup or bytes, so the note would be noise.
+ */
+function isolationNote(rendererClass: string): string {
+  if (rendererClass !== 'html' && rendererClass !== 'jsx') return '';
+  return (
+    'It renders in an isolated frame with no network access, so external ' +
+    'images, fonts, scripts, and fetches will not load. Inline whatever the ' +
+    'page needs.\n'
+  );
 }
 
 async function callTool(
@@ -422,6 +454,11 @@ async function callTool(
               'including its fragment, can read the file. The key is in the ' +
               'fragment and it is now in this transcript. This machine can ' +
               'republish it later; the link will not change.\n' +
+              // The publisher is the only party who can act on this, and the
+              // publish call is the only moment they are looking. The relic
+              // page used to carry it to the recipient, who cannot do
+              // anything about a font that will not load.
+              isolationNote(result.renderer_class) +
               `What Relic knows: ${result.disclosure_url}`,
           },
         ],

@@ -99,7 +99,7 @@ describe('the sandbox handler', () => {
   });
 
   test('refuses a second render, so content cannot be swapped after trust', () => {
-    const { html, jsx, handle } = makeHandler();
+    const { html, handle } = makeHandler();
 
     handle({ type: 'relic:render', html: 'first' });
     expect(handle({ type: 'relic:render', html: 'second' })).toBe(false);

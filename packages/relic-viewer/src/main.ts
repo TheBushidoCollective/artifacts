@@ -127,6 +127,15 @@ function toast(message: string): void {
   window.setTimeout(() => element.remove(), 4000);
 }
 
+/**
+ * A one-off statement above the content.
+ *
+ * The pre-render statement that used to greet every sandboxed relic is gone,
+ * demoted to a marker in the bar, because the risk it described was removed.
+ * This remains for the cases that are genuinely about this file: a downgrade,
+ * or a component that would not compile. Those are conditions of the content
+ * in front of the reader, not a standing warning.
+ */
 function notice(text: string): HTMLElement {
   const element = document.createElement('div');
   element.className = 'notice';
@@ -184,6 +193,26 @@ function buildBar(view: ReadyView, relicId: string): HTMLElement {
 
   const actions = document.createElement('div');
   actions.className = 'actions';
+
+  // A statement of fact, sitting with the actions rather than above the
+  // content. It used to be a banner, and the risk it warned about, content
+  // reaching the network, no longer exists.
+  //
+  // It collapses to its icon at narrow widths exactly like the buttons beside
+  // it. Keeping this label while hiding theirs put a fact ahead of the
+  // actions and pushed Report off the row, so the accessible name carries the
+  // meaning once the text is gone.
+  const marker = document.createElement('a');
+  marker.className = 'action marker';
+  marker.href = `${SERVICE_ORIGIN}/policy`;
+  marker.rel = 'noopener noreferrer';
+  marker.setAttribute('aria-label', 'Runs the author\u2019s code, isolated');
+  marker.title = 'Runs the author\u2019s code, isolated. What Relic knows.';
+  marker.appendChild(icon(ICONS.source));
+  const markerText = document.createElement('span');
+  markerText.textContent = 'Runs author code, isolated';
+  marker.appendChild(markerText);
+  actions.appendChild(marker);
 
   // The fragment was stripped from the address bar, so re-sharing has to come
   // from somewhere. This is that affordance, backed by the in-memory key.
@@ -471,27 +500,6 @@ function renderReady(
 
   if (view.downgradeNotice !== undefined) {
     main.appendChild(notice(view.downgradeNotice));
-  }
-
-  // Said before the recipient has reason to trust what is in the frame, and
-  // not buried: both frame routes run the author's code, and the frame's
-  // policy permits no remote source, so that code cannot reach the network
-  // or contact its author. The notice still has to say what that costs the
-  // recipient, because isolation is not safety: the code runs in their
-  // browser, and stating the isolation without its limits would read as a
-  // promise the isolation does not make.
-  if (view.route === 'sandboxed-html' || view.route === 'sandboxed-jsx') {
-    main.appendChild(
-      notice(
-        'This relic runs its author\u2019s code in this page. That code is ' +
-          'isolated: it cannot reach the network, contact its author, or ' +
-          'touch anything outside its frame, and a page that expects ' +
-          'external images, fonts, or scripts renders without them. The ' +
-          'isolation is about network and cross-origin reach, not safety: ' +
-          'the code runs in your browser, can use your CPU, and can render ' +
-          'whatever it wants.'
-      )
-    );
   }
 
   switch (view.route) {

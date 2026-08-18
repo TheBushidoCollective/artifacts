@@ -184,6 +184,10 @@ body {
 }
 
 @media (max-width: 34rem) {
+  /* The marker collapses with the buttons. Exempting it kept a fact at full
+     width while the actions lost their labels, which pushed Report off the
+     row at 420px. Its accessible name carries the meaning when the text
+     goes. */
   .action span {
     display: none;
   }

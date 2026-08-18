@@ -231,3 +231,7 @@ claim them:
   possible outcomes.
 - The named abuse-response human and their backup
   (`preconditions.md` section 1).
+
+## 2026-08-18: Pre-render statement demoted to a compact marker
+
+The pre-render statement in the viewer (previously a banner above the content) was demoted to a compact marker in the header chrome. Its original justification was that rendered content could reach the network, allowing the author to learn the recipient's IP, user agent, and open time. Since that egress was removed by the strict CSP applied to the frame, the risk described by the banner is gone. A banner shouting about a removed risk trains recipients to ignore real ones. The page now carries a quiet marker in the header chrome stating "Runs author code, isolated" (linked to `/policy` for the full statement) rather than a block layout banner.

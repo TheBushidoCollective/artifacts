@@ -3,6 +3,7 @@ import { encryptRelic, generateKey, generateRelicId } from '@relic/format';
 import { createApp } from '@relic/server/src/app.ts';
 import { MemoryStorage } from '@relic/server/src/storage.ts';
 import { MemoryStore } from '@relic/server/src/store.ts';
+import { localStorageKeyVault } from '../src/main.ts';
 import {
   deadFromProblem,
   load,
@@ -10,6 +11,26 @@ import {
   shareUrlFor,
   type ViewerDeps,
 } from '../src/viewer.ts';
+
+/** Enough of the Storage interface for the vault, defined locally so no test
+ * imports another test file: doing that re-runs its describe blocks. */
+function localStorageShim(): Storage {
+  const map = new Map<string, string>();
+  return {
+    get length() {
+      return map.size;
+    },
+    key: (i: number) => [...map.keys()][i] ?? null,
+    getItem: (k: string) => map.get(k) ?? null,
+    setItem: (k: string, v: string) => {
+      map.set(k, v);
+    },
+    removeItem: (k: string) => {
+      map.delete(k);
+    },
+    clear: () => map.clear(),
+  } as Storage;
+}
 
 const SERVICE = 'https://relic.example';
 const utf8 = (text: string) => new TextEncoder().encode(text);
@@ -258,11 +279,10 @@ describe('remembering the key', () => {
 
   test('the real vault reloads a never-expiring relic', async () => {
     // The fake vault above ignores expiry, which is how the bug slipped
-    // through it. This one runs the actual localStorage vault against the
-    // same clock the app under test uses.
-    const { localStorageKeyVault } = await import('../src/main.ts');
-    const { keyvaultMemoryStorage } = await import('./keyvault.test.ts');
-    const store = keyvaultMemoryStorage();
+    // through it. This one runs the actual localStorage vault, on a local
+    // Storage shim rather than an import from another test file, against
+    // the same clock the app under test uses.
+    const store = localStorageShim();
     const vault = localStorageKeyVault(store, () => now);
     const { id, fragment } = await seed(
       utf8('# Survives the refresh\n'),

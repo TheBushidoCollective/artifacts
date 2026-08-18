@@ -223,7 +223,58 @@ function looksTextual(content: Uint8Array): boolean {
   return suspicious / limit < 0.01;
 }
 
-const HTML_PREFIXES = ['<!doctype html', '<html', '<!-- ', '<svg'];
+/**
+ * What a real HTML document or fragment opens with.
+ *
+ * This list started as doctype/html/comment/svg only, and that failed in the
+ * field: a page starting with `<head>`, `<div>`, or `<meta>` sniffed as code,
+ * the declared-versus-sniffed rule then showed genuine HTML as escaped text,
+ * and the publisher got a broken product with an honest-sounding excuse. So
+ * the list covers the elements a document or fragment can start with, and
+ * `<!doctype` is not pinned to `html` because legacy doctypes exist.
+ *
+ * Two guards keep it from swallowing plain text. Every prefix is tag-shaped,
+ * and prose does not open with `<head>` or `<meta`; where a short tag is
+ * ambiguous with a word (`<p>` versus `<password:`) the closing bracket is
+ * part of the prefix. And widening this can only make a file that already
+ * declares itself HTML render as HTML; a `.txt` starting with `<div>` still
+ * downgrades, because the disagreement rule takes the least privileged tier
+ * and the frame is where executing markup belongs either way.
+ */
+const HTML_PREFIXES = [
+  '<!doctype',
+  '<?xml', // XHTML prologue
+  '<html',
+  '<head',
+  '<body',
+  '<meta',
+  '<title',
+  '<link',
+  '<style',
+  '<script',
+  '<svg',
+  '<div',
+  '<main',
+  '<section',
+  '<article',
+  '<header',
+  '<footer',
+  '<nav',
+  '<aside',
+  '<table',
+  '<form',
+  '<ul',
+  '<ol',
+  '<dl',
+  '<h1',
+  '<h2',
+  '<h3',
+  '<h4',
+  '<h5',
+  '<h6',
+  '<p>',
+  '<!--',
+];
 
 /**
  * Derive the class from the bytes the publishing client holds.

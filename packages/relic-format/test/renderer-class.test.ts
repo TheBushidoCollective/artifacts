@@ -159,6 +159,47 @@ describe('sniffContentClass ignores the filename entirely', () => {
   });
 });
 
+describe('the HTML prefix list recognizes real pages', () => {
+  // Found in the field: a genuine page whose first element is not one of
+  // doctype/html/comment/svg sniffed as code, the disagreement rule then
+  // showed it as escaped text, and the publisher saw a broken product.
+  const pages: ReadonlyArray<readonly [string, string]> = [
+    ['head first', '<head><title>x</title></head><body>hi</body>'],
+    ['div first', '<div class="page"><h1>hi</h1></div>'],
+    ['meta first', '<meta charset="utf-8"><title>x</title>'],
+    ['section first', '<section><p>hi</p></section>'],
+    ['title first', '<title>x</title><p>hi</p>'],
+    ['xhtml prologue', '<?xml version="1.0"?><!doctype html><html>hi</html>'],
+    ['comment without a space', '<!--generated--><div>hi</div>'],
+    ['legacy doctype', '<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01//EN">'],
+    ['body first', '<body><p>hi</p></body>'],
+    ['script first', '<script>var x = 1;</script><p>hi</p>'],
+    ['style first', '<style>p{margin:0}</style><p>hi</p>'],
+    ['form first', '<form action="/x"><input></form>'],
+  ];
+
+  for (const [name, page] of pages) {
+    test(`${name} sniffs as html`, () => {
+      expect(sniffContentClass(utf8(page))).toBe('html');
+    });
+  }
+
+  // The list is tag-shaped for a reason, and the one short tag that could
+  // open a word carries its closing bracket. Prose must not become markup.
+  const notPages: ReadonlyArray<readonly [string, string]> = [
+    ['a line that starts like a tag', '<password: hunter2>\nthe rest is prose'],
+    ['a log line', '2026-08-18 02:00:00 INFO something happened'],
+    ['a code file', 'const x = 1;\nexport default x;'],
+    ['markdown', '# A heading\n\nSome prose.'],
+  ];
+
+  for (const [name, text] of notPages) {
+    test(`${name} still sniffs as code`, () => {
+      expect(sniffContentClass(utf8(text))).toBe('code');
+    });
+  }
+});
+
 describe('privilegeTier', () => {
   test('only html and jsx execute, and they share the top tier', () => {
     expect(privilegeTier('html')).toBe(3);

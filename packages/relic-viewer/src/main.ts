@@ -127,6 +127,24 @@ function toast(message: string): void {
   window.setTimeout(() => element.remove(), 4000);
 }
 
+/**
+ * A one-off statement above the content.
+ *
+ * The pre-render statement that used to greet every sandboxed relic is gone,
+ * demoted to a marker in the bar, because the risk it described was removed.
+ * This remains for the cases that are genuinely about this file: a downgrade,
+ * or a component that would not compile. Those are conditions of the content
+ * in front of the reader, not a standing warning.
+ */
+function notice(text: string): HTMLElement {
+  const element = document.createElement('div');
+  element.className = 'notice';
+  element.appendChild(icon(ICONS.flag));
+  const span = document.createElement('span');
+  span.textContent = text;
+  element.appendChild(span);
+  return element;
+}
 
 function downloadContent(view: ReadyView): void {
   const blob = new Blob([view.content as unknown as BlobPart], {
@@ -176,10 +194,20 @@ function buildBar(view: ReadyView, relicId: string): HTMLElement {
   const actions = document.createElement('div');
   actions.className = 'actions';
 
+  // A statement of fact, sitting with the actions rather than above the
+  // content. It used to be a banner, and the risk it warned about, content
+  // reaching the network, no longer exists.
+  //
+  // It collapses to its icon at narrow widths exactly like the buttons beside
+  // it. Keeping this label while hiding theirs put a fact ahead of the
+  // actions and pushed Report off the row, so the accessible name carries the
+  // meaning once the text is gone.
   const marker = document.createElement('a');
   marker.className = 'action marker';
   marker.href = `${SERVICE_ORIGIN}/policy`;
   marker.rel = 'noopener noreferrer';
+  marker.setAttribute('aria-label', 'Runs the author\u2019s code, isolated');
+  marker.title = 'Runs the author\u2019s code, isolated. What Relic knows.';
   marker.appendChild(icon(ICONS.source));
   const markerText = document.createElement('span');
   markerText.textContent = 'Runs author code, isolated';

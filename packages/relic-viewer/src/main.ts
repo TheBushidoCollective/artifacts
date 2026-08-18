@@ -591,9 +591,14 @@ export function localStorageKeyVault(
       if (name === null || !name.startsWith(VAULT_PREFIX)) continue;
       try {
         const entry = JSON.parse(store.getItem(name) ?? '') as {
-          expiresAt?: number;
+          expiresAt?: number | null;
         };
-        if (typeof entry.expiresAt !== 'number' || entry.expiresAt <= now()) {
+        // null is how a never-expires entry is persisted; JSON has no
+        // Infinity. Any other non-number is corruption, and swept.
+        if (
+          (entry.expiresAt !== null && typeof entry.expiresAt !== 'number') ||
+          (typeof entry.expiresAt === 'number' && entry.expiresAt <= now())
+        ) {
           stale.push(name);
         }
       } catch {
@@ -608,11 +613,17 @@ export function localStorageKeyVault(
     remember(relicId, fragment, expiresAt) {
       const store = read();
       if (store === undefined) return;
-      if (!Number.isFinite(expiresAt) || expiresAt <= now()) return;
+      // NaN stays refused: an unparsable date is corruption, not forever.
+      // Infinity passes, because a relic with no lifetime is worth keeping
+      // the key for until it is deleted.
+      if (Number.isNaN(expiresAt) || expiresAt <= now()) return;
       try {
         store.setItem(
           `${VAULT_PREFIX}${relicId}`,
-          JSON.stringify({ fragment, expiresAt })
+          JSON.stringify({
+            fragment,
+            expiresAt: Number.isFinite(expiresAt) ? expiresAt : null,
+          })
         );
       } catch {
         // Quota, or storage disabled mid-session. A remembered key is a
@@ -632,7 +643,12 @@ export function localStorageKeyVault(
           expiresAt?: unknown;
         };
         if (typeof entry.fragment !== 'string') return undefined;
-        if (typeof entry.expiresAt !== 'number' || entry.expiresAt <= now()) {
+        if (typeof entry.expiresAt === 'number' && entry.expiresAt <= now()) {
+          return undefined;
+        }
+        // null means never expires. Anything else that is not a number is
+        // corruption, and recalls nothing.
+        if (entry.expiresAt !== null && typeof entry.expiresAt !== 'number') {
           return undefined;
         }
         return entry.fragment;

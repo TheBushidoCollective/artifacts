@@ -3,6 +3,7 @@ import { encryptRelic, generateKey, generateRelicId } from '@relic/format';
 import { createApp } from '@relic/server/src/app.ts';
 import { MemoryStorage } from '@relic/server/src/storage.ts';
 import { MemoryStore } from '@relic/server/src/store.ts';
+import { localStorageKeyVault } from '../src/main.ts';
 import {
   deadFromProblem,
   load,
@@ -10,6 +11,26 @@ import {
   shareUrlFor,
   type ViewerDeps,
 } from '../src/viewer.ts';
+
+/** Enough of the Storage interface for the vault, defined locally so no test
+ * imports another test file: doing that re-runs its describe blocks. */
+function localStorageShim(): Storage {
+  const map = new Map<string, string>();
+  return {
+    get length() {
+      return map.size;
+    },
+    key: (i: number) => [...map.keys()][i] ?? null,
+    getItem: (k: string) => map.get(k) ?? null,
+    setItem: (k: string, v: string) => {
+      map.set(k, v);
+    },
+    removeItem: (k: string) => {
+      map.delete(k);
+    },
+    clear: () => map.clear(),
+  } as Storage;
+}
 
 const SERVICE = 'https://relic.example';
 const utf8 = (text: string) => new TextEncoder().encode(text);
@@ -38,13 +59,17 @@ function shimFetch(): typeof globalThis.fetch {
 /** An in-memory stand-in for the browser's storage, shared across a test. */
 export function fakeVault(seed: Record<string, string> = {}) {
   const entries = new Map(Object.entries(seed));
+  /** What load() asked the vault to remember, keyed by relic id. */
+  const rememberCalls = new Map<string, number>();
   return {
     entries,
+    rememberCalls,
     vault: {
       // No expiry check. The app under test runs on its own clock, so
       // comparing its expiry to real wall time would reject everything.
       // Expiry belongs to the storage implementation and is tested there.
-      remember(relicId: string, fragment: string, _expiresAt: number) {
+      remember(relicId: string, fragment: string, expiresAt: number) {
+        rememberCalls.set(relicId, expiresAt);
         entries.set(relicId, fragment);
       },
       recall: (relicId: string) => entries.get(relicId),
@@ -230,6 +255,51 @@ describe('remembering the key', () => {
     expect(new TextDecoder().decode(reloaded.view.content)).toBe(
       '# Still here\n'
     );
+  });
+
+  test('a relic with no lifetime is remembered as never expiring', async () => {
+    // Found in the field: the mint returns relic_expires_at null for a relic
+    // with no lifetime, Date.parse(null) is NaN, and the vault refused to
+    // store anything, so every reload lost the key. The mapping to Infinity
+    // is the fix; this pins it against the real server response shape.
+    const { id, fragment } = await seed(
+      utf8('# Kept until deleted\n'),
+      'report.md',
+      'text/markdown'
+    );
+    const { vault, rememberCalls } = fakeVault();
+
+    const state = await load(
+      id,
+      deps(fragment, `${SERVICE}/x#${fragment}`, vault)
+    );
+    expect(state.kind).toBe('ready');
+    expect(rememberCalls.get(id)).toBe(Number.POSITIVE_INFINITY);
+  });
+
+  test('the real vault reloads a never-expiring relic', async () => {
+    // The fake vault above ignores expiry, which is how the bug slipped
+    // through it. This one runs the actual localStorage vault, on a local
+    // Storage shim rather than an import from another test file, against
+    // the same clock the app under test uses.
+    const store = localStorageShim();
+    const vault = localStorageKeyVault(store, () => now);
+    const { id, fragment } = await seed(
+      utf8('# Survives the refresh\n'),
+      'report.md',
+      'text/markdown'
+    );
+
+    const first = await load(
+      id,
+      deps(fragment, `${SERVICE}/x#${fragment}`, vault)
+    );
+    expect(first.kind).toBe('ready');
+
+    // Much later, same browser: the entry must still recall.
+    now += 365 * 24 * 60 * 60 * 1000;
+    const reloaded = await load(id, deps('', `${SERVICE}/x`, vault));
+    expect(reloaded.kind).toBe('ready');
   });
 
   test('nothing is remembered for a relic that does not exist', async () => {

@@ -417,6 +417,36 @@ describe('rendering', () => {
     }
   });
 
+  test('routes a jsx relic to the usercontent origin, never inline', async () => {
+    // The service origin renders markdown, code, and images itself. A
+    // component must never join them: it executes, so it belongs on the
+    // frame side of the boundary with html.
+    const { id, fragment } = await seed(
+      utf8('export default function App() {\n  return <div>hi</div>;\n}\n'),
+      'App.jsx',
+      'text/jsx'
+    );
+    const state = await load(id, deps(fragment));
+
+    expect(state.kind).toBe('ready');
+    if (state.kind !== 'ready') return;
+    expect(state.view.route).toBe('sandboxed-jsx');
+    expect(state.view.route).not.toBe('code');
+    expect(state.view.downgradeNotice).toBeUndefined();
+  });
+
+  test('routes a tsx relic the same way', async () => {
+    const { id, fragment } = await seed(
+      utf8(
+        'type P = { n: string };\nexport default ({ n }: P) => <h1>{n}</h1>;\n'
+      ),
+      'Widget.tsx',
+      'text/tsx'
+    );
+    const state = await load(id, deps(fragment));
+    if (state.kind === 'ready') expect(state.view.route).toBe('sandboxed-jsx');
+  });
+
   test('an archive is download-only in the first release', async () => {
     const zip = new Uint8Array([0x50, 0x4b, 0x03, 0x04, 0, 0, 0, 0]);
     const { id, fragment } = await seed(zip, 'bundle.zip', 'application/zip');
@@ -467,6 +497,47 @@ describe('the declared versus sniffed rule', () => {
     if (state.kind === 'ready') {
       expect(state.view.downgradeNotice).toBeUndefined();
     }
+  });
+
+  test('prose wearing a jsx name renders as source, not as a component', async () => {
+    // The declaration alone cannot buy frame rendering: the content-side
+    // check must parse, and prose does not. This is the jsx analogue of
+    // HTML wearing an image name.
+    const { id, fragment } = await seed(
+      utf8('just some prose here, not a component at all'),
+      'App.jsx',
+      'text/jsx'
+    );
+    const state = await load(id, deps(fragment));
+
+    expect(state.kind).toBe('ready');
+    if (state.kind !== 'ready') return;
+    expect(state.view.route).not.toBe('sandboxed-jsx');
+    expect(state.view.route).toBe('code');
+    expect(state.view.downgradeNotice).toBeDefined();
+  });
+
+  test('a PNG wearing a jsx name renders as an image', async () => {
+    const png = new Uint8Array([
+      0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
+    ]);
+    const { id, fragment } = await seed(png, 'App.jsx', 'text/jsx');
+    const state = await load(id, deps(fragment));
+
+    expect(state.kind).toBe('ready');
+    if (state.kind !== 'ready') return;
+    expect(state.view.route).toBe('image');
+    expect(state.view.route).not.toBe('sandboxed-jsx');
+  });
+
+  test("a jsx declaration cannot upgrade somebody else's plain code", () => {
+    // The content-side check only runs when the declared class is jsx, so
+    // ordinary code files keep their quiet code route with no spurious
+    // downgrade notice.
+    const plain = utf8('const a = 1;\nif (a < 2) console.log(a);\n');
+    const decision = routeFor('script.js', 'text/plain', plain);
+    expect(decision.route).toBe('code');
+    expect(decision.notice).toBeUndefined();
   });
 
   test('routeFor never promotes to a more privileged path', () => {

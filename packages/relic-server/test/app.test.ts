@@ -7,7 +7,7 @@ import {
   RESERVED_SEGMENTS,
 } from '@relic/format';
 import { createApp, type RelicApp, stripToRelicId } from '../src/app.ts';
-import { MemoryStorage } from '../src/storage.ts';
+import { ciphertextHash, MemoryStorage } from '../src/storage.ts';
 import { MemoryStore } from '../src/store.ts';
 
 const OPERATOR = new Map([['jason', 'operator-secret']]);
@@ -49,7 +49,7 @@ async function publish(
     size?: number;
     ttlDays?: number;
   } = {}
-): Promise<{ id: string; key: Uint8Array }> {
+): Promise<{ id: string; key: Uint8Array; grant: Record<string, unknown> }> {
   const challengeResponse = await app.fetch(
     req('/api/challenge', { method: 'POST', ip: options.ip })
   );
@@ -76,6 +76,7 @@ async function publish(
     })
   );
   expect(grantResponse.status).toBe(200);
+  const grant = (await grantResponse.json()) as Record<string, unknown>;
 
   const container = await encryptRelic({
     content: new TextEncoder().encode('hello relic'),
@@ -85,7 +86,39 @@ async function publish(
   });
   storage.put(id, container);
 
-  return { id, key };
+  return { id, key, grant };
+}
+
+/** Ciphertext for a republished version, under the same key as v1. */
+async function encrypted(text: string, key: Uint8Array): Promise<Uint8Array> {
+  return encryptRelic({
+    content: new TextEncoder().encode(text),
+    filename: 'notes.md',
+    mimetype: 'text/markdown',
+    key,
+  });
+}
+
+/**
+ * A republish request the test controls token by token. `undefined` omits
+ * the field entirely, which is its own refusal case.
+ */
+async function republish(
+  id: string,
+  token: string | undefined,
+  options: { rendererClass?: string; size?: number } = {}
+): Promise<Response> {
+  return app.fetch(
+    req(`/api/relics/${id}/republish`, {
+      method: 'POST',
+      body: JSON.stringify({
+        ...(token === undefined ? {} : { publish_token: token }),
+        renderer_class: options.rendererClass ?? 'markdown',
+        declared_size_bytes: options.size ?? 12,
+        declared_ciphertext_bytes: encryptedSize(options.size ?? 12),
+      }),
+    })
+  );
 }
 
 /**
@@ -755,6 +788,254 @@ describe('the publish completion call', () => {
 
     expect((await app.store.getRelic(id))?.mintsUsed).toBe(0);
     expect(await app.store.readMintLog()).toHaveLength(before);
+  });
+});
+
+describe('republish and versions', () => {
+  test('a first grant returns the publish token exactly once, at version 1', async () => {
+    const { id, grant } = await publish();
+    const token = grant['publish_token'];
+    // 32 random bytes, base64url: 43 characters, no padding, no + or /.
+    expect(token).toMatch(/^[A-Za-z0-9_-]{43}$/);
+
+    const row = await app.store.getRelic(id);
+    expect(row?.version).toBe(1);
+    // The row holds a hash, never the credential itself.
+    expect(row?.publishTokenHash).toMatch(/^[0-9a-f]{64}$/);
+    expect(row?.publishTokenHash).not.toBe(token);
+  });
+
+  test('the token never appears outside the first grant response', async () => {
+    const { id, grant } = await publish();
+    const token = grant['publish_token'] as string;
+
+    const response = await republish(id, token);
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as Record<string, unknown>;
+    expect(body['publish_token']).toBeUndefined();
+    expect(JSON.stringify(body)).not.toContain(token);
+  });
+
+  test('a valid token opens version 2 at the suffixed object path', async () => {
+    const { id, grant } = await publish();
+
+    const response = await republish(id, grant['publish_token'] as string, {
+      rendererClass: 'html',
+    });
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as { upload_url: string };
+    expect(body.upload_url).toContain(`/upload/${id}/v2?`);
+
+    const row = await app.store.getRelic(id);
+    expect(row?.version).toBe(2);
+    expect(row?.rendererClass).toBe('html');
+    // Version 1's object stays in place until the new one completes: a
+    // republish in flight must not be able to destroy the servable bytes.
+    expect(await storage.stat(id)).toBeDefined();
+    expect(await storage.stat(`${id}/v2`)).toBeUndefined();
+  });
+
+  test('completion and mint serve the new version bytes', async () => {
+    const { id, key, grant } = await publish();
+    const first = await storage.stat(id);
+
+    await republish(id, grant['publish_token'] as string);
+    const container = await encrypted('hello relic, revised and longer', key);
+    storage.put(`${id}/v2`, container);
+
+    now += 30 * 1000;
+    const completed = await app.fetch(
+      req(`/api/relics/${id}/complete`, { method: 'POST' })
+    );
+    expect(completed.status).toBe(200);
+    const completedBody = await completed.json();
+    expect(completedBody.object_length).toBe(container.length);
+    // A true publish timestamp for the new version, same as a first publish.
+    expect((await app.store.getRelic(id))?.publishedAt).toBe(now);
+
+    const mint = (await app
+      .fetch(
+        req(`/api/relics/${id}/mint`, { method: 'POST', ip: '203.0.113.5' })
+      )
+      .then((r) => r.json())) as {
+      url: string;
+      object_length: number;
+      object_crc32c: string;
+    };
+    expect(mint.url).toContain(`/o/${id}/v2?`);
+    expect(mint.object_length).toBe(container.length);
+    expect(mint.object_crc32c).not.toBe(first?.crc32c);
+  });
+
+  test('a mint between republish and landing is the usual temporary 409', async () => {
+    const { id, grant } = await publish();
+    await republish(id, grant['publish_token'] as string);
+
+    const response = await app.fetch(
+      req(`/api/relics/${id}/mint`, { method: 'POST', ip: '203.0.113.5' })
+    );
+    expect(response.status).toBe(409);
+    expect((await response.json()).code).toBe('relic_not_yet_published');
+  });
+
+  test('a wrong or missing publish token is 403 invalid_publish_token', async () => {
+    const { id, grant } = await publish();
+    const token = grant['publish_token'] as string;
+
+    for (const bad of [undefined, 'not-the-token', token.slice(0, 42)]) {
+      const response = await republish(id, bad);
+      expect(response.status).toBe(403);
+      const body = await response.json();
+      expect(body.code).toBe('invalid_publish_token');
+      expect(body.relic_id).toBe(id);
+    }
+    // A refused republish does not consume a version.
+    expect((await app.store.getRelic(id))?.version).toBe(1);
+  });
+
+  test('a takedown can never be undone by republishing', async () => {
+    const { id, grant } = await publish();
+    await app.fetch(
+      req(`/api/relics/${id}`, {
+        method: 'DELETE',
+        headers: { authorization: 'Bearer operator-secret' },
+      })
+    );
+
+    // The refusal lands before the token is even hashed, so the rightful
+    // holder and a brute force are indistinguishable here.
+    const response = await republish(id, grant['publish_token'] as string);
+    expect(response.status).toBe(410);
+    expect((await response.json()).code).toBe('relic_removed');
+  });
+
+  test('the download cap is one number across all versions', async () => {
+    app = build({ config: { downloadCap: 2 } });
+    const { id, grant } = await publish({ ip: '198.51.100.10' });
+    now += 10 * 60 * 1000;
+
+    for (let index = 0; index < 2; index++) {
+      const response = await app.fetch(
+        req(`/api/relics/${id}/mint`, {
+          method: 'POST',
+          ip: `203.0.113.${index + 20}`,
+        })
+      );
+      expect(response.status).toBe(200);
+    }
+
+    await republish(id, grant['publish_token'] as string);
+    storage.put(
+      `${id}/v2`,
+      await encrypted('hello relic again', generateKey())
+    );
+    await app.fetch(req(`/api/relics/${id}/complete`, { method: 'POST' }));
+
+    const response = await app.fetch(
+      req(`/api/relics/${id}/mint`, { method: 'POST', ip: '203.0.113.99' })
+    );
+    expect(response.status).toBe(410);
+    const body = await response.json();
+    expect(body.code).toBe('download_cap_exhausted');
+    expect(body.download_cap).toBe(2);
+  });
+
+  test('version 1 keeps the bare object path production already serves', async () => {
+    const { id, grant } = await publish();
+    expect(grant['upload_url']).toContain(`/upload/${id}?`);
+    expect(await storage.stat(`${id}/v1`)).toBeUndefined();
+
+    const mint = (await app
+      .fetch(
+        req(`/api/relics/${id}/mint`, { method: 'POST', ip: '203.0.113.5' })
+      )
+      .then((r) => r.json())) as { url: string };
+    expect(mint.url).toContain(`/o/${id}?`);
+    expect(mint.url).not.toContain('/v1');
+  });
+
+  test('a repeat mint after a republish is a fresh URL for new content', async () => {
+    const { id, key, grant } = await publish({ ip: '198.51.100.10' });
+    now += 10 * 60 * 1000;
+    const first = (await app
+      .fetch(
+        req(`/api/relics/${id}/mint`, { method: 'POST', ip: '203.0.113.5' })
+      )
+      .then((r) => r.json())) as { url: string };
+
+    await republish(id, grant['publish_token'] as string);
+    storage.put(
+      `${id}/v2`,
+      await encrypted('hello relic, second edition', key)
+    );
+    await app.fetch(req(`/api/relics/${id}/complete`, { method: 'POST' }));
+
+    // Still inside the dedup window, but the content changed: new content
+    // is a first look, not a reload.
+    now += 3 * 60 * 1000;
+    const second = (await app
+      .fetch(
+        req(`/api/relics/${id}/mint`, { method: 'POST', ip: '203.0.113.5' })
+      )
+      .then((r) => r.json())) as { url: string };
+    expect(second.url).toContain(`/o/${id}/v2?`);
+    expect(second.url).not.toBe(first.url);
+
+    const entry = (await app.store.readMintLog()).at(-1);
+    expect(entry?.countedAsOpen).toBe(true);
+    expect(entry?.dropReason).toBeUndefined();
+  });
+
+  test('a delete removes and blocklists every version payload', async () => {
+    const { id, key, grant } = await publish();
+    const v1Bytes = await storage.read(id);
+    if (v1Bytes === undefined) throw new Error('v1 bytes missing');
+    const v1Hash = await ciphertextHash(v1Bytes);
+
+    await republish(id, grant['publish_token'] as string);
+    storage.put(`${id}/v2`, await encrypted('a second payload', key));
+    await app.fetch(req(`/api/relics/${id}/complete`, { method: 'POST' }));
+
+    const response = await app.fetch(
+      req(`/api/relics/${id}?reason=abuse`, {
+        method: 'DELETE',
+        headers: { authorization: 'Bearer operator-secret' },
+      })
+    );
+    expect(response.status).toBe(200);
+
+    expect(await storage.stat(id)).toBeUndefined();
+    expect(await storage.stat(`${id}/v2`)).toBeUndefined();
+
+    // The tombstone records the version that was being served, and the
+    // blocklist covers the older payload too: one republish must not be
+    // able to hide a payload from the abuse control.
+    const stone = await app.store.getTombstone(id);
+    expect(stone?.ciphertextHash).not.toBe(v1Hash);
+    expect(await app.store.isBlocklisted(stone?.ciphertextHash ?? '')).toBe(
+      true
+    );
+    expect(await app.store.isBlocklisted(v1Hash)).toBe(true);
+  });
+
+  test('a republish declaration obeys the same size cap arithmetic', async () => {
+    const { id, grant } = await publish();
+    const response = await republish(id, grant['publish_token'] as string, {
+      size: 200 * 1024 * 1024,
+    });
+    expect(response.status).toBe(413);
+    expect((await response.json()).code).toBe('size_over_cap');
+    expect((await app.store.getRelic(id))?.version).toBe(1);
+  });
+
+  test('a republish on an unknown id is 404, an unparseable one is 400', async () => {
+    const missing = await republish(generateRelicId(), 'whatever');
+    expect(missing.status).toBe(404);
+    expect((await missing.json()).code).toBe('relic_not_found');
+
+    const malformed = await republish('too-short', 'whatever');
+    expect(malformed.status).toBe(400);
+    expect((await malformed.json()).code).toBe('invalid_relic_id');
   });
 });
 

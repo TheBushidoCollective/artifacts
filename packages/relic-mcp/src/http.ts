@@ -2,9 +2,13 @@
  * Streamable HTTP transport, revision `2026-07-28`.
  *
  * Stateless by construction: a single POST endpoint, one HTTP request per
- * JSON-RPC message, no session, and no `Mcp-Session-Id`. Nothing is retained
- * between calls, so a load balancer can round-robin across processes with no
- * sticky routing and no shared session store.
+ * JSON-RPC message, no session, and no `Mcp-Session-Id`. No protocol state
+ * is retained between calls, so a load balancer can round-robin across
+ * processes with no sticky routing and no shared session store. The one
+ * thing that does outlive a call is the publish state in state.ts, and it
+ * is per-machine disk, not transport state: processes sharing a machine
+ * share it, and machines that do not share it cannot republish each
+ * other's relics.
  *
  * **This does not make Relic hostable.** The transport says how bytes reach
  * the server, not where the server runs. The publishing client must sit next

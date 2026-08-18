@@ -27,6 +27,14 @@ against the Relic operator. It does not hold against your model provider or
 whoever stores your transcripts, and that is structural rather than a defect
 on a schedule.
 
+Rendered content is not inert. A relic that renders as HTML or JSX runs in a
+sandboxed frame that may reach the network, so whoever authored it can learn
+your IP, your user agent, and when you opened the link, by pointing that reach
+at a host they control. The sandbox keeps that content away from the decryption
+key, which never leaves the link and your browser. It does not keep the content
+away from the internet, the viewer says so on the page before the content
+renders, and so does `/policy`.
+
 `/policy` states the whole trade, and the frame conditions the telemetry on
 that statement being readable before anybody publishes.
 
@@ -36,7 +44,7 @@ that statement being readable before anybody publishes.
 |---|---|
 | `@relic/format` | The wire format. RFC 8188 `aes128gcm` framing around an envelope that lives inside the encrypted stream. Imported by both ends so the encryptor and the decryptor cannot drift apart. |
 | `@relic/server` | The app server. Grants, mints, the abuse surface, delete-by-id, and the published disclosure. Never handles relic bytes on either leg. |
-| `relic-mcp` | The local MCP server, published to npm. Holds the key, encrypts in process, returns no script. |
+| `relic-mcp` | The local MCP server, published to npm. Holds the key, encrypts in process, returns no script, and persists the key and publish token that republish needs. |
 | `@relic/viewer` | The PWA. Decrypts in the browser and renders by type under a taskbar. |
 
 ## Running it
@@ -68,6 +76,17 @@ restart.
 Relic exposes `relic_publish`, which takes a filesystem path and never inline
 content, and `relic_describe_client`, which explains what the client does with
 your file without reading it or contacting anything.
+
+It also exposes `relic_republish`, which posts a new version of a file to an
+existing relic's URL. It takes the relic id and a path; the publish token is
+never an argument and never printed, because the client stored it beside the
+relic's key at first publish and reads it back from there. The server issued
+that token once and keeps only its hash, so the machine that published is the
+only machine that can republish: lose that state and nobody, the operator
+included, can authorize another version. Opening the link always serves the
+current version, and the download cap is shared across all versions. A relic
+taken down for abuse refuses every future version whatever token is presented,
+because a takedown an abuser could out-publish would not be a takedown.
 
 ```bash
 npx -y relic-mcp@latest   # nothing to clone, nothing to build

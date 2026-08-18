@@ -129,6 +129,8 @@ function row(overrides: Partial<RelicRow> = {}): RelicRow {
     rendererClass: 'html',
     publishingClient: 'relic-mcp',
     declaredSizeBytes: 1024,
+    version: 1,
+    publishTokenHash: 'f'.repeat(64),
     mintsUsed: 0,
     ...overrides,
   };

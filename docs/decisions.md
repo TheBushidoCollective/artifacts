@@ -119,6 +119,11 @@ forwarded once without dying.
 Worst-case egress per relic is 200 x 100 MiB, which is 20 GiB, or $2.40 at
 $0.12/GB. That is the number the kill-switch ceiling is set against.
 
+The pool is per relic id across every version: republishing adds an object,
+never a second pool (`format.md` 3.12), so the 20 GiB ceiling per id survives
+versioning. What versions multiply is storage, up to 100 MiB per version,
+kept until deleted.
+
 ### 3. Expiry
 
 **No operator TTL. A publisher may set a lifetime, capped at 3650 days;

@@ -173,6 +173,17 @@ export function createApp(options: AppOptions = {}): RelicApp {
    * `frame-ancestors` is the half of the boundary this response owns: only the
    * service origin may frame it, so the page cannot be embedded by a third
    * party to borrow the rendering path.
+   *
+   * Rendered content in this frame can reach the network, and that is
+   * deliberate. The JSX route depends on it: the frame, an opaque origin,
+   * imports React and ReactDOM from a CDN because it cannot fetch
+   * same-origin assets, and a component may fetch whatever its author wrote.
+   * The cost lands on the recipient and is stated to them on the page that
+   * frames this one: whoever authored the relic can learn their IP address,
+   * user agent, and when they opened it. `frame-ancestors` and `base-uri`
+   * stay exactly as they are, because embedding and base hijacking are the
+   * boundary; `script-src` is written out only so the deliberate posture is
+   * visible and a future tightening cannot silently break rendering.
    */
   async function serveSandbox(): Promise<Response> {
     const asset = await assets.get('sandbox.html');
@@ -187,6 +198,12 @@ export function createApp(options: AppOptions = {}): RelicApp {
         'content-security-policy': [
           `frame-ancestors ${new URL(config.serviceOrigin).origin}`,
           "base-uri 'none'",
+          // 'unsafe-inline' is the document.write path both render routes
+          // use; blob: is the module the JSX mount builds from posted code;
+          // https: is the CDN React comes from and any module a component
+          // imports. Every other fetch directive is deliberately absent:
+          // pages and components keep the network reach HTML has always had.
+          "script-src 'unsafe-inline' blob: https:",
         ].join('; '),
       },
     });
@@ -222,6 +239,14 @@ export function createApp(options: AppOptions = {}): RelicApp {
       request.method === 'POST'
     ) {
       return complete(second, now);
+    }
+    if (
+      first === 'relics' &&
+      second !== undefined &&
+      third === 'republish' &&
+      request.method === 'POST'
+    ) {
+      return republish(second, request, ip, now);
     }
     if (
       first === 'relics' &&
@@ -364,6 +389,12 @@ export function createApp(options: AppOptions = {}): RelicApp {
       return refuse('relic_id_collision', { relic_id: relicId });
     }
 
+    // The publish token is the relic's one credential: possession of it is
+    // the only way to ever republish this id. It is minted here, returned
+    // exactly once below, and stored only as a hash, so the store's JSON
+    // documents can never leak a replayable bearer token.
+    const publishToken = mintPublishToken();
+
     await store.putRelic({
       id: relicId,
       publishIp: ip,
@@ -372,6 +403,8 @@ export function createApp(options: AppOptions = {}): RelicApp {
       rendererClass: rendererClass as RendererClass,
       publishingClient,
       declaredSizeBytes: declared,
+      version: 1,
+      publishTokenHash: await sha256Hex(publishToken),
       mintsUsed: 0,
     });
 
@@ -411,7 +444,150 @@ export function createApp(options: AppOptions = {}): RelicApp {
     }
 
     const upload = await storage.signUpload(
+      objectKey(relicId, 1),
+      declaredCiphertext,
+      config.urlValiditySeconds,
+      now
+    );
+
+    return Response.json({
+      relic_id: relicId,
+      // The only time the token ever appears. A client that loses it can
+      // never republish; the server cannot recover it by construction.
+      publish_token: publishToken,
+      upload_url: upload.url,
+      upload_method: upload.method,
+      upload_headers: upload.headers,
+      upload_expires_at: iso(upload.expiresAt),
+      relic_expires_at: relicExpiryIso(expiresAt),
+      report_url: `${config.serviceOrigin}/abuse`,
+      disclosure_url: `${config.serviceOrigin}/policy`,
+    });
+  }
+
+  /**
+   * A republish: the same relic id, new bytes, authorized by the publish
+   * token rather than by a fresh grant.
+   *
+   * The token check is a hash comparison, and the comparison is constant
+   * time, because a timing side channel on the one bearer credential this
+   * surface has would be the whole ballgame for a brute force.
+   *
+   * The takedown is consulted before the token is even hashed. A tombstoned
+   * id refuses forever whatever credential is presented, so no amount of
+   * token theft or brute force undoes a removal. That ordering is the abuse
+   * control; the reverse order would make it a suggestion.
+   *
+   * The new version's object lands beside the old one, which stays in place
+   * until the publish completes: a republish in flight must not be able to
+   * destroy the only servable bytes, and a delete arriving mid-upload still
+   * finds every version to hash and remove.
+   */
+  async function republish(
+    rawId: string,
+    request: Request,
+    ip: string,
+    now: number
+  ): Promise<Response> {
+    if (config.killSwitchEngaged) {
+      return refuse('service_paused', { retry_after_seconds: 300 });
+    }
+
+    // A republish is a publish. The same per-IP budget covers both, so a
+    // holder guessing at tokens cannot outrun the publish limiter.
+    const verdict = limiter.check(
+      `publish ${ip}`,
+      config.publishRateLimit,
+      now
+    );
+    if (!verdict.allowed) {
+      return refuse('publish_rate_limited', {
+        retry_after_seconds: verdict.retryAfterSeconds,
+      });
+    }
+
+    let relicId: string;
+    try {
+      relicId = parseRelicId(rawId);
+    } catch {
+      return refuse('invalid_relic_id');
+    }
+
+    const tombstone = await store.getTombstone(relicId);
+    if (tombstone !== undefined) {
+      return refuse('relic_removed', {
+        relic_id: relicId,
+        report_url: `${config.serviceOrigin}/abuse`,
+      });
+    }
+
+    const row = await store.getRelic(relicId);
+    if (row === undefined) {
+      return refuse('relic_not_found', { relic_id: relicId });
+    }
+
+    const body = (await readJson(request)) as Record<string, unknown>;
+
+    const presented = body['publish_token'];
+    if (typeof presented !== 'string') {
+      return refuse('invalid_publish_token', { relic_id: relicId });
+    }
+    const presentedHash = await sha256Hex(presented);
+    if (!timingSafeEqual(presentedHash, row.publishTokenHash)) {
+      return refuse('invalid_publish_token', { relic_id: relicId });
+    }
+
+    const rendererClass = body['renderer_class'];
+    if (typeof rendererClass !== 'string' || !isRendererClass(rendererClass)) {
+      return refuse('invalid_publish_metadata', { relic_id: relicId });
+    }
+
+    const declared = Number(body['declared_size_bytes']);
+    if (!Number.isSafeInteger(declared) || declared < 0) {
+      return refuse('invalid_publish_metadata', { relic_id: relicId });
+    }
+    if (declared > config.plaintextCapBytes) {
+      return refuse('size_over_cap', {
+        relic_id: relicId,
+        size_limit_bytes: config.plaintextCapBytes,
+        declared_size_bytes: declared,
+        size_basis: 'plaintext',
+      });
+    }
+
+    const declaredCiphertext = Number(body['declared_ciphertext_bytes']);
+    if (!Number.isSafeInteger(declaredCiphertext) || declaredCiphertext <= 0) {
+      return refuse('invalid_publish_metadata', { relic_id: relicId });
+    }
+    if (declaredCiphertext > config.ciphertextCapBytes) {
+      return refuse('size_over_cap', {
+        relic_id: relicId,
+        size_limit_bytes: config.plaintextCapBytes,
+        declared_size_bytes: declared,
+        size_basis: 'plaintext',
+      });
+    }
+    if (declared > 0) {
+      if (declaredCiphertext !== encryptedSize(declared)) {
+        return refuse('invalid_publish_metadata', { relic_id: relicId });
+      }
+    } else if (
+      declaredCiphertext > encryptedSize(0, undefined, MAX_HEADER_BYTES)
+    ) {
+      return refuse('invalid_publish_metadata', { relic_id: relicId });
+    }
+
+    const next = await store.beginVersion(
       relicId,
+      rendererClass as RendererClass,
+      declared
+    );
+    if (next === undefined) {
+      return refuse('relic_not_found', { relic_id: relicId });
+    }
+
+    const upload = await storage.signUpload(
+      objectKey(relicId, next.version),
       declaredCiphertext,
       config.urlValiditySeconds,
       now
@@ -423,7 +599,7 @@ export function createApp(options: AppOptions = {}): RelicApp {
       upload_method: upload.method,
       upload_headers: upload.headers,
       upload_expires_at: iso(upload.expiresAt),
-      relic_expires_at: relicExpiryIso(expiresAt),
+      relic_expires_at: relicExpiryIso(row.expiresAt),
       report_url: `${config.serviceOrigin}/abuse`,
       disclosure_url: `${config.serviceOrigin}/policy`,
     });
@@ -455,7 +631,7 @@ export function createApp(options: AppOptions = {}): RelicApp {
     if (row === undefined)
       return refuse('relic_not_found', { relic_id: relicId });
 
-    const object = await storage.stat(relicId);
+    const object = await storage.stat(objectKey(relicId, row.version));
     if (object === undefined) {
       return refuse('relic_not_yet_published', {
         relic_id: relicId,
@@ -528,7 +704,11 @@ export function createApp(options: AppOptions = {}): RelicApp {
       });
     }
 
-    const object = await storage.stat(relicId);
+    // The current version's object and nothing else. There is deliberately
+    // no way to ask for an older one: the cap, the metric, and the abuse
+    // controls all key on the relic id, and a servable history would give
+    // the egress arithmetic a term the cap cannot see.
+    const object = await storage.stat(objectKey(relicId, row.version));
 
     // A relic with no publisher-set lifetime cannot land here; its only end
     // is deletion.
@@ -615,7 +795,10 @@ export function createApp(options: AppOptions = {}): RelicApp {
 
     let url: string;
     let urlExpiresAt: number;
+    const sameVersion =
+      previous !== undefined && previous.version === row.version;
     const stillViable =
+      sameVersion &&
       previous !== undefined &&
       previous.urlExpiresAt - now >= config.minViableValiditySeconds * 1000;
 
@@ -626,18 +809,29 @@ export function createApp(options: AppOptions = {}): RelicApp {
       url = previous.url;
       urlExpiresAt = previous.urlExpiresAt;
     } else {
-      const signed = await storage.signDownload(relicId, validity, now);
+      const signed = await storage.signDownload(
+        objectKey(relicId, row.version),
+        validity,
+        now
+      );
       url = signed.url;
       urlExpiresAt = signed.expiresAt;
     }
 
     // A repeat inside the window is not a distinct open, and it still
     // consumes the cap. The two counters answer different questions: the open
-    // counter is the metric, the cap is the cost control.
-    const isDedup = previous !== undefined;
+    // counter is the metric, the cap is the cost control. A repeat against a
+    // new version is a first look at new content, not a reload, so only a
+    // same-version previous entry dedupes.
+    const isDedup = sameVersion;
     const capRemaining =
       config.downloadCap - (await store.consumeMint(relicId));
-    await store.rememberMint(relicId, ip, { url, urlExpiresAt, at: now });
+    await store.rememberMint(relicId, ip, {
+      url,
+      urlExpiresAt,
+      at: now,
+      version: row.version,
+    });
 
     const publishedAt = row.publishedAt ?? row.grantedAt;
     const dropReason = isDedup
@@ -718,15 +912,27 @@ export function createApp(options: AppOptions = {}): RelicApp {
       'abuse') as ReasonClass;
     const reference = url.searchParams.get('reference') ?? undefined;
 
-    // Hash before delete. A delete that captures no hash permanently loses the
-    // ability to blocklist that payload.
-    const bytes = await storage.read(relicId);
-    if (bytes === undefined) {
+    // Hash before delete, every version. A delete that captures no hash
+    // permanently loses the ability to blocklist that payload, and a
+    // republished relic can carry a different payload per version, so
+    // hashing only the current one would hand the blocklist a gap exactly
+    // one republish wide.
+    const hashes: string[] = [];
+    for (let version = 1; version <= row.version; version++) {
+      const bytes = await storage.read(objectKey(relicId, version));
+      if (bytes !== undefined) hashes.push(await ciphertextHash(bytes));
+    }
+    // The tombstone's hash of record is the newest version that had bytes:
+    // the content the relic was serving when it was taken down. An empty
+    // list is the same refusal it always was.
+    const hash = hashes.at(-1);
+    if (hash === undefined) {
       return new Response('Refused: no bytes to hash', { status: 409 });
     }
-    const hash = await ciphertextHash(bytes);
 
-    await storage.delete(relicId);
+    for (let version = 1; version <= row.version; version++) {
+      await storage.delete(objectKey(relicId, version));
+    }
     await store.putTombstone({
       id: relicId,
       publishIp: row.publishIp,
@@ -746,7 +952,9 @@ export function createApp(options: AppOptions = {}): RelicApp {
       reasonClass === 'abuse' || reasonClass === 'blocklist_match';
     const shouldBlocklist =
       override === 'true' ? true : override === 'false' ? false : automatic;
-    if (shouldBlocklist) await store.blocklist(hash);
+    if (shouldBlocklist) {
+      for (const versionHash of hashes) await store.blocklist(versionHash);
+    }
 
     return Response.json({
       relic_id: relicId,
@@ -904,6 +1112,58 @@ export function stripToRelicId(submitted: string): string {
 
 function iso(epochMillis: number): string {
   return new Date(epochMillis).toISOString();
+}
+
+/**
+ * The storage object name for one version of a relic's ciphertext.
+ *
+ * Version 1 keeps the bare path the bucket already serves objects from;
+ * versions 2 and up add a suffix. This is pinned by what production already
+ * holds, not open to choice here: five objects live at the bare path and
+ * must keep resolving, so the layout rule is backward compatibility rather
+ * than a migration.
+ */
+function objectKey(relicId: string, version: number): string {
+  return version === 1 ? relicId : `${relicId}/v${version}`;
+}
+
+/** The relic's bearer credential for republishing: 32 random bytes. */
+function mintPublishToken(): string {
+  const bytes = new Uint8Array(32);
+  crypto.getRandomValues(bytes);
+  let binary = '';
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  // base64url: the token travels in JSON bodies, and this alphabet holds no
+  // character a JSON string or a shell would treat specially.
+  return btoa(binary)
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/, '');
+}
+
+async function sha256Hex(value: string): Promise<string> {
+  const digest = await crypto.subtle.digest(
+    'SHA-256',
+    new TextEncoder().encode(value)
+  );
+  return [...new Uint8Array(digest)]
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('');
+}
+
+/**
+ * Constant-time equality, for the publish token's hash comparison.
+ *
+ * Both sides are fixed-length hex digests, so even the length branch
+ * discloses nothing, and an attacker timing wrong-token responses gets no
+ * prefix oracle on the one credential this surface checks.
+ */
+function timingSafeEqual(a: string, b: string): boolean {
+  let diff = a.length ^ b.length;
+  for (let index = 0; index < a.length && index < b.length; index++) {
+    diff |= a.charCodeAt(index) ^ b.charCodeAt(index);
+  }
+  return diff === 0;
 }
 
 /**

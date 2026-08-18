@@ -1,5 +1,19 @@
-import { beforeEach, describe, expect, test } from 'bun:test';
-import { openRelic, parseFragment, parseRelicId } from '@relic/format';
+import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
+import {
+  mkdir,
+  mkdtemp,
+  readFile as readStateFile,
+  rm,
+  writeFile as writeStateFile,
+} from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import {
+  encodeKey,
+  openRelic,
+  parseFragment,
+  parseRelicId,
+} from '@relic/format';
 import { createApp } from '@relic/server/src/app.ts';
 import { MemoryStorage } from '@relic/server/src/storage.ts';
 import { MemoryStore } from '@relic/server/src/store.ts';
@@ -11,7 +25,15 @@ import {
   publish,
   ServerRefusal,
 } from '../src/publish.ts';
-import { handleMessage, TOOL_DEFINITION, TOOL_NAME } from '../src/server.ts';
+import { republish } from '../src/republish.ts';
+import {
+  handleMessage,
+  REPUBLISH_TOOL_DEFINITION,
+  REPUBLISH_TOOL_NAME,
+  TOOL_DEFINITION,
+  TOOL_NAME,
+} from '../src/server.ts';
+import { publishStateModes, publishStatePath } from '../src/state.ts';
 
 const SERVICE = 'https://relic.example';
 
@@ -54,16 +76,18 @@ function shimFetch(): typeof globalThis.fetch {
     }
 
     if (url.hostname === 'storage.invalid') {
-      const segments = url.pathname.split('/').filter((s) => s.length > 0);
-      const relicId = segments[1] as string;
+      // Object keys are the bare id for version 1 and `{id}/v{n}` from
+      // version 2 on, so the key is everything after the route prefix
+      // rather than whichever segment happens to sit second.
+      const key = url.pathname.replace(/^\/(?:upload|o)\//, '');
 
       if (init?.method === 'PUT') {
         const body = init.body as Uint8Array;
-        storage.put(relicId, new Uint8Array(body));
+        storage.put(key, new Uint8Array(body));
         return new Response(null, { status: 200 });
       }
 
-      const bytes = await storage.read(relicId);
+      const bytes = await storage.read(key);
       if (bytes === undefined) return new Response(null, { status: 404 });
       return new Response(bytes as unknown as BodyInit, { status: 200 });
     }
@@ -85,7 +109,29 @@ function captureGrants(
   }) as typeof globalThis.fetch;
 }
 
-beforeEach(() => {
+/**
+ * Records every republish request body and every storage PUT target, so
+ * tests see which version's object was written and what rode the request.
+ */
+function captureRepublish(
+  bodies: Record<string, unknown>[],
+  uploads: string[]
+): typeof globalThis.fetch {
+  return (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = new URL(typeof input === 'string' ? input : String(input));
+    if (url.pathname.endsWith('/republish')) {
+      bodies.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
+    }
+    if (init?.method === 'PUT' && url.hostname === 'storage.invalid') {
+      uploads.push(url.pathname);
+    }
+    return deps.fetch(input, init);
+  }) as typeof globalThis.fetch;
+}
+
+let stateScratch: string;
+
+beforeEach(async () => {
   now = Date.parse('2026-08-02T12:00:00.000Z');
   storage = new MemoryStorage();
   disk = new Map();
@@ -102,6 +148,21 @@ beforeEach(() => {
     fetch: shimFetch(),
     clientName: 'relic-mcp/0.1.0 (test)',
   };
+
+  // Redirected per test, into a directory this run created, so no test
+  // touches a real config directory and the permission assertions read
+  // modes the client itself chose.
+  stateScratch = await mkdtemp(join(tmpdir(), 'relic-publish-state-'));
+  process.env['RELIC_PUBLISH_STATE'] = join(
+    stateScratch,
+    'relic-mcp',
+    'publish-state.json'
+  );
+});
+
+afterEach(async () => {
+  delete process.env['RELIC_PUBLISH_STATE'];
+  await rm(stateScratch, { recursive: true, force: true });
 });
 
 function writeFile(path: string, content: string | Uint8Array): void {
@@ -111,6 +172,20 @@ function writeFile(path: string, content: string | Uint8Array): void {
   );
 }
 
+/** The parsed publish state file, read from the path the client itself uses. */
+async function readStoredState(): Promise<{
+  relics: Record<
+    string,
+    { key: string; publish_token: string; version: number }
+  >;
+}> {
+  return JSON.parse(await readStateFile(publishStatePath(), 'utf8')) as {
+    relics: Record<
+      string,
+      { key: string; publish_token: string; version: number }
+    >;
+  };
+}
 /** Stand in for the viewer: mint, fetch, decrypt. */
 async function open(url: string, ip = '203.0.113.5') {
   const parsed = new URL(url);
@@ -404,7 +479,7 @@ describe('publisher-chosen lifetimes', () => {
 });
 
 describe('the MCP surface', () => {
-  test('advertises publish and describe, both prefixed with the product name', async () => {
+  test('advertises publish, republish, and describe, all prefixed with the product name', async () => {
     const response = await handleMessage(
       { jsonrpc: '2.0', id: 1, method: 'tools/list' },
       deps
@@ -412,6 +487,7 @@ describe('the MCP surface', () => {
     const tools = (response?.result as { tools: { name: string }[] }).tools;
     expect(tools.map((t) => t.name)).toEqual([
       'relic_publish',
+      'relic_republish',
       'relic_describe_client',
     ]);
     // The spec's own remedy for cross-server collisions is a name prefix.
@@ -448,7 +524,6 @@ describe('the MCP surface', () => {
       false
     );
   });
-
   test('describe_client states the transcript leak, not just the good news', async () => {
     const response = await handleMessage(
       {
@@ -611,7 +686,7 @@ describe('the MCP surface', () => {
     expect(result.content[0]?.text).toContain('transcript');
   });
 
-  test('returns all eight result members', async () => {
+  test('returns all nine result members', async () => {
     writeFile('/work/notes.md', '# hello');
     const response = await handleMessage(
       {
@@ -635,7 +710,9 @@ describe('the MCP surface', () => {
       'report_url',
       'resolved_path',
       'url',
+      'version',
     ]);
+    expect(structured['version']).toBe(1);
   });
 
   test('a failed publish is a tool error, not a protocol error', async () => {
@@ -693,11 +770,426 @@ describe('the MCP surface', () => {
   });
 });
 
+describe('republish', () => {
+  test('takes a relic_id and a path, and never a publish_token argument', () => {
+    const schema = REPUBLISH_TOOL_DEFINITION.inputSchema;
+    expect(Object.keys(schema.properties)).toEqual([
+      'relic_id',
+      'path',
+      'filename',
+      'ttl_days',
+    ]);
+    expect(schema.required).toEqual(['relic_id', 'path']);
+    expect(schema.additionalProperties).toBe(false);
+    // The token is loaded from local state, never accepted as input: an
+    // argument token would put the bearer secret in the transcript, which
+    // is exactly where this design refuses to put it.
+    expect(Object.keys(schema.properties)).not.toContain('publish_token');
+  });
+
+  test('a republish without a relic_id cannot be made', async () => {
+    const response = await handleMessage(
+      {
+        jsonrpc: '2.0',
+        id: 40,
+        method: 'tools/call',
+        params: { name: REPUBLISH_TOOL_NAME, arguments: { path: 'notes.md' } },
+      },
+      deps
+    );
+    expect(response?.error?.code).toBe(-32602);
+  });
+
+  test('a second publish to the same id is readable at the original URL', async () => {
+    writeFile('/work/report.md', '# v1\n\nfirst\n');
+    const first = await publish({ path: 'report.md' }, deps);
+
+    writeFile('/work/report.md', '# v2\n\nsecond\n');
+    const second = await republish(
+      { relic_id: first.relic_id, path: 'report.md' },
+      deps
+    );
+
+    expect(second.version).toBe(2);
+    expect(second.relic_id).toBe(first.relic_id);
+    expect(second.renderer_class).toBe('markdown');
+    expect(second.relic_expires_at).toBeNull();
+    // The unchanged URL is the promise a version makes. It is also the one
+    // place the key lives outside the state file, so it is not reprinted.
+    expect('url' in second).toBe(false);
+
+    now += 10 * 60 * 1000;
+    const viewed = await open(first.url);
+    expect(viewed.mintStatus).toBe(200);
+    expect(new TextDecoder().decode(viewed.opened?.content)).toBe(
+      '# v2\n\nsecond\n'
+    );
+    expect(viewed.opened?.envelope.entries[0]?.filename).toBe('report.md');
+  });
+
+  test('reuses the stored key rather than generating a new one', async () => {
+    writeFile('/work/notes.md', 'first');
+    const first = await publish({ path: 'notes.md' }, deps);
+    const { key } = parseFragment(new URL(first.url).hash);
+
+    writeFile('/work/notes.md', 'second');
+    await republish({ relic_id: first.relic_id, path: 'notes.md' }, deps);
+
+    const stored = await readStoredState();
+    // A fresh key would have been recorded here, and would have cut every
+    // holder of the original link off from the new content.
+    expect(stored.relics[first.relic_id]?.key).toBe(encodeKey(key));
+
+    now += 10 * 60 * 1000;
+    const viewed = await open(first.url);
+    expect(new TextDecoder().decode(viewed.opened?.content)).toBe('second');
+  });
+
+  test('the filename override reaches the new version envelope', async () => {
+    writeFile('/work/tmp-xyz.md', 'first');
+    const first = await publish({ path: 'tmp-xyz.md' }, deps);
+
+    writeFile('/work/tmp-xyz.md', 'second');
+    await republish(
+      { relic_id: first.relic_id, path: 'tmp-xyz.md', filename: 'final.md' },
+      deps
+    );
+
+    now += 10 * 60 * 1000;
+    const viewed = await open(first.url);
+    expect(viewed.opened?.envelope.entries[0]?.filename).toBe('final.md');
+  });
+
+  test('forwards ttl_days when set, omits it when unset, and uploads to versioned paths', async () => {
+    writeFile('/work/notes.md', 'first');
+    const first = await publish({ path: 'notes.md' }, deps);
+
+    const bodies: Record<string, unknown>[] = [];
+    const uploads: string[] = [];
+    const wire = { ...deps, fetch: captureRepublish(bodies, uploads) };
+
+    writeFile('/work/notes.md', 'second');
+    await republish({ relic_id: first.relic_id, path: 'notes.md' }, wire);
+    expect('ttl_days' in (bodies[0] ?? {})).toBe(false);
+
+    writeFile('/work/notes.md', 'third');
+    await republish(
+      { relic_id: first.relic_id, path: 'notes.md', ttl_days: 5 },
+      wire
+    );
+    expect(bodies[1]?.['ttl_days']).toBe(5);
+
+    // The wire carries the bearer token, the class from bytes, and the
+    // declared sizes; the uploads land on the versioned object paths.
+    expect(typeof bodies[0]?.['publish_token']).toBe('string');
+    expect(bodies[0]?.['renderer_class']).toBe('markdown');
+    expect(bodies[0]?.['declared_size_bytes']).toBe('second'.length);
+    expect(uploads[0]).toBe(`/upload/${first.relic_id}/v2`);
+    expect(uploads[1]).toBe(`/upload/${first.relic_id}/v3`);
+  });
+
+  test('counts versions locally, one per republish', async () => {
+    writeFile('/work/notes.md', 'one');
+    const first = await publish({ path: 'notes.md' }, deps);
+    expect(first.version).toBe(1);
+
+    writeFile('/work/notes.md', 'two');
+    const second = await republish(
+      { relic_id: first.relic_id, path: 'notes.md' },
+      deps
+    );
+    writeFile('/work/notes.md', 'three');
+    const third = await republish(
+      { relic_id: first.relic_id, path: 'notes.md' },
+      deps
+    );
+    expect(second.version).toBe(2);
+    expect(third.version).toBe(3);
+
+    const stored = await readStoredState();
+    expect(stored.relics[first.relic_id]?.version).toBe(3);
+  });
+});
+
+describe('local publish state', () => {
+  test('writes the file 0600 inside a 0700 directory', async () => {
+    writeFile('/work/notes.md', 'hello');
+    await publish({ path: 'notes.md' }, deps);
+
+    // Both are created by the client in this test, so the modes read here
+    // are the ones it chose, not ones a fixture staged.
+    const modes = await publishStateModes();
+    expect(modes.file).toBe(0o600);
+    expect(modes.directory).toBe(0o700);
+  });
+
+  test('records the id, the key, and the token of a version-1 publish', async () => {
+    writeFile('/work/notes.md', 'hello');
+    const result = await publish({ path: 'notes.md' }, deps);
+    const { key } = parseFragment(new URL(result.url).hash);
+
+    const stored = await readStoredState();
+    const entry = stored.relics[result.relic_id];
+    expect(entry?.key).toBe(encodeKey(key));
+    expect(entry?.publish_token.length).toBeGreaterThan(20);
+    expect(entry?.version).toBe(1);
+  });
+
+  test('refuses an id with no local state, without touching the network', async () => {
+    writeFile('/work/notes.md', 'hello');
+    let calls = 0;
+    const counting = ((...args: Parameters<typeof globalThis.fetch>) => {
+      calls += 1;
+      return deps.fetch(...args);
+    }) as typeof globalThis.fetch;
+
+    let refusal: PublishError | undefined;
+    try {
+      await republish(
+        { relic_id: '0123456789abcdefghjkmnpqst', path: 'notes.md' },
+        { ...deps, fetch: counting }
+      );
+    } catch (error) {
+      refusal = error as PublishError;
+    }
+
+    expect(refusal).toBeInstanceOf(PublishError);
+    expect(refusal?.code).toBe('no_local_publish_state');
+    expect(refusal?.message).toContain('another machine');
+    expect(refusal?.message).toContain('cannot be republished here');
+    // The refusal is decided locally, before any request can be made.
+    expect(calls).toBe(0);
+  });
+
+  test('an id that is not a relic id is named as such, not as another machine', async () => {
+    writeFile('/work/notes.md', 'hello');
+    let refusal: PublishError | undefined;
+    try {
+      await republish({ relic_id: 'not-a-relic-id', path: 'notes.md' }, deps);
+    } catch (error) {
+      refusal = error as PublishError;
+    }
+
+    expect(refusal?.code).toBe('no_local_publish_state');
+    expect(refusal?.message).toContain('is not a relic id');
+    expect(refusal?.message).not.toContain('another machine');
+  });
+
+  test('a corrupt state file refuses loudly and echoes none of its bytes', async () => {
+    writeFile('/work/notes.md', 'hello');
+    const first = await publish({ path: 'notes.md' }, deps);
+
+    // A torn tail, as a crash mid-write would leave: half of an entry that
+    // happens to be readable text.
+    await writeStateFile(
+      publishStatePath(),
+      '{"relics": {"broken-half": tru',
+      'utf8'
+    );
+
+    let refusal: PublishError | undefined;
+    try {
+      await republish({ relic_id: first.relic_id, path: 'notes.md' }, deps);
+    } catch (error) {
+      refusal = error as PublishError;
+    }
+
+    expect(refusal?.code).toBe('local_state_unreadable');
+    expect(refusal?.message).toContain('not valid JSON');
+    // The error names the file and the consequence, never the bytes in it.
+    expect(refusal?.message).not.toContain('broken-half');
+  });
+
+  test('a publish that cannot record state fails with the URL intact', async () => {
+    writeFile('/work/notes.md', 'hello');
+    // A directory where the file should be stands in for a full or
+    // read-only disk: every state write fails, nothing else does.
+    await mkdir(publishStatePath(), { recursive: true });
+
+    let refusal: PublishError | undefined;
+    try {
+      await publish({ path: 'notes.md' }, deps);
+    } catch (error) {
+      refusal = error as PublishError;
+    }
+
+    expect(refusal?.code).toBe('local_state_write_failed');
+    expect(refusal?.message).toContain(
+      'cannot be republished from this machine'
+    );
+    // The relic is live; handing its URL over in the failure is what keeps
+    // a state problem from becoming a lost link.
+    expect(String(refusal?.details['url'])).toContain('#r1');
+  });
+});
+
+describe('republish refusals', () => {
+  test('a wrong publish token surfaces invalid_publish_token distinctly', async () => {
+    writeFile('/work/notes.md', 'first');
+    const first = await publish({ path: 'notes.md' }, deps);
+
+    // The only honest road to the 403 is presenting a token the service
+    // did not hash, so tamper with the stored one.
+    const stored = await readStoredState();
+    stored.relics[first.relic_id]!.publish_token =
+      'a-token-the-service-never-hashed';
+    await writeStateFile(publishStatePath(), JSON.stringify(stored), 'utf8');
+
+    writeFile('/work/notes.md', 'second');
+    await expect(
+      republish({ relic_id: first.relic_id, path: 'notes.md' }, deps)
+    ).rejects.toMatchObject({ code: 'invalid_publish_token', status: 403 });
+
+    const response = await handleMessage(
+      {
+        jsonrpc: '2.0',
+        id: 41,
+        method: 'tools/call',
+        params: {
+          name: REPUBLISH_TOOL_NAME,
+          arguments: { relic_id: first.relic_id, path: 'notes.md' },
+        },
+      },
+      deps
+    );
+    const result = response?.result as {
+      isError: boolean;
+      content: { text: string }[];
+      structuredContent: { code: string };
+    };
+    expect(result.isError).toBe(true);
+    expect(result.structuredContent.code).toBe('invalid_publish_token');
+    const text = result.content[0]?.text ?? '';
+    expect(text).toContain('issued once');
+    expect(text).toContain('cannot be republished from');
+    expect(text).toContain('still be read');
+    // Distinct from the takedown refusal, which it must never be mistaken
+    // for: this relic still exists.
+    expect(text).not.toContain('takedown');
+  });
+
+  test('a removed relic is terminal, and the words say so', async () => {
+    writeFile('/work/notes.md', 'first');
+    const first = await publish({ path: 'notes.md' }, deps);
+
+    await app.fetch(
+      new Request(`${SERVICE}/api/relics/${first.relic_id}`, {
+        method: 'DELETE',
+        headers: { authorization: 'Bearer operator-secret' },
+      })
+    );
+
+    writeFile('/work/notes.md', 'second');
+    await expect(
+      republish({ relic_id: first.relic_id, path: 'notes.md' }, deps)
+    ).rejects.toMatchObject({ code: 'relic_removed', status: 410 });
+
+    const response = await handleMessage(
+      {
+        jsonrpc: '2.0',
+        id: 42,
+        method: 'tools/call',
+        params: {
+          name: REPUBLISH_TOOL_NAME,
+          arguments: { relic_id: first.relic_id, path: 'notes.md' },
+        },
+      },
+      deps
+    );
+    const result = response?.result as {
+      isError: boolean;
+      content: { text: string }[];
+      structuredContent: { code: string };
+    };
+    expect(result.isError).toBe(true);
+    expect(result.structuredContent.code).toBe('relic_removed');
+    const text = result.content[0]?.text ?? '';
+    expect(text).toContain('permanent');
+    expect(text).toContain('cannot revive it');
+    expect(text).toContain('Publish the content as a new relic');
+    // The token refusal is about this machine's standing; this one is
+    // about nobody's, ever again.
+    expect(text).not.toContain('publish token this machine holds');
+  });
+
+  test('the key and the token never appear in tool output', async () => {
+    writeFile('/work/notes.md', 'first');
+    const published = await handleMessage(
+      {
+        jsonrpc: '2.0',
+        id: 43,
+        method: 'tools/call',
+        params: { name: TOOL_NAME, arguments: { path: 'notes.md' } },
+      },
+      deps
+    );
+    const relicId = (
+      published?.result as { structuredContent: { relic_id: string } }
+    ).structuredContent.relic_id;
+    const stored = await readStoredState();
+    const entry = stored.relics[relicId]!;
+
+    // The publish result prints the URL, key in its fragment, by product
+    // design and with its disclosure. The token has no such license.
+    expect(JSON.stringify(published?.result)).not.toContain(
+      entry.publish_token
+    );
+
+    // The republish result prints neither secret, and no fragment either.
+    writeFile('/work/notes.md', 'second');
+    const republished = await handleMessage(
+      {
+        jsonrpc: '2.0',
+        id: 44,
+        method: 'tools/call',
+        params: {
+          name: REPUBLISH_TOOL_NAME,
+          arguments: { relic_id: relicId, path: 'notes.md' },
+        },
+      },
+      deps
+    );
+    const text = JSON.stringify(republished?.result);
+    expect(text).not.toContain(entry.publish_token);
+    expect(text).not.toContain(entry.key);
+    expect(text).not.toContain('#r1');
+
+    // The machine-bound refusal keeps the same discipline.
+    const refused = await handleMessage(
+      {
+        jsonrpc: '2.0',
+        id: 45,
+        method: 'tools/call',
+        params: {
+          name: REPUBLISH_TOOL_NAME,
+          arguments: {
+            relic_id: '0123456789abcdefghjkmnpqst',
+            path: 'notes.md',
+          },
+        },
+      },
+      deps
+    );
+    const refusedText = JSON.stringify(refused?.result);
+    expect(refusedText).not.toContain(entry.publish_token);
+    expect(refusedText).not.toContain(entry.key);
+  });
+});
+
 describe('guessMimetype', () => {
   test('maps known extensions', () => {
     expect(guessMimetype('a.md', 'markdown')).toBe('text/markdown');
     expect(guessMimetype('a.png', 'image')).toBe('image/png');
     expect(guessMimetype('a.html', 'html')).toBe('text/html');
+  });
+
+  test('declares component source as jsx, never as plain or javascript', () => {
+    // text/plain and text/javascript both read as `code` in the viewer, so
+    // a component published under either renders as escaped source with no
+    // error. The declaration has to say jsx for the executing route to be
+    // reachable at all.
+    expect(guessMimetype('a.jsx', 'jsx')).toBe('text/jsx');
+    expect(guessMimetype('a.tsx', 'jsx')).toBe('text/tsx');
   });
 
   test('falls back by class when the extension is unknown', () => {

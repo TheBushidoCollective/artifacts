@@ -1,5 +1,5 @@
 /**
- * The renderer class: the coarse, seven-value taxonomy the frame concedes to
+ * The renderer class: the coarse, eight-value taxonomy the frame concedes to
  * the operator so the success metric is computable at all.
  *
  * Two rules travel with it and neither is negotiable:
@@ -14,15 +14,18 @@
  *    Routing comes from sniffing after decryption, and it can only ever move
  *    content to a less privileged path.
  *
- * The taxonomy cuts exactly on the wedge boundary, so the metric's second
- * clause is computable with no ambiguity.
+ * The eighth value arrived with JSX rendering. Component source was
+ * previously `code`, but `code` is escaped text and a component's whole
+ * point is to execute, so it needed its own value on the renderable side
+ * carrying the same top privilege as `html`.
  */
 
-/** The seven values. Stored server-side against the relic ID, nowhere else. */
+/** The eight values. Stored server-side against the relic ID, nowhere else. */
 export type RendererClass =
   | 'markdown'
   | 'code'
   | 'html'
+  | 'jsx'
   | 'image'
   | 'media'
   | 'archive'
@@ -32,6 +35,7 @@ export const RENDERER_CLASSES: readonly RendererClass[] = [
   'markdown',
   'code',
   'html',
+  'jsx',
   'image',
   'media',
   'archive',
@@ -43,6 +47,7 @@ export const RENDERABLE_CLASSES: readonly RendererClass[] = [
   'markdown',
   'code',
   'html',
+  'jsx',
   'image',
 ];
 
@@ -120,9 +125,12 @@ const EXTENSIONS: Readonly<Record<string, RendererClass>> = {
   rar: 'archive',
 
   ts: 'code',
-  tsx: 'code',
   js: 'code',
-  jsx: 'code',
+  // Component source is its own class rather than `code`, because the jsx
+  // route executes it instead of escaping it. The dialect only picks the
+  // transpile transform; the privilege is identical either way.
+  jsx: 'jsx',
+  tsx: 'jsx',
   mjs: 'code',
   cjs: 'code',
   json: 'code',
@@ -258,8 +266,9 @@ export function sniffContentClass(content: Uint8Array): RendererClass {
 /**
  * How much the viewer has to trust content to render it this way.
  *
- * 3 executes script, 2 goes through an image decoder, 1 is escaped text, and
- * 0 is never rendered at all. The declared-versus-sniffed rule compares
+ * 3 executes script (an HTML page or a JSX component), 2 goes through an
+ * image decoder, 1 is escaped text, and 0 is never rendered at all. The
+ * declared-versus-sniffed rule compares
  * tiers rather than classes, because `markdown` and `code` differ only in how
  * escaped text is decorated and a spurious disagreement between them would
  * downgrade every Markdown relic ever published.
@@ -267,6 +276,7 @@ export function sniffContentClass(content: Uint8Array): RendererClass {
 export function privilegeTier(cls: RendererClass): 0 | 1 | 2 | 3 {
   switch (cls) {
     case 'html':
+    case 'jsx':
       return 3;
     case 'image':
       return 2;
@@ -322,10 +332,13 @@ export function leastPrivileged(
   first: RendererClass,
   second: RendererClass
 ): RendererClass {
-  // Ordered most privileged to least. `html` is the most dangerous thing the
-  // viewer will render, so a disagreement involving it always loses.
+  // Ordered most privileged to least. `html` and `jsx` are the two most
+  // dangerous things the viewer will render, and they carry identical
+  // privilege: both execute in the frame. A disagreement involving either
+  // always loses.
   const ranking: readonly RendererClass[] = [
     'html',
+    'jsx',
     'image',
     'markdown',
     'code',

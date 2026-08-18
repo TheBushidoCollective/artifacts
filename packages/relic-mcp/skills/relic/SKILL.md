@@ -1,6 +1,6 @@
 ---
 name: relic
-description: Publish a local file as an encrypted, shareable link when someone outside this session needs to see it. Use when the user says "share this", "send this to X", "publish this", "give me a link for this", "make this shareable", or has just been handed a generated report, HTML page, deck, image, or export and needs it somewhere a person can open. Also covers what the recipient sees, how long a link lives, and what the service can and cannot read.
+description: Publish a local file as an encrypted, shareable link when someone outside this session needs to see it. Use when the user says "share this", "send this to X", "publish this", "give me a link for this", "make this shareable", or has just been handed a generated report, HTML page, deck, image, or export and needs it somewhere a person can open. Also covers republishing a new version of an existing relic, what the recipient sees, how long a link lives, and what the service can and cannot read.
 ---
 
 # Relic
@@ -30,6 +30,38 @@ Optional arguments worth knowing:
 - `ttl_days` gives the link a lifetime in days, 1 to 3650. A relic is kept
   until it is deleted unless you set one. Shorter is better for anything
   sensitive: when the content should stop being available, say when.
+
+The result reports the relic as version 1 and its id. Keep the id if a later
+version of the same content will replace this one; that is what
+`relic_republish` is for.
+
+## Republishing
+
+Call `relic_republish` with the relic id and a new file:
+
+```
+relic_republish(relic_id: "0a2c...", path: "/Users/me/Downloads/report-v2.html")
+```
+
+The new file becomes version 2, then 3, and so on, encrypted under the same
+key as version 1. **The share URL does not change**: everyone holding the
+existing link now sees the new content, and there is no new link to hand out.
+`relic_id` is the 26-character id the original publish returned, not the URL.
+Optional `filename` overrides the display name in the new version.
+
+Two things to know before promising an update:
+
+- **Republishing works only on the machine that published.** The key and the
+  publish token are recorded locally when the first publish happens, in a
+  0600 file under the user's config directory. On any other machine the tool
+  refuses: the relic was published from another machine and cannot be
+  republished here. Neither secret is ever printed or logged.
+- **A takedown is terminal.** If the relic was removed, republishing cannot
+  revive it, ever, whatever token is presented. The tool says so plainly;
+  publish the content as a new relic instead.
+
+A relic's lifetime is set at its first publish and carries across versions
+unchanged.
 
 ## Say this when you hand over the link
 

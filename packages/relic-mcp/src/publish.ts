@@ -14,12 +14,14 @@
 
 import {
   deriveRendererClass,
+  encodeKey,
   encryptRelic,
   generateKey,
   generateRelicId,
   type RendererClass,
   relicUrl,
 } from '@relic/format';
+import { savePublishState } from './state.ts';
 
 /**
  * Codes for the legs the app server is not in.
@@ -27,7 +29,8 @@ import {
  * `spec/service.md` 1.1 owns app-server-originated failures. A purely local
  * file error and a failure on the client-to-storage upload leg have no
  * app-server status, so they get codes here, and these never collide with the
- * server's.
+ * server's. The state codes join them for the same reason: the publish state
+ * is this machine's alone, so its failures are this machine's to report.
  */
 export type ClientCode =
   | 'source_not_found'
@@ -36,7 +39,11 @@ export type ClientCode =
   | 'source_unreadable'
   | 'local_size_precheck_failed'
   | 'upload_failed'
-  | 'service_unreachable';
+  | 'service_unreachable'
+  | 'grant_missing_publish_token'
+  | 'no_local_publish_state'
+  | 'local_state_unreadable'
+  | 'local_state_write_failed';
 
 export class PublishError extends Error {
   override readonly name = 'PublishError';
@@ -94,6 +101,11 @@ export interface PublishInput {
 export interface PublishResult {
   readonly url: string;
   readonly relic_id: string;
+  /**
+   * Always 1 here: a fresh id is a fresh relic, and the client knows it
+   * without asking. Republish counts upward from the local state file.
+   */
+  readonly version: number;
   /** Null when the relic has no lifetime, which is now the default. */
   readonly relic_expires_at: string | null;
   readonly renderer_class: RendererClass;
@@ -121,8 +133,9 @@ export async function publish(
 
   // 1. Challenge. This returns the cap before a grant is requested, so the
   //    precheck below uses a number that came from the server moments ago
-  //    rather than a compiled-in constant that goes stale. Nothing is kept on
-  //    disk between invocations, so there is no stale local policy.
+  //    rather than a compiled-in constant that goes stale. Policy is never
+  //    cached locally; the one thing publish now keeps on disk is state, in
+  //    state.ts, and it is secrets, not policy.
   const challenge = await postJson(
     deps,
     `${deps.serviceOrigin}/api/challenge`,
@@ -199,39 +212,56 @@ export async function publish(
       }
       throw error;
     }
-
-    // 3. Straight to storage. The ciphertext never transits the app server.
-    const upload = await deps.fetch(String(grant['upload_url']), {
-      method: 'PUT',
-      // The grant signed this exact length, so it is sent explicitly rather
-      // than left to whatever the runtime infers from the body.
-      headers: { 'content-length': String(container.length) },
-      body: container as unknown as BodyInit,
-    });
-    if (!upload.ok) {
+    // The grant hands the publish token over exactly once, here. Without it
+    // this machine can never issue another version of the relic, so a grant
+    // missing it is refused before any bytes move, rather than after the
+    // object exists and the omission is somebody's support ticket.
+    const publishToken = grant['publish_token'];
+    if (typeof publishToken !== 'string' || publishToken.length === 0) {
       throw new PublishError(
-        'upload_failed',
-        `upload returned ${upload.status}`,
-        { relic_id: relicId, status: upload.status }
+        'grant_missing_publish_token',
+        'the grant carried no publish_token, so the relic would never be ' +
+          'republishable from this machine',
+        { relic_id: relicId }
       );
     }
 
-    // 4. Report completion, so the server has a true publish timestamp. A lost
-    //    confirmation is survivable by design: the client already holds the ID
-    //    and the key, so it can still produce a shareable URL.
+    // 3. Straight to storage, then report completion. Both legs are shared
+    //    with republish, because a version-2 object earns the same handling
+    //    a version-1 one does.
+    await putContainer(deps, relicId, String(grant['upload_url']), container);
+    await reportComplete(deps, relicId);
+
+    const url = relicUrl(deps.relicOrigin, relicId, key);
+
+    // 4. Record what a republish needs, before success is reported. State a
+    //    human cannot rebuild by hand only exists once it is on disk; a
+    //    publish that returns without this step is a link that can never be
+    //    updated from here, silently.
     try {
-      await postJson(
-        deps,
-        `${deps.serviceOrigin}/api/relics/${relicId}/complete`,
-        {}
+      await savePublishState(relicId, {
+        key: encodeKey(key),
+        publish_token: publishToken,
+        version: 1,
+      });
+    } catch (error) {
+      // The relic itself is live and the URL works, so both are handed over
+      // in the failure rather than lost to the error path. What failed is
+      // only the local record, but that failure is permanent for this
+      // machine, so it is reported as a failure.
+      throw new PublishError(
+        'local_state_write_failed',
+        'the relic is published and the link works, but recording it for ' +
+          `later republishing failed, so it cannot be republished from this ` +
+          `machine: ${(error as Error).message}`,
+        { relic_id: relicId, url }
       );
-    } catch {
-      // Deliberately swallowed. The relic is uploaded and the URL is valid.
     }
 
     return {
-      url: relicUrl(deps.relicOrigin, relicId, key),
+      url,
       relic_id: relicId,
+      version: 1,
       // Null is a real state now, the default one; String(null) would hand
       // the caller the four characters "null" where a date used to be.
       relic_expires_at:
@@ -252,7 +282,7 @@ export async function publish(
   );
 }
 
-async function readSource(
+export async function readSource(
   path: string,
   files: FileReader
 ): Promise<SourceFile> {
@@ -294,7 +324,7 @@ async function readSource(
   return { bytes, basename: files.basename(resolvedPath), resolvedPath };
 }
 
-async function postJson(
+export async function postJson(
   deps: PublishDeps,
   url: string,
   body: unknown
@@ -331,6 +361,60 @@ async function postJson(
   return parsed;
 }
 
+/**
+ * PUT the ciphertext to storage under a signed URL.
+ *
+ * Shared by publish and republish because the leg is identical and its
+ * details are load-bearing: the grant signed this exact length, so it is
+ * sent explicitly rather than left to whatever the runtime infers from the
+ * body.
+ */
+export async function putContainer(
+  deps: PublishDeps,
+  relicId: string,
+  uploadUrl: string,
+  container: Uint8Array
+): Promise<void> {
+  const upload = await deps.fetch(uploadUrl, {
+    method: 'PUT',
+    headers: { 'content-length': String(container.length) },
+    body: container as unknown as BodyInit,
+  });
+  if (!upload.ok) {
+    throw new PublishError(
+      'upload_failed',
+      `upload returned ${upload.status}`,
+      {
+        relic_id: relicId,
+        status: upload.status,
+      }
+    );
+  }
+}
+
+/**
+ * Report a finished upload, so the server has a true publish timestamp.
+ *
+ * An optimization, never a requirement: the confirmation is the message
+ * that gets lost, which is why the client owns the ID and the key before
+ * anything leaves the machine. The first mint anchors the timestamp if
+ * this call disappears.
+ */
+export async function reportComplete(
+  deps: PublishDeps,
+  relicId: string
+): Promise<void> {
+  try {
+    await postJson(
+      deps,
+      `${deps.serviceOrigin}/api/relics/${relicId}/complete`,
+      {}
+    );
+  } catch {
+    // Deliberately swallowed. The object is uploaded and the link is valid.
+  }
+}
+
 const MIMETYPES: Readonly<Record<string, string>> = {
   md: 'text/markdown',
   markdown: 'text/markdown',
@@ -354,12 +438,19 @@ const MIMETYPES: Readonly<Record<string, string>> = {
   zip: 'application/zip',
   gz: 'application/gzip',
   pdf: 'application/pdf',
+  // Component source declares what it is. text/plain or text/javascript
+  // would both read as `code` on the far side and the relic would render
+  // as escaped source, silently, which is the one outcome a component
+  // author would never guess had happened.
+  jsx: 'text/jsx',
+  tsx: 'text/tsx',
 };
 
 const CLASS_FALLBACK: Readonly<Record<RendererClass, string>> = {
   markdown: 'text/markdown',
   code: 'text/plain',
   html: 'text/html',
+  jsx: 'text/jsx',
   image: 'application/octet-stream',
   media: 'application/octet-stream',
   archive: 'application/octet-stream',

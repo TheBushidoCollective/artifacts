@@ -38,6 +38,7 @@ import {
   publish,
   ServerRefusal,
 } from './publish.ts';
+import { republish } from './republish.ts';
 
 export {
   LEGACY_PROTOCOL_VERSIONS,
@@ -72,6 +73,18 @@ export const TOOL_NAME = 'relic_publish';
  * the attack.
  */
 export const DESCRIBE_TOOL_NAME = 'relic_describe_client';
+
+/**
+ * The republish tool: a new version of a relic this machine published.
+ *
+ * A separate tool rather than an argument on publish, because the two calls
+ * hold different secrets and different failure modes. Publish mints an id
+ * and a key; republish consumes ones recorded locally, and refusing when
+ * they are absent is the machine boundary made visible. Folding it into
+ * publish would turn "published from another machine" into a retry loop
+ * that can never succeed.
+ */
+export const REPUBLISH_TOOL_NAME = 'relic_republish';
 
 /**
  * The ceiling on a publisher-supplied lifetime, matching the grant
@@ -119,6 +132,11 @@ export const TOOL_DEFINITION = {
     properties: {
       url: { type: 'string' },
       relic_id: { type: 'string' },
+      version: {
+        type: 'integer',
+        minimum: 1,
+        description: 'Always 1 from this tool; republish counts upward.',
+      },
       relic_expires_at: { type: ['string', 'null'] },
       renderer_class: { type: 'string' },
       filename: { type: 'string' },
@@ -129,6 +147,76 @@ export const TOOL_DEFINITION = {
     required: [
       'url',
       'relic_id',
+      'version',
+      'relic_expires_at',
+      'renderer_class',
+      'filename',
+      'resolved_path',
+      'report_url',
+      'disclosure_url',
+    ],
+    additionalProperties: false,
+  },
+} as const;
+
+export const REPUBLISH_TOOL_DEFINITION = {
+  name: REPUBLISH_TOOL_NAME,
+  title: 'Republish a relic',
+  description:
+    'Publish a new version of a relic this machine originally published, ' +
+    'encrypting under the same key so the existing share URL keeps working. ' +
+    'Only possible from the machine that holds the relic\'s key and publish ' +
+    'token; a relic that was taken down can never be revived.',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      relic_id: {
+        type: 'string',
+        description:
+          'The 26-character relic id the original publish returned.',
+      },
+      path: {
+        type: 'string',
+        description: 'Filesystem path to the file that becomes the new version.',
+      },
+      filename: {
+        type: 'string',
+        description:
+          'Optional. Overrides the name written into the encrypted envelope ' +
+          'header of the new version. Defaults to the basename of `path`.',
+      },
+      ttl_days: {
+        type: 'integer',
+        minimum: 1,
+        maximum: MAX_TTL_DAYS,
+        description:
+          'Optional. A lifetime in days, forwarded on the republish ' +
+          'request. The service fixes a relic\'s lifetime at its first ' +
+          'publish, so treat this as reserved.',
+      },
+    },
+    required: ['relic_id', 'path'],
+    additionalProperties: false,
+  },
+  outputSchema: {
+    type: 'object',
+    properties: {
+      relic_id: { type: 'string' },
+      version: {
+        type: 'integer',
+        minimum: 2,
+        description: 'The version just published.',
+      },
+      relic_expires_at: { type: ['string', 'null'] },
+      renderer_class: { type: 'string' },
+      filename: { type: 'string' },
+      resolved_path: { type: 'string' },
+      report_url: { type: 'string' },
+      disclosure_url: { type: 'string' },
+    },
+    required: [
+      'relic_id',
+      'version',
       'relic_expires_at',
       'renderer_class',
       'filename',
@@ -223,7 +311,13 @@ export async function handleMessage(
       return {
         jsonrpc: '2.0',
         id,
-        result: { tools: [TOOL_DEFINITION, DESCRIBE_TOOL_DEFINITION] },
+        result: {
+          tools: [
+            TOOL_DEFINITION,
+            REPUBLISH_TOOL_DEFINITION,
+            DESCRIBE_TOOL_DEFINITION,
+          ],
+        },
       };
 
     case 'tools/call':
@@ -255,11 +349,18 @@ async function callTool(
           key_transmitted_to_service: false,
           plaintext_transmitted_to_service: false,
           ciphertext_destination: 'object storage, via a signed URL',
+          local_publish_state:
+            'relic id, key, and publish token per relic, written 0600 under ' +
+            'the user config directory; never printed, never sent',
           service_origin: deps.serviceOrigin,
         },
         isError: false,
       },
     };
+  }
+
+  if (params['name'] === REPUBLISH_TOOL_NAME) {
+    return callRepublish(id, params, deps);
   }
 
   if (params['name'] !== TOOL_NAME) {
@@ -283,31 +384,21 @@ async function callTool(
   const filename =
     typeof args['filename'] === 'string' ? args['filename'] : undefined;
 
-  // A lifetime is opt-in: absent or null means the relic is kept until it is
-  // deleted. A value that fails the contract is refused rather than dropped,
-  // because silently dropping it publishes the opposite of what was asked:
-  // a relic meant to die in days lives forever.
-  const rawTtlDays = args['ttl_days'];
-  let ttlDays: number | undefined;
-  if (rawTtlDays !== undefined && rawTtlDays !== null) {
-    if (
-      typeof rawTtlDays !== 'number' ||
-      !Number.isSafeInteger(rawTtlDays) ||
-      rawTtlDays < 1 ||
-      rawTtlDays > MAX_TTL_DAYS
-    ) {
-      return errorResponse(
-        id,
-        ERROR_CODES.invalidParams,
-        `\`ttl_days\` must be an integer between 1 and ${MAX_TTL_DAYS}, or ` +
-          'omitted to keep the relic until it is deleted'
-      );
-    }
-    ttlDays = rawTtlDays;
+  const ttlDays = parseTtlDays(args['ttl_days']);
+  if (!ttlDays.ok) {
+    return errorResponse(
+      id,
+      ERROR_CODES.invalidParams,
+      `\`ttl_days\` must be an integer between 1 and ${MAX_TTL_DAYS}, or ` +
+        'omitted to keep the relic until it is deleted'
+    );
   }
 
   try {
-    const result = await publish({ path, filename, ttl_days: ttlDays }, deps);
+    const result = await publish(
+      { path, filename, ttl_days: ttlDays.days },
+      deps
+    );
     return {
       jsonrpc: '2.0',
       id,
@@ -320,7 +411,8 @@ async function callTool(
           {
             type: 'text',
             text:
-              `Published ${result.filename} as a relic.\n\n${result.url}\n\n` +
+              `Published ${result.filename} as version 1 of a new relic.\n\n` +
+              `${result.url}\n\n` +
               // No lifetime is the default, so the agent relaying this needs
               // a sentence that says so, not a date-shaped hole.
               (result.relic_expires_at === null
@@ -328,7 +420,8 @@ async function callTool(
                 : `Expires ${result.relic_expires_at}. `) +
               'Anyone with this link, ' +
               'including its fragment, can read the file. The key is in the ' +
-              'fragment and it is now in this transcript.\n' +
+              'fragment and it is now in this transcript. This machine can ' +
+              'republish it later; the link will not change.\n' +
               `What Relic knows: ${result.disclosure_url}`,
           },
         ],
@@ -340,6 +433,122 @@ async function callTool(
     return { jsonrpc: '2.0', id, result: toolError(error) };
   }
 }
+
+async function callRepublish(
+  id: string | number | null,
+  params: Record<string, unknown>,
+  deps: PublishDeps
+): Promise<JsonRpcResponse> {
+  const args = (params['arguments'] ?? {}) as Record<string, unknown>;
+  const relicId = args['relic_id'];
+  if (typeof relicId !== 'string' || relicId.length === 0) {
+    return errorResponse(
+      id,
+      ERROR_CODES.invalidParams,
+      '`relic_id` is required and must be a string'
+    );
+  }
+
+  const path = args['path'];
+  if (typeof path !== 'string' || path.length === 0) {
+    return errorResponse(
+      id,
+      ERROR_CODES.invalidParams,
+      '`path` is required and must be a string'
+    );
+  }
+
+  const filename =
+    typeof args['filename'] === 'string' ? args['filename'] : undefined;
+
+  const ttlDays = parseTtlDays(args['ttl_days']);
+  if (!ttlDays.ok) {
+    return errorResponse(
+      id,
+      ERROR_CODES.invalidParams,
+      `\`ttl_days\` must be an integer between 1 and ${MAX_TTL_DAYS}, or ` +
+        'omitted to leave the lifetime as the first publish set it'
+    );
+  }
+
+  try {
+    const result = await republish(
+      { relic_id: relicId, path, filename, ttl_days: ttlDays.days },
+      deps
+    );
+    return {
+      jsonrpc: '2.0',
+      id,
+      result: {
+        // No URL is printed here, on purpose. It has not changed, and
+        // reprinting it would reprint the key for no new reader; the first
+        // publish already made that disclosure once.
+        content: [
+          {
+            type: 'text',
+            text:
+              `Republished ${result.filename} as version ${result.version} ` +
+              `of relic ${result.relic_id}.\n\n` +
+              'The share URL is unchanged: everyone holding the existing ' +
+              'link, including its fragment, now sees this content. There ' +
+              'is no new link to hand out.\n\n' +
+              (result.relic_expires_at === null
+                ? 'The relic does not expire; it is kept until it is deleted.'
+                : `Expires ${result.relic_expires_at}.`) +
+              '\n' +
+              `What Relic knows: ${result.disclosure_url}`,
+          },
+        ],
+        structuredContent: result,
+        isError: false,
+      },
+    };
+  } catch (error) {
+    return { jsonrpc: '2.0', id, result: toolError(error) };
+  }
+}
+
+/**
+ * A lifetime is opt-in: absent or null means no change from the default. A
+ * value that fails the contract is refused rather than dropped, because
+ * silently dropping it does the opposite of what was asked: a relic meant
+ * to die in days lives forever.
+ */
+function parseTtlDays(
+  raw: unknown
+): { ok: true; days: number | undefined } | { ok: false } {
+  if (raw === undefined || raw === null) return { ok: true, days: undefined };
+  if (
+    typeof raw !== 'number' ||
+    !Number.isSafeInteger(raw) ||
+    raw < 1 ||
+    raw > MAX_TTL_DAYS
+  ) {
+    return { ok: false };
+  }
+  return { ok: true, days: raw };
+}
+
+/**
+ * Republish refusals a publisher must understand on their own terms.
+ *
+ * The server's problem document carries the code; these sentences carry
+ * what the publisher can still do, because "403" and "410" answer nothing
+ * a human would ask. The two must stay distinct: one means this machine
+ * lost its standing, the other means nobody has any, ever again.
+ */
+const REFUSAL_GUIDANCE: Readonly<Record<string, string>> = {
+  invalid_publish_token:
+    'The publish token this machine holds for that relic was rejected. It ' +
+    'is issued once, at first publish, and never changes, so a rejection ' +
+    'means the local record no longer matches the service\'s. The relic can ' +
+    'still be read at its existing link, but it cannot be republished from ' +
+    'here.',
+  relic_removed:
+    'That relic was taken down. A takedown is permanent: republishing ' +
+    'cannot revive it, whatever token is presented. Publish the content as ' +
+    'a new relic instead.',
+};
 
 /**
  * A failed publish is a tool error, not a protocol error.
@@ -358,8 +567,16 @@ function toolError(error: unknown): Record<string, unknown> {
     };
   }
   if (error instanceof ServerRefusal) {
+    const guidance = REFUSAL_GUIDANCE[error.code];
     return {
-      content: [{ type: 'text', text: `${error.code}: ${error.message}` }],
+      content: [
+        {
+          type: 'text',
+          text:
+            `${error.code}: ${error.message}` +
+            (guidance === undefined ? '' : `\n${guidance}`),
+        },
+      ],
       structuredContent: { code: error.code, ...error.problem },
       isError: true,
     };
@@ -400,6 +617,14 @@ What happens when you publish a file:
 What the service operator can see: that a relic exists, roughly how big it is,
 what coarse class it was declared as, the publishing IP, and when it was
 fetched. Never the contents, and never the key.
+
+What this keeps on disk: for each relic you publish, its id, its key, and a
+publish token, in a 0600 file under your user config directory. That record
+is what lets a relic be republished later, and it is why republishing works
+only on the machine that published. The token's SHA-256 is the only copy the
+service ever holds, and neither secret is ever printed or logged. Deleting
+the file changes nothing for existing links; it only ends this machine's
+ability to update those relics.
 
 What this does NOT protect against: the key is returned to your agent in the
 URL, so it enters the model's context and your session transcript. That is

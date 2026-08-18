@@ -33,9 +33,14 @@ For any client that takes a JSON config:
 3. Encrypts locally with AES-128-GCM under RFC 8188 `aes128gcm` framing.
 4. Uploads **only ciphertext**, straight to object storage under a signed URL.
    It does not pass through the Relic service.
-5. Tells the service three things: a coarse renderer class from a seven-value
+5. Tells the service three things: a coarse renderer class from an eight-value
    list, this client's name, and the ciphertext's byte length. Not your
    filename, not the mimetype, not the contents.
+6. Records the relic's id, key, and publish token locally, in a 0600 file
+   under your user config directory, so the relic can be republished from
+   this machine later. See [Republishing](#republishing). The service never
+   receives the key or the token plaintext; it keeps only a SHA-256 of the
+   token.
 
 Call the `relic_describe_client` tool and it will tell you all of this itself,
 without reading a file or making a request.
@@ -48,6 +53,48 @@ model's context and your session transcript on every publish.** Zero-knowledge
 holds against the Relic operator. It does not hold against your model provider
 or whoever stores your transcripts. That is structural, not a defect awaiting
 a fix.
+
+## Republishing
+
+`relic_republish` publishes a new version of a relic this machine originally
+published: same id, same key, **same share URL**. Everyone holding the
+existing link sees the new content; there is no new link to hand out.
+
+```json
+{
+  "name": "relic_republish",
+  "arguments": { "relic_id": "0a2c...", "path": "./report-v2.md" }
+}
+```
+
+It takes `relic_id` (the 26-character id the original publish returned) and
+`path`, plus an optional `filename` override and an optional `ttl_days` that
+is forwarded on the request. Versions count from 1: `relic_publish` reports
+version 1, each republish reports the next number, and the URL never changes
+across them. A relic's lifetime is fixed at its first publish and carries
+across versions.
+
+Republishing needs the relic's key and its publish token, so the first
+`relic_publish` records both in a local state file:
+`$XDG_CONFIG_HOME/relic-mcp/publish-state.json` by default
+(`~/.config/relic-mcp/publish-state.json` when `XDG_CONFIG_HOME` is unset),
+created `0600` inside a `0700` directory, and redirectable with
+`RELIC_PUBLISH_STATE`. Consequences worth stating plainly:
+
+- **Only that machine can republish.** Anywhere else, the tool refuses: the
+  relic was published from another machine and cannot be republished here.
+  Copying the state file to another machine moves the ability with it.
+- **The file holds the key and the token.** They are never printed, logged,
+  or returned by any tool result. The service stores only a SHA-256 of the
+  token, so it cannot reconstruct either one.
+- **Losing the file changes nothing for existing links**; it only ends that
+  machine's ability to update those relics.
+- **A takedown is permanent.** A removed relic answers `relic_removed`
+  (HTTP 410) forever, whatever token is presented, and republishing cannot
+  revive it. Publish the content as a new relic instead. A rejected token is
+  its own refusal (`invalid_publish_token`, HTTP 403): the local record no
+  longer matches the service's, and the relic cannot be republished from
+  this machine, though it can still be read.
 
 ## Why it runs locally
 
@@ -65,7 +112,8 @@ binding the tarball to a specific commit and workflow.
 
 | Tool | Input | Notes |
 |---|---|---|
-| `relic_publish` | `path`, optional `filename`, `ttl_days` | A filesystem path. Inline content is deliberately not accepted, so the plaintext never joins the key in your transcript. A relic is kept until it is deleted; `ttl_days` (an integer, 1 to 3650) gives it a lifetime. |
+| `relic_publish` | `path`, optional `filename`, `ttl_days` | A filesystem path. Inline content is deliberately not accepted, so the plaintext never joins the key in your transcript. A relic is kept until it is deleted; `ttl_days` (an integer, 1 to 3650) gives it a lifetime. Reports the relic as version 1. |
+| `relic_republish` | `relic_id`, `path`, optional `filename`, `ttl_days` | Publishes a new version under the same key, so the share URL is unchanged. Works only on the machine holding that relic's key and publish token; a taken-down relic can never be revived. |
 | `relic_describe_client` | none | Explains the encryption path. Reads nothing, sends nothing. |
 
 ## Environment
@@ -75,6 +123,7 @@ binding the tarball to a specific commit and workflow.
 | `RELIC_SERVICE_ORIGIN` | The Relic service to publish to. |
 | `RELIC_ORIGIN` | Origin used to build the shareable URL. Defaults to the above. |
 | `RELIC_CLIENT_NAME` | Reported to the service as the publishing client. |
+| `RELIC_PUBLISH_STATE` | Where the publish state file lives. Defaults to `$XDG_CONFIG_HOME/relic-mcp/publish-state.json`, or `~/.config/relic-mcp/publish-state.json`. |
 | `RELIC_MCP_HTTP` | `1` to serve Streamable HTTP instead of stdio. |
 | `RELIC_MCP_PORT`, `RELIC_MCP_HOST` | HTTP bind. Defaults to `127.0.0.1:7333`. |
 | `RELIC_MCP_ALLOWED_ORIGINS` | Comma-separated `Origin` allowlist for HTTP. |
@@ -82,8 +131,10 @@ binding the tarball to a specific commit and workflow.
 ## Protocol
 
 MCP revision `2026-07-28`, the stateless one: no handshake, no session, no
-`Mcp-Session-Id`. Nothing is retained between calls. The handshake-based
-revisions (`2025-11-25` and earlier) are still answered.
+`Mcp-Session-Id`. No protocol state is retained between calls; the one thing
+that does outlive a call is the per-machine publish state file described
+above. The handshake-based revisions (`2025-11-25` and earlier) are still
+answered.
 
 Requires Node 18 or newer.
 

@@ -148,7 +148,7 @@ export function createApp(options: AppOptions = {}): RelicApp {
       return new Response(REGISTER_SW_JS, {
         headers: {
           'content-type': 'text/javascript; charset=utf-8',
-          'cache-control': 'public, max-age=3600',
+          'cache-control': 'no-store',
         },
       });
     }
@@ -159,8 +159,12 @@ export function createApp(options: AppOptions = {}): RelicApp {
     return new Response(asset.body as unknown as BodyInit, {
       headers: {
         'content-type': asset.contentType,
-        // The shell itself is no-store; its assets are immutable per deploy.
-        'cache-control': 'public, max-age=3600',
+        // The shell and its assets are all no-store. The build emits stable
+        // filenames, so an HTTP cache would serve the previous deploy's code
+        // against the new server for its whole TTL; measured in the field as
+        // a shipped fix that did not run for up to an hour. Repeat visits are
+        // cached by the service worker, which revalidates per navigation.
+        'cache-control': 'no-store',
         'referrer-policy': 'no-referrer',
         'x-content-type-options': 'nosniff',
       },

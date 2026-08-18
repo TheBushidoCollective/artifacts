@@ -123,6 +123,15 @@ describe('the sandbox page', () => {
     expect(response.headers.get('cache-control')).toBe('no-store');
   });
 
+  test('shell assets are no-store too, because their filenames are stable', async () => {
+    // Measured in the field: viewer.js served with max-age made a shipped
+    // fix not run for returning browsers for up to an hour after the deploy.
+    // The service worker is the caching layer; the HTTP cache only added
+    // staleness.
+    const response = await app().fetch(get('/assets/viewer.js'));
+    expect(response.headers.get('cache-control')).toBe('no-store');
+  });
+
   test('is reserved, so it can never be shadowed by an issued id', async () => {
     const { RESERVED_SEGMENTS } = await import('@relic/format');
     expect(RESERVED_SEGMENTS).toContain('sandbox.html');

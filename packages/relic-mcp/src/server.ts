@@ -263,6 +263,40 @@ export const SERVER_INFO = {
 export const CAPABILITIES = { tools: {} } as const;
 
 /**
+ * Server-level guidance, returned on the handshake so a client can put it in
+ * the model's context before any tool is called.
+ *
+ * The plugin ships a skill with the same facts, but a skill only reaches
+ * Claude Code, and only when somebody installs the plugin rather than wiring
+ * this server directly. Every other client saw tool descriptions and nothing
+ * else, which left four things an agent cannot read off a schema.
+ *
+ * Item four is the reason this exists at all rather than living only in the
+ * publish result. The result is returned after the file is written, which is
+ * too late for an agent that already linked a stylesheet from a CDN. This
+ * lands before generation, which is the only moment the advice can be taken.
+ *
+ * It costs context on every session, so it stays short and it stays true.
+ * Anything that needs a paragraph belongs in the skill or the disclosure.
+ */
+export const INSTRUCTIONS = `Relic turns a file on this machine into an \
+encrypted link. Encryption happens locally, only ciphertext is uploaded, and \
+the key lives in the URL fragment, which browsers never send to a server.
+
+Four things that change how you should act:
+
+1. The link is the credential. Anyone holding it, fragment included, can read \
+the file. Do not paste it into a tracker, a log, or a public channel.
+2. Publishing puts the key in this transcript. That is structural rather than \
+a defect, and worth saying plainly when you hand the link over.
+3. A relic can be republished only from the machine that published it, which \
+is where its key and publish token are stored. Anywhere else it refuses, and \
+no retry changes that.
+4. Rendered HTML and JSX run in an isolated frame with no network access. \
+Inline the styles, scripts, fonts, and images a page needs, because a CDN \
+reference renders as nothing. Decide that before you write the file.`;
+
+/**
  * Handle one JSON-RPC message.
  *
  * Returns undefined for notifications, which carry no id and take no
@@ -297,6 +331,7 @@ export async function handleMessage(
           protocolVersions: [...SUPPORTED_PROTOCOL_VERSIONS],
           capabilities: CAPABILITIES,
           serverInfo: SERVER_INFO,
+          instructions: INSTRUCTIONS,
         },
       };
 
@@ -312,6 +347,7 @@ export async function handleMessage(
           protocolVersion: isSupportedVersion(asked) ? asked : PROTOCOL_VERSION,
           capabilities: CAPABILITIES,
           serverInfo: SERVER_INFO,
+          instructions: INSTRUCTIONS,
         },
       };
     }

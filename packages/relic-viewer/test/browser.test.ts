@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import {
+  buildBar,
   renderSandboxedHtml,
   renderSandboxedJsx,
   safeDownloadName,
@@ -253,6 +254,13 @@ describe('the usercontent frame the render routes build', () => {
         created.push(element);
         return element;
       },
+      // The bar's icons are inline SVG, which comes through the namespaced
+      // constructor rather than createElement.
+      createElementNS: (_ns: string, tag: string) => {
+        const element = new ElementStub(tag);
+        created.push(element);
+        return element;
+      },
     };
     (globalThis as { window?: unknown }).window = {
       addEventListener: () => {},
@@ -308,5 +316,28 @@ describe('the usercontent frame the render routes build', () => {
       USERCONTENT_ORIGIN
     );
     expect(sandboxAttributeOf(wrapper)).toBe('allow-scripts');
+  });
+
+  test('the marker says the same thing to the eye and to a screen reader', () => {
+    // WCAG 2.5.3 asks the accessible name to contain the visible label, and
+    // these were separate strings that drifted the moment they were written:
+    // the label read "Runs author code" while the name read "the author's
+    // code", which is exactly what breaks voice control, since the user says
+    // what they can see.
+    buildBar(view('sandboxed-html', '<p>hi</p>'), 'aaaaaaaaaaaaaaaaaaaaaaaaaa');
+
+    const marker = created.find((element) =>
+      element.className.split(' ').includes('marker')
+    );
+    if (marker === undefined) throw new Error('the bar built no marker');
+
+    const name = marker.attributes.get('aria-label') ?? '';
+    const visible = marker.children
+      .map((child) => child.textContent)
+      .join('')
+      .trim();
+
+    expect(visible.length).toBeGreaterThan(0);
+    expect(name).toContain(visible);
   });
 });

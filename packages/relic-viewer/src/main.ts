@@ -39,6 +39,14 @@ const SERVICE_ORIGIN =
  */
 const WORDMARK = 'relik.link';
 
+/**
+ * The marker beside the actions, in one place.
+ *
+ * It is the visible label, the accessible name, and the stem of the tooltip,
+ * and it was three separate strings until two of them disagreed.
+ */
+const MARKER_LABEL = 'Runs author code, isolated';
+
 const ICONS = {
   copy: 'M5 2h7a1 1 0 0 1 1 1v8h-1V3H5V2zM3 4h7a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1zm0 1v8h7V5H3z',
   download:
@@ -167,7 +175,7 @@ function downloadContent(view: ReadyView): void {
  * selectable. The filename is untrusted display text and goes in through
  * `textContent`.
  */
-function buildBar(view: ReadyView, relicId: string): HTMLElement {
+export function buildBar(view: ReadyView, relicId: string): HTMLElement {
   const bar = document.createElement('header');
   bar.className = 'bar';
 
@@ -206,11 +214,15 @@ function buildBar(view: ReadyView, relicId: string): HTMLElement {
   marker.className = 'action marker';
   marker.href = `${SERVICE_ORIGIN}/policy`;
   marker.rel = 'noopener noreferrer';
-  marker.setAttribute('aria-label', 'Runs the author\u2019s code, isolated');
-  marker.title = 'Runs the author\u2019s code, isolated. What Relic knows.';
+  // One string for the label and the accessible name, because WCAG 2.5.3
+  // wants the name to contain the visible text and these had drifted: the
+  // label read "Runs author code" while the name read "the author's code",
+  // which is exactly the mismatch that breaks speech control.
+  marker.setAttribute('aria-label', MARKER_LABEL);
+  marker.title = `${MARKER_LABEL}. What Relic knows.`;
   marker.appendChild(icon(ICONS.source));
   const markerText = document.createElement('span');
-  markerText.textContent = 'Runs author code, isolated';
+  markerText.textContent = MARKER_LABEL;
   marker.appendChild(markerText);
   actions.appendChild(marker);
 

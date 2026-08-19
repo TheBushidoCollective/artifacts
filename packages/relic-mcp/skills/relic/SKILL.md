@@ -85,9 +85,15 @@ Also worth one line, unprompted, the first time in a session:
 ## What the recipient gets
 
 A page that fetches the ciphertext, decrypts it in their browser, and renders
-by type. Markdown, code, images, and plain text render inline. HTML renders in
-a sandboxed frame on a separate origin, so a published page cannot reach the
-key or the service. Anything else offers a download.
+by type. Markdown, code, images, and plain text render inline. HTML and JSX
+render in a sandboxed frame on a separate origin, so a published page cannot
+reach the key or the service. Anything else offers a download.
+
+That frame has **no network access**: its policy permits no remote source at
+all, so a page cannot fetch, beacon, or load an external image, font, or
+script. Inline what a page needs when you generate it, because a CDN
+reference renders as nothing. The upside is that a relic cannot phone home or
+learn the recipient's IP address.
 
 They need the whole URL including the `#...` part. A link truncated at the `#`
 is a page that cannot decrypt anything, and that is the most common way sharing

@@ -200,6 +200,57 @@ describe('the version the server reports', () => {
   });
 });
 
+describe('the handshake carries instructions', () => {
+  // A skill only reaches Claude Code, and only when the plugin is installed.
+  // Every other client had tool descriptions and nothing else.
+  const facts = [
+    // The link is the credential.
+    /credential/i,
+    // The key reaches the transcript on every publish.
+    /transcript/i,
+    // Republish is bound to the publishing machine.
+    /republished only from the machine/i,
+    // The frame cannot reach the network, which has to be known before a page
+    // is generated rather than after it is published.
+    /no network access/i,
+  ];
+
+  test('server/discover returns them', async () => {
+    const response = await handleMessage(rpc('server/discover'), deps);
+    const result = response?.result as { instructions?: string };
+    expect(typeof result.instructions).toBe('string');
+    for (const fact of facts) expect(result.instructions).toMatch(fact);
+  });
+
+  test('the legacy initialize returns them too', async () => {
+    const response = await handleMessage(
+      rpc('initialize', { protocolVersion: PROTOCOL_VERSION }),
+      deps
+    );
+    const result = response?.result as { instructions?: string };
+    expect(typeof result.instructions).toBe('string');
+    for (const fact of facts) expect(result.instructions).toMatch(fact);
+  });
+
+  test('stay short, because they cost context every session', async () => {
+    const { INSTRUCTIONS } = await import('../src/server.ts');
+    expect(INSTRUCTIONS.length).toBeLessThan(1200);
+  });
+
+  test('do not drift from the skill on the facts that matter', async () => {
+    // Two surfaces, two audiences, one set of load-bearing facts. The wording
+    // is free to differ; a fact appearing in one and not the other is how a
+    // client ends up told something the other denies.
+    const skill = await Bun.file(
+      new URL('../skills/relic/SKILL.md', import.meta.url).pathname
+    ).text();
+
+    expect(skill).toMatch(/transcript/i);
+    expect(skill).toMatch(/no network access/i);
+    expect(skill).toMatch(/machine that published/i);
+  });
+});
+
 describe('the legacy handshake still works', () => {
   test('initialize is answered, which makes this a dual-era server', async () => {
     const response = await handleMessage(

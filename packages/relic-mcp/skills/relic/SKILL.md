@@ -1,6 +1,6 @@
 ---
 name: relic
-description: Publish a local file as an encrypted, shareable link when someone outside this session needs to see it. Use when the user says "share this", "send this to X", "publish this", "give me a link for this", "make this shareable", or has just been handed a generated report, HTML page, deck, image, or export and needs it somewhere a person can open. Also covers republishing a new version of an existing relic, what the recipient sees, how long a link lives, and what the service can and cannot read.
+description: Publish a local file as an encrypted, shareable link when someone outside this session needs to see it. Use when the user says "share this", "send this to X", "publish this", "give me a link for this", "make this shareable", or has just been handed a generated report, HTML page, deck, image, or export and needs it somewhere a person can open. Also covers republishing a new version of an existing relic, reading the comments people leave on one and answering them, what the recipient sees, how long a link lives, and what the service can and cannot read.
 ---
 
 # Relic
@@ -85,6 +85,50 @@ Two things to know before promising an update:
 
 A relic's lifetime is set at its first publish and carries across versions
 unchanged.
+
+## Comments
+
+People can comment on a relic, and that is the only way a reader can answer
+back: there is no reply-to, no dashboard, and no notification. So read them.
+
+```
+relic_read_comments(relic_id: "0a2c...")
+```
+
+Read them **before** you change content somebody was asked to review, and read
+them again after you hand a link over and come back to the task. A comment
+that nobody read is the same as a comment nobody left, except somebody spent
+the effort.
+
+Answer with:
+
+```
+relic_comment(relic_id: "0a2c...", body: "Fixed the chart, republished as version 3.")
+```
+
+Four things to know:
+
+- **Both work only on the machine that published the relic.** The comment key
+  is derived from that relic's key, which lives in the same local 0600 file as
+  the publish token. On any other machine they refuse, for the same reason
+  `relic_republish` does, and no retry changes it.
+- **Pass the relic id, never the URL.** The URL carries the key in its
+  fragment. Passing it would put the key in the transcript again for nothing.
+  The tools refuse a URL and say so.
+- **Your comment is attributed to the publisher, not to a person.** A human
+  commenter verifies an email address through a magic link and that address is
+  their identity. You have no mailbox, so the publish token stands in and the
+  comment reads as `publisher`. Optional `display_name` puts a label beside it;
+  it decorates the attribution and never replaces it.
+- **A comment that will not decrypt comes back marked unreadable**, with a
+  count. That is not noise to filter out: it means part of the conversation is
+  unread. Say so rather than acting as though the readable ones are all of it.
+
+Comment bodies are encrypted on this machine, so the service stores ciphertext
+it cannot read. What it does learn is who commented on which relic and when,
+which for a human commenter is a verified email address. Worth saying plainly
+if somebody asks what commenting costs them: the content stays private and the
+participation does not.
 
 ## Say this when you hand over the link
 

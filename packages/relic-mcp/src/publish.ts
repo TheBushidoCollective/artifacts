@@ -36,6 +36,11 @@ import {
  * app-server status, so they get codes here, and these never collide with the
  * server's. The state codes join them for the same reason: the publish state
  * is this machine's alone, so its failures are this machine's to report.
+ *
+ * The `local_comment_*` codes take the `local_` prefix `spec/publish.md` 2.2
+ * reserves for a client-side refusal with no leg, rather than a bare
+ * `comment_` one. The service owns its own comment refusals, and an
+ * unprefixed name here would eventually collide with one of them.
  */
 export type ClientCode =
   | 'source_not_found'
@@ -49,7 +54,11 @@ export type ClientCode =
   | 'grant_missing_publish_token'
   | 'no_local_publish_state'
   | 'local_state_unreadable'
-  | 'local_state_write_failed';
+  | 'local_state_write_failed'
+  | 'local_comment_body_empty'
+  | 'local_comment_body_too_long'
+  | 'local_comment_name_too_long'
+  | 'app_response_unusable';
 
 export class PublishError extends Error {
   override readonly name = 'PublishError';
@@ -457,18 +466,60 @@ export async function postJson(
     );
   }
 
-  const parsed = (await response.json().catch(() => ({}))) as Record<
-    string,
-    unknown
-  >;
+  const parsed = await readJson(response);
+  // Every publish leg answers with an object. A body that is not one is read
+  // as empty rather than crashing the caller on its first member read.
+  return typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)
+    ? (parsed as Record<string, unknown>)
+    : {};
+}
+
+/**
+ * GET a JSON document from the app server.
+ *
+ * Separate from `postJson` only because the payload may legitimately be an
+ * array: the comment list is one. The refusal handling is the same leg and
+ * the same rules, so it is shared rather than restated.
+ */
+export async function getJson(
+  deps: PublishDeps,
+  url: string
+): Promise<unknown> {
+  let response: Response;
+  try {
+    response = await deps.fetch(url);
+  } catch (error) {
+    throw new PublishError(
+      'service_unreachable',
+      `could not reach ${url}: ${(error as Error).message}`
+    );
+  }
+  return readJson(response);
+}
+
+/**
+ * Throw the app server's refusal, or hand back whatever it answered with.
+ *
+ * The shape is deliberately `unknown`: the grant legs answer with an object
+ * and the comment list answers with an array, so narrowing belongs to the
+ * caller that knows which it asked for.
+ */
+async function readJson(response: Response): Promise<unknown> {
+  const parsed = await response.json().catch(() => undefined);
 
   if (!response.ok) {
     // Clients key on `code`, never on prose. RFC 9457 says so about its own
-    // `detail` member: consumers should not parse it for information.
+    // `detail` member: consumers should not parse it for information. A body
+    // that is not a problem document still has to produce a refusal, so an
+    // unusable one degrades to `unknown` rather than throwing here.
+    const problem =
+      typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)
+        ? (parsed as Record<string, unknown>)
+        : {};
     throw new ServerRefusal(
-      String(parsed['code'] ?? 'unknown'),
+      String(problem['code'] ?? 'unknown'),
       response.status,
-      parsed
+      problem
     );
   }
 

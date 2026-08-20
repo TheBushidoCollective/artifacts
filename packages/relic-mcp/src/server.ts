@@ -20,6 +20,7 @@
  * unusable in most of the agents this product exists to serve.
  */
 
+import { type CommentRecord, postComment, readComments } from './comments.ts';
 import {
   ERROR_CODES,
   errorResponse,
@@ -96,6 +97,32 @@ export const REPUBLISH_TOOL_NAME = 'relic_republish';
  * wrong one. This call reads local state and never contacts the service.
  */
 export const LOOKUP_TOOL_NAME = 'relic_lookup_source';
+
+/**
+ * The comment tools, and why they are two rather than one.
+ *
+ * Reading is the half that makes comments worth having for an agent: a person
+ * leaves a comment, the agent reads it back, and it acts on it. Writing is
+ * the half that lets the agent answer. They are separated for the same reason
+ * lookup is separate from republish: the read needs no credential and the
+ * write spends the publish token, so folding them together would make an
+ * agent that only wants to read present a write credential to find out.
+ *
+ * Both take a relic id, never the share URL. The fragment is the key.
+ */
+export const READ_COMMENTS_TOOL_NAME = 'relic_read_comments';
+
+export const COMMENT_TOOL_NAME = 'relic_comment';
+
+/**
+ * The one sentence about comments an agent has to have before it reads any,
+ * carried on both comment tools and in the handshake instructions the way the
+ * version-history disclosure is.
+ */
+const COMMENT_MACHINE_BOUNDARY =
+  'Only works for a relic this machine published: the comment key is derived ' +
+  "from that relic's key, which lives in local publish state and nowhere the " +
+  'service can reach.';
 
 /**
  * The ceiling on a publisher-supplied lifetime, matching the grant
@@ -315,6 +342,127 @@ export const LOOKUP_TOOL_DEFINITION = {
   },
 } as const;
 
+export const READ_COMMENTS_TOOL_DEFINITION = {
+  name: READ_COMMENTS_TOOL_NAME,
+  title: "Read a relic's comments",
+  description:
+    'Read the comments people have left on a relic, oldest first, decrypted ' +
+    'on this machine. Use it before changing content somebody was asked to ' +
+    'review, and after sharing a link, because a comment is the only way a ' +
+    'reader can answer back. ' +
+    COMMENT_MACHINE_BOUNDARY +
+    ' Takes the relic id, never the share URL: the URL carries the key in ' +
+    'its fragment. A comment that will not decrypt is returned marked ' +
+    'unreadable rather than dropped, so a shortened list never reads as ' +
+    'agreement.',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      relic_id: {
+        type: 'string',
+        description: 'The 26-character relic id the original publish returned.',
+      },
+    },
+    required: ['relic_id'],
+    additionalProperties: false,
+  },
+  outputSchema: {
+    type: 'object',
+    properties: {
+      relic_id: { type: 'string' },
+      count: { type: 'integer', minimum: 0 },
+      unreadable_count: {
+        type: 'integer',
+        minimum: 0,
+        description:
+          'How many of `count` did not decrypt. Above zero means part of the ' +
+          'conversation is unread, not absent.',
+      },
+      comments: {
+        type: 'array',
+        items: {
+          type: 'object',
+          properties: {
+            comment_id: { type: 'string' },
+            author: {
+              type: 'string',
+              description:
+                'The commenter\u2019s verified email address, or "publisher" ' +
+                'for a comment written with a publish token.',
+            },
+            created_at: { type: 'string' },
+            display_name: { type: ['string', 'null'] },
+            body: { type: ['string', 'null'] },
+            readable: { type: 'boolean' },
+            unreadable_reason: { type: ['string', 'null'] },
+          },
+          required: [
+            'comment_id',
+            'author',
+            'created_at',
+            'display_name',
+            'body',
+            'readable',
+            'unreadable_reason',
+          ],
+          additionalProperties: false,
+        },
+      },
+    },
+    required: ['relic_id', 'count', 'unreadable_count', 'comments'],
+    additionalProperties: false,
+  },
+} as const;
+
+export const COMMENT_TOOL_DEFINITION = {
+  name: COMMENT_TOOL_NAME,
+  title: 'Comment on a relic',
+  description:
+    'Leave a comment on a relic this machine published, encrypted here so ' +
+    'the service stores ciphertext it cannot read. Everyone holding the ' +
+    'link sees it. Attribution is the publish token, so the comment is ' +
+    'attributed to "publisher" rather than to an email address: an agent has ' +
+    'no mailbox and cannot verify one. That is attribution and not ' +
+    'authorization. ' +
+    COMMENT_MACHINE_BOUNDARY +
+    ' Takes the relic id, never the share URL.',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      relic_id: {
+        type: 'string',
+        description: 'The 26-character relic id the original publish returned.',
+      },
+      body: {
+        type: 'string',
+        description:
+          'The comment text, up to 4096 bytes of UTF-8. It is encrypted ' +
+          'before it leaves this machine.',
+      },
+      display_name: {
+        type: 'string',
+        description:
+          'Optional. A name shown beside the comment, up to 64 bytes of ' +
+          'UTF-8. It aliases the attribution for presentation and never ' +
+          'replaces it.',
+      },
+    },
+    required: ['relic_id', 'body'],
+    additionalProperties: false,
+  },
+  outputSchema: {
+    type: 'object',
+    properties: {
+      relic_id: { type: 'string' },
+      comment_id: { type: 'string' },
+      author: { type: 'string' },
+      created_at: { type: 'string' },
+    },
+    required: ['relic_id', 'comment_id', 'author', 'created_at'],
+    additionalProperties: false,
+  },
+} as const;
+
 export const DESCRIBE_TOOL_DEFINITION = {
   name: DESCRIBE_TOOL_NAME,
   title: 'Describe the Relic client',
@@ -356,12 +504,14 @@ export const CAPABILITIES = { tools: {} } as const;
  * The plugin ships a skill with the same facts, but a skill only reaches
  * Claude Code, and only when somebody installs the plugin rather than wiring
  * this server directly. Every other client saw tool descriptions and nothing
- * else, which left five things an agent cannot read off a schema.
+ * else, which left six things an agent cannot read off a schema.
  *
- * Item five is the reason this exists at all rather than living only in the
- * publish result. The result is returned after the file is written, which is
- * too late for an agent that already linked a stylesheet from a CDN. This
- * lands before generation, which is the only moment the advice can be taken.
+ * Item five is one of the two reasons this exists at all rather than living
+ * only in a tool result. The publish result arrives after the file is
+ * written, which is too late for an agent that already linked a stylesheet
+ * from a CDN. Item six is the other: an agent that never learns comments
+ * exist never reads one. Both land before the work, which is the only moment
+ * either can be acted on.
  *
  * It costs context on every session, so it stays short and it stays true.
  * Anything that needs a paragraph belongs in the skill or the disclosure.
@@ -370,7 +520,7 @@ export const INSTRUCTIONS = `Relic encrypts a file on this machine and uploads \
 only ciphertext. The key lives in the URL fragment, which browsers never send \
 to a server.
 
-Five things that change how you should act:
+Six things that change how you should act:
 
 1. The link is the credential. Anyone holding it, fragment included, can read \
 the file. Do not paste it into a tracker, a log, or a public channel.
@@ -384,7 +534,11 @@ is where its key and publish token are stored. Anywhere else it refuses, and \
 no retry changes that.
 5. Rendered HTML and JSX run in an isolated frame with no network access. \
 Inline the styles, scripts, fonts, and images a page needs, because a CDN \
-reference renders as nothing. Decide that before you write the file.`;
+reference renders as nothing. Decide that before you write the file.
+6. People can comment on a relic. Read them with relic_read_comments before \
+you change reviewed content, and answer with relic_comment. Both take the \
+relic id, work only on the machine that published, and attribute you as the \
+publisher.`;
 
 /**
  * Handle one JSON-RPC message.
@@ -454,6 +608,8 @@ export async function handleMessage(
             TOOL_DEFINITION,
             LOOKUP_TOOL_DEFINITION,
             REPUBLISH_TOOL_DEFINITION,
+            READ_COMMENTS_TOOL_DEFINITION,
+            COMMENT_TOOL_DEFINITION,
             DESCRIBE_TOOL_DEFINITION,
           ],
         },
@@ -512,6 +668,13 @@ async function callTool(
             'relic id, source identity, key, and publish token per relic, ' +
             'written 0600 under the user config directory; key and token ' +
             'are never printed or sent',
+          comment_encryption:
+            'AES-128-GCM under a key derived from the relic key with a ' +
+            'distinct HKDF label, so comment bodies reach the service as ' +
+            'ciphertext and the URL fragment is unchanged',
+          comment_attribution:
+            'the publish token, reported by the service as "publisher"; the ' +
+            'operator learns which identity commented on which relic and when',
           service_origin: deps.serviceOrigin,
         },
         isError: false,
@@ -525,6 +688,14 @@ async function callTool(
 
   if (params['name'] === REPUBLISH_TOOL_NAME) {
     return callRepublish(id, params, deps);
+  }
+
+  if (params['name'] === READ_COMMENTS_TOOL_NAME) {
+    return callReadComments(id, params, deps);
+  }
+
+  if (params['name'] === COMMENT_TOOL_NAME) {
+    return callComment(id, params, deps);
   }
 
   if (params['name'] !== TOOL_NAME) {
@@ -750,6 +921,138 @@ async function callRepublish(
   }
 }
 
+async function callReadComments(
+  id: string | number | null,
+  params: Record<string, unknown>,
+  deps: PublishDeps
+): Promise<JsonRpcResponse> {
+  const args = (params['arguments'] ?? {}) as Record<string, unknown>;
+  const relicId = args['relic_id'];
+  if (typeof relicId !== 'string' || relicId.length === 0) {
+    return errorResponse(
+      id,
+      ERROR_CODES.invalidParams,
+      '`relic_id` is required and must be a string'
+    );
+  }
+
+  try {
+    const result = await readComments(relicId, deps);
+    return {
+      jsonrpc: '2.0',
+      id,
+      result: {
+        content: [{ type: 'text', text: commentTranscript(result) }],
+        structuredContent: result,
+        isError: false,
+      },
+    };
+  } catch (error) {
+    return { jsonrpc: '2.0', id, result: toolError(error) };
+  }
+}
+
+async function callComment(
+  id: string | number | null,
+  params: Record<string, unknown>,
+  deps: PublishDeps
+): Promise<JsonRpcResponse> {
+  const args = (params['arguments'] ?? {}) as Record<string, unknown>;
+  const relicId = args['relic_id'];
+  if (typeof relicId !== 'string' || relicId.length === 0) {
+    return errorResponse(
+      id,
+      ERROR_CODES.invalidParams,
+      '`relic_id` is required and must be a string'
+    );
+  }
+
+  const body = args['body'];
+  if (typeof body !== 'string') {
+    return errorResponse(
+      id,
+      ERROR_CODES.invalidParams,
+      '`body` is required and must be a string'
+    );
+  }
+
+  const displayName = args['display_name'];
+  if (displayName !== undefined && typeof displayName !== 'string') {
+    return errorResponse(
+      id,
+      ERROR_CODES.invalidParams,
+      '`display_name` must be a string or omitted'
+    );
+  }
+
+  try {
+    const result = await postComment(
+      { relic_id: relicId, body, display_name: displayName },
+      deps
+    );
+    return {
+      jsonrpc: '2.0',
+      id,
+      result: {
+        content: [
+          {
+            type: 'text',
+            text:
+              `Commented on relic ${result.relic_id} as ${result.author}.\n` +
+              'Everyone holding the link sees it. The service stored ' +
+              'ciphertext it cannot read, and it knows that this address ' +
+              'commented on this relic at this time.',
+          },
+        ],
+        structuredContent: result,
+        isError: false,
+      },
+    };
+  } catch (error) {
+    return { jsonrpc: '2.0', id, result: toolError(error) };
+  }
+}
+
+/**
+ * The comments as a person would read them, because a JSON array of rows is
+ * not a conversation.
+ *
+ * Unreadable comments are printed in place, in order, with their reason. A
+ * list that quietly closed over a gap would read as the whole conversation,
+ * and an agent acting on "nobody objected" when somebody did is exactly the
+ * failure the count exists to prevent.
+ */
+function commentTranscript(result: {
+  readonly relic_id: string;
+  readonly count: number;
+  readonly unreadable_count: number;
+  readonly comments: readonly CommentRecord[];
+}): string {
+  if (result.count === 0) {
+    return `No comments on relic ${result.relic_id} yet.`;
+  }
+
+  const lines = result.comments.map((comment) => {
+    const who =
+      comment.display_name === null
+        ? comment.author
+        : `${comment.display_name} (${comment.author})`;
+    return comment.readable
+      ? `${comment.created_at} ${who}:\n${comment.body}`
+      : `${comment.created_at} ${who}:\n[unreadable: ${comment.unreadable_reason}]`;
+  });
+
+  const header =
+    result.unreadable_count === 0
+      ? `${result.count} comment(s) on relic ${result.relic_id}, oldest first.`
+      : `${result.count} comment(s) on relic ${result.relic_id}, oldest ` +
+        `first. ${result.unreadable_count} did not decrypt and are shown as ` +
+        'unreadable rather than dropped, so treat this conversation as ' +
+        'partially unread.';
+
+  return `${header}\n\n${lines.join('\n\n')}`;
+}
+
 /**
  * A lifetime is opt-in: absent or null means no change from the default. A
  * value that fails the contract is refused rather than dropped, because
@@ -772,11 +1075,11 @@ function parseTtlDays(
 }
 
 /**
- * Republish refusals a publisher must understand on their own terms.
+ * Refusals a publisher must understand on their own terms.
  *
  * The server's problem document carries the code; these sentences carry
  * what the publisher can still do, because "403" and "410" answer nothing
- * a human would ask. The two must stay distinct: one means this machine
+ * a human would ask. The first two must stay distinct: one means this machine
  * lost its standing, the other means nobody has any, ever again.
  */
 const REFUSAL_GUIDANCE: Readonly<Record<string, string>> = {
@@ -790,6 +1093,10 @@ const REFUSAL_GUIDANCE: Readonly<Record<string, string>> = {
     'That relic was taken down. A takedown is permanent: republishing ' +
     'cannot revive it, whatever token is presented. Publish the content as ' +
     'a new relic instead.',
+  comment_rate_limited:
+    'The service is rate limiting comments on that relic. The refusal ' +
+    'carries retry_after_seconds; wait it out rather than retrying in a ' +
+    'loop, which only extends the limit.',
 };
 
 /**
@@ -824,7 +1131,7 @@ function toolError(error: unknown): Record<string, unknown> {
     };
   }
   return {
-    content: [{ type: 'text', text: `publish failed: ${String(error)}` }],
+    content: [{ type: 'text', text: `the call failed: ${String(error)}` }],
     structuredContent: { code: 'unknown' },
     isError: true,
   };
@@ -868,6 +1175,17 @@ only on the machine that published. The token's SHA-256 is the only copy the
 service ever holds, and neither secret is ever printed or logged. Deleting the
 file changes nothing for existing links; it only ends this machine's ability
 to update those relics.
+
+What happens with comments: a comment body is encrypted here too, under a key
+derived from that relic's key with a distinct HKDF label, so the service
+stores comment ciphertext it cannot read and the URL fragment does not change.
+Reading comments needs that key, and writing one is authorized by the publish
+token, so both work only on the machine that published. A comment this client
+writes is attributed to the publisher rather than an email address, because
+an agent has no mailbox to verify. What the operator does learn is who
+commented on which relic and when: for a person that is a verified email
+address, and that association is a real cost the content's encryption does
+not cover.
 
 What this does NOT protect against: the key is returned to your agent in the
 URL, so it enters the model's context and your session transcript. That is

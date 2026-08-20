@@ -121,6 +121,25 @@ async function republish(
   );
 }
 
+/** A relic with every object present from version 1 through `currentVersion`. */
+async function publishThroughVersion(
+  currentVersion: number
+): Promise<{ id: string }> {
+  const { id, key, grant } = await publish();
+  const token = grant['publish_token'] as string;
+
+  for (let version = 2; version <= currentVersion; version++) {
+    const response = await republish(id, token);
+    expect(response.status).toBe(200);
+    storage.put(
+      `${id}/v${version}`,
+      await encrypted(`hello relic, version ${version}`, key)
+    );
+  }
+
+  return { id };
+}
+
 /**
  * A grant request the test controls field by field, for the metadata the
  * publish helper does not model.
@@ -223,6 +242,10 @@ describe('reserved segments beat ids at the router', () => {
     expect(body).toContain('permits no remote source');
     expect(body).toContain('renders without them');
     expect(body).toContain('not safety');
+    expect(body).toContain('markdown, code, html, jsx, image');
+    expect(body).toContain(
+      "Anyone holding a relic's link can fetch every version it has ever held"
+    );
   });
 
   test('/install carries the configured origin, since the server has no default', async () => {
@@ -500,7 +523,68 @@ describe('the grant', () => {
 });
 
 describe('the mint', () => {
-  test('returns the six fields the viewer consumes', async () => {
+  test('omitting version signs the current object for version 1', async () => {
+    const { id } = await publish();
+    const body = (await app
+      .fetch(
+        req(`/api/relics/${id}/mint`, { method: 'POST', ip: '203.0.113.5' })
+      )
+      .then((r) => r.json())) as Record<string, unknown>;
+
+    expect(body['url']).toContain(`/o/${id}?`);
+    expect(body['version']).toBe(1);
+    expect(body['current_version']).toBe(1);
+  });
+
+  test('omitting version signs the current object for version 5', async () => {
+    const { id } = await publishThroughVersion(5);
+    const body = (await app
+      .fetch(
+        req(`/api/relics/${id}/mint`, { method: 'POST', ip: '203.0.113.5' })
+      )
+      .then((r) => r.json())) as Record<string, unknown>;
+
+    expect(body['url']).toContain(`/o/${id}/v5?`);
+    expect(body['version']).toBe(5);
+    expect(body['current_version']).toBe(5);
+  });
+
+  test('version 1 on a version 5 relic signs the bare object path', async () => {
+    const { id } = await publishThroughVersion(5);
+    const body = (await app
+      .fetch(
+        req(`/api/relics/${id}/mint`, {
+          method: 'POST',
+          ip: '203.0.113.5',
+          body: JSON.stringify({ version: 1 }),
+        })
+      )
+      .then((r) => r.json())) as Record<string, unknown>;
+
+    expect(body['url']).toContain(`/o/${id}?`);
+    expect(body['url']).not.toContain(`/v1?`);
+    expect(body['version']).toBe(1);
+    expect(body['current_version']).toBe(5);
+  });
+
+  test('version 3 on a version 5 relic signs the v3 object path', async () => {
+    const { id } = await publishThroughVersion(5);
+    const body = (await app
+      .fetch(
+        req(`/api/relics/${id}/mint`, {
+          method: 'POST',
+          ip: '203.0.113.5',
+          body: JSON.stringify({ version: 3 }),
+        })
+      )
+      .then((r) => r.json())) as Record<string, unknown>;
+
+    expect(body['url']).toContain(`/o/${id}/v3?`);
+    expect(body['version']).toBe(3);
+    expect(body['current_version']).toBe(5);
+  });
+
+  test('returns the eight fields the viewer consumes', async () => {
     const { id } = await publish();
     const body = (await app
       .fetch(
@@ -509,16 +593,18 @@ describe('the mint', () => {
       .then((r) => r.json())) as Record<string, unknown>;
 
     expect(Object.keys(body).sort()).toEqual([
+      'current_version',
       'mints_remaining',
       'object_crc32c',
       'object_length',
       'relic_expires_at',
       'url',
       'url_expires_at',
+      'version',
     ]);
   });
 
-  test('excludes filename, mimetype, renderer class, and version', async () => {
+  test('excludes filename, mimetype, and renderer class', async () => {
     const { id } = await publish();
     const body = (await app
       .fetch(
@@ -526,14 +612,50 @@ describe('the mint', () => {
       )
       .then((r) => r.json())) as Record<string, unknown>;
 
-    for (const barred of [
-      'filename',
-      'mimetype',
-      'renderer_class',
-      'version',
-    ]) {
+    for (const barred of ['filename', 'mimetype', 'renderer_class']) {
       expect(body[barred]).toBeUndefined();
     }
+  });
+
+  test('refuses an invalid explicit version without consuming the cap', async () => {
+    const { id } = await publishThroughVersion(5);
+
+    for (const version of [0, 6, -1, 1.5, 'three']) {
+      const response = await app.fetch(
+        req(`/api/relics/${id}/mint`, {
+          method: 'POST',
+          ip: `203.0.113.${String(version).length + 10}`,
+          body: JSON.stringify({ version }),
+        })
+      );
+      expect(response.status).toBe(400);
+      expect((await response.json()).code).toBe('invalid_relic_version');
+    }
+
+    expect((await app.store.getRelic(id))?.mintsUsed).toBe(0);
+  });
+
+  test('rate limiting counts each explicit-version mint', async () => {
+    app = build({ config: { mintRateLimit: { limit: 2, windowSeconds: 60 } } });
+    const { id } = await publishThroughVersion(5);
+    const statuses: number[] = [];
+
+    for (const version of [1, 3, 5]) {
+      statuses.push(
+        (
+          await app.fetch(
+            req(`/api/relics/${id}/mint`, {
+              method: 'POST',
+              ip: '203.0.113.5',
+              body: JSON.stringify({ version }),
+            })
+          )
+        ).status
+      );
+    }
+
+    expect(statuses).toEqual([200, 200, 429]);
+    expect((await app.store.getRelic(id))?.mintsUsed).toBe(2);
   });
 
   test('is case-insensitive on the id, and the cap does not fragment', async () => {

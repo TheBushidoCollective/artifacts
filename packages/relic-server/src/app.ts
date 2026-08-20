@@ -284,7 +284,7 @@ export function createApp(options: AppOptions = {}): RelicApp {
       third === 'mint' &&
       request.method === 'POST'
     ) {
-      return mint(second, ip, now);
+      return mint(second, request, ip, now);
     }
     if (
       first === 'relics' &&
@@ -709,6 +709,7 @@ export function createApp(options: AppOptions = {}): RelicApp {
 
   async function mint(
     rawId: string,
+    request: Request,
     ip: string,
     now: number
   ): Promise<Response> {
@@ -758,11 +759,27 @@ export function createApp(options: AppOptions = {}): RelicApp {
       });
     }
 
-    // The current version's object and nothing else. There is deliberately
-    // no way to ask for an older one: the cap, the metric, and the abuse
-    // controls all key on the relic id, and a servable history would give
-    // the egress arithmetic a term the cap cannot see.
-    const object = await storage.stat(objectKey(relicId, row.version));
+    const body = (await readJson(request)) as Record<string, unknown>;
+    const explicitVersion = body['version'];
+    const version =
+      explicitVersion === undefined ? row.version : explicitVersion;
+    if (
+      typeof version !== 'number' ||
+      !Number.isSafeInteger(version) ||
+      version < 1 ||
+      version > row.version
+    ) {
+      return logAndRefuse(
+        relicId,
+        ip,
+        now,
+        occurrenceId,
+        'invalid_relic_version',
+        { relic_id: relicId }
+      );
+    }
+
+    const object = await storage.stat(objectKey(relicId, version));
 
     // A relic with no publisher-set lifetime cannot land here; its only end
     // is deletion.
@@ -790,7 +807,7 @@ export function createApp(options: AppOptions = {}): RelicApp {
       );
     }
 
-    if (row.publishedAt === undefined) {
+    if (row.publishedAt === undefined && version === row.version) {
       // The completion call never arrived, so the true publish time is
       // unknown. Anchor at the grant instead, because the upload begins
       // immediately after it.
@@ -849,8 +866,7 @@ export function createApp(options: AppOptions = {}): RelicApp {
 
     let url: string;
     let urlExpiresAt: number;
-    const sameVersion =
-      previous !== undefined && previous.version === row.version;
+    const sameVersion = previous !== undefined && previous.version === version;
     const stillViable =
       sameVersion &&
       previous !== undefined &&
@@ -864,7 +880,7 @@ export function createApp(options: AppOptions = {}): RelicApp {
       urlExpiresAt = previous.urlExpiresAt;
     } else {
       const signed = await storage.signDownload(
-        objectKey(relicId, row.version),
+        objectKey(relicId, version),
         validity,
         now
       );
@@ -884,7 +900,7 @@ export function createApp(options: AppOptions = {}): RelicApp {
       url,
       urlExpiresAt,
       at: now,
-      version: row.version,
+      version,
     });
 
     const publishedAt = row.publishedAt ?? row.grantedAt;
@@ -918,6 +934,8 @@ export function createApp(options: AppOptions = {}): RelicApp {
         object_length: object.length,
         object_crc32c: object.crc32c,
         mints_remaining: capRemaining,
+        version,
+        current_version: row.version,
       },
       { headers: { 'referrer-policy': 'no-referrer' } }
     );
@@ -1555,7 +1573,7 @@ site data for this origin removes every remembered key.
 
 ## What we do know
 
-- **A coarse renderer class**, one of: markdown, code, html, image, media,
+- **A coarse renderer class**, one of: markdown, code, html, jsx, image, media,
   archive, binary. Nothing finer.
 - **The name of the tool that published it**, so we can tell whether Relic
   serves the contexts it was built for.
@@ -1579,6 +1597,13 @@ you a usable link is the product. **The key therefore enters the model's
 context and your session transcript on every publish.** Zero-knowledge holds
 against us. It does not hold against your model provider or whoever stores
 your transcripts. This is structural, not a defect we plan to fix.
+
+## Republishing keeps the earlier versions
+
+**Anyone holding a relic's link can fetch every version it has ever held, so
+republishing does not withdraw earlier content.** The same fragment key
+decrypts every version in your browser. Republishing is not a redaction
+mechanism.
 
 ## The JavaScript caveat
 

@@ -8,7 +8,7 @@ What the app server returns, when it returns it, what a relic's life looks like 
 
 One taxonomy, one set of codes, for every caller. The publishing client and a browser can reach the same endpoint, and a taxonomy that varies by caller is a bug generator.
 
-This section owns failures the **app server originates**. A purely local file error, a failure on the client-to-GCS upload leg, and a storage-side refusal have no app-server status, because the server is structurally not in those legs (`docs/preconditions.md` section 4). Those are `spec-publish-contract`'s codes. Their absence here is deliberate. The twelve cases in 1.1 are this unit's completeness bar; 1.6 adds the grant-time refusals `format.md` obliges the server to make, which the twelve don't reach and which belong here for the same reason the twelve do. 1.7 adds the republish refusals on the same grounds.
+This section owns failures the **app server originates**. A purely local file error, a failure on the client-to-GCS upload leg, and a storage-side refusal have no app-server status, because the server is structurally not in those legs (`docs/preconditions.md` section 4). Those are `spec-publish-contract`'s codes. Their absence here is deliberate. The twelve cases in 1.1 are this unit's completeness bar; 1.6 adds the grant-time refusals `format.md` obliges the server to make, which the twelve don't reach and which belong here for the same reason the twelve do. 1.7 adds the republish refusals on the same grounds. 1.8 adds the mint version selector's validation refusal.
 
 ### 1.1 The twelve cases
 
@@ -115,6 +115,10 @@ Republish-to-same-URL exists, authorized by a bearer publish token, and the endp
 
 **A valid token on a live relic produces the next version.** The row's version increments, the object lands at the versioned path (`format.md` 3.12) under that path's own existence refusal, the renderer class is redeclared with the new ciphertext, and the response mirrors the grant: a signed upload target and its constraints. The per-IP publish quota and the kill switch apply to republish exactly as to publish, because a version costs the same storage and the same abuse surface a first publish does, and an endpoint outside the quota would be a quota bypass wearing a different verb.
 
+### 1.8 The mint version refusal
+
+`POST /api/relics/{id}/mint` accepts an optional JSON body with `version`. When present, `version` must be an integer from 1 through the relic's current version, inclusive. Zero, a negative number, a number above the current version, a fractional number, and a value of any other type return `400 invalid_relic_version`. The refusal carries `relic_id`, does not consume the download cap, and is recorded as a refused mint. It is not clamped, because silently serving different bytes from the ones requested would make a version comparison untrustworthy.
+
 ## 2. Mint placement, the mint response, and counting
 
 **The mint is never a side effect of serving `/{id}`.** That path returns a static shell with no mint, no counter increment, and no cap consumption. The mint is a distinct request the shell makes.
@@ -125,7 +129,7 @@ This single rule keeps non-executing fetchers off both the open counter and the 
 
 ### 2.1 The mint response
 
-`spec-viewer` consumes this. Six fields:
+`spec-viewer` consumes this. Eight fields:
 
 - **`url`** the signed download URL.
 - **`url_expires_at`** RFC 3339, UTC. Lets the viewer reuse a still-valid URL instead of minting again.
@@ -133,16 +137,20 @@ This single rule keeps non-executing fetchers off both the open counter and the 
 - **`object_length`** the ciphertext object's byte length, so the viewer can refuse before allocating and can detect a truncated transfer. `format.md` 3.3 derives plaintext size from this and `rs`.
 - **`object_crc32c`** base64, read from the object's non-editable metadata ([GCS](https://docs.cloud.google.com/storage/docs/metadata)), where CRC32C "is the recommended validation method for performing integrity checks" ([GCS](https://docs.cloud.google.com/storage/docs/data-validation)). Its only job here is separating transport corruption from everything else, which matters because `format.md` 3.5 establishes that a tag failure is indistinguishable from a wrong key. It removes one branch and it cannot remove the others.
 - **`mints_remaining`** so the viewer can warn before the cap kills the link rather than after.
+- **`version`** the relic version this response's URL, length, and CRC32C describe.
+- **`current_version`** the relic's latest version, so a client can discover the available version range without a second endpoint.
 
-**Excluded, deliberately:** filename, declared mimetype, renderer class, and the format version. The first three are barred from server-side placement by `format.md` 3.2 and 3.6. The version lives in the fragment (`format.md` 2.2) and a second copy here could only disagree with it.
+**Excluded, deliberately:** filename, declared mimetype, renderer class, and the container format version. The first three are barred from server-side placement by `format.md` 3.2 and 3.6. The container format version lives in the fragment (`format.md` 2.2) and a second copy here could only disagree with it.
 
-**The mint serves the current version.** A relic id names a sequence of objects (`format.md` 3.12), the mint response describes the current one, `object_length` and `object_crc32c` included, and no endpoint accepts a version selector. A recipient always sees the latest version the publisher posted, under the same URL and the same key, and there is no supported way to ask for an older one.
+**The mint serves the current version when the request has no `version` field.** This is the existing request shape and keeps the existing behavior. A caller may instead send `{"version": n}` to select an earlier version under 1.8's bounds. The response's `url`, `object_length`, `object_crc32c`, and `version` all describe the selected object, while `current_version` still reports the row's latest version. The signed object path follows `format.md` 3.12 exactly: version 1 is the bare id path, and versions 2 and up use `{id}/v{n}`. The selector changes neither the relic URL nor its fragment key.
 
 ### 2.2 Counting
 
 **A refused mint is never an open and never consumes the cap.** Refusals inflate the metric's first clause, which already carries a permanent confound, and a cap-exhausted mint consuming cap would be circular.
 
 **The cap counts per relic id across all versions.** A republish does not reset the counter and does not add a second one; every version's opens draw on the same pool, which is what keeps the worst-case egress arithmetic in the preconditions true per id under republishing. A publisher whose relic exhausts its cap republishes into the same exhausted pool, and that is the deliberate shape: the cap prices the link, not the version, and the link is what the recipient was sent.
+
+**Rate limiting counts each mint request, whatever version it selects.** Comparing two versions costs two mints, and both successful mints consume the relic's shared download cap.
 
 **A repeated successful mint from the same IP on the same relic inside a dedup interval isn't a distinct open. It does consume the cap.** The two counters answer different questions. The open counter is the metric, and what dedup actually catches is a *recipient* reloading the page, because the publisher's own reload is already gone: `docs/frame.md`'s baseline filter drops opens whose requesting IP matches the relic's publishing IP. The cap is the cost control, and the worst-case egress arithmetic in `docs/preconditions.md` collapses if a mint returns a usable URL without consuming it. The dedup itself is bounded by the per-IP download rate limit, which still fires and still returns `429`.
 
@@ -226,6 +234,7 @@ It lives at a stable URL, is linked from every relic page beside `/abuse`, and i
 4. **The correct form of the fragment claim.** "The key never reaches a server" is wrong unqualified. The honest form is **"your browser never sends the key to Relic's servers."**
 5. **Retention, per sink, with its own window each.** Application records, edge and load balancer logs, GCS access logs where enabled, the intake mailbox or ticket queue, and soft-deleted object bytes. Listed separately rather than as one number, because a single figure is the claim that goes false first. It states that deleted does not mean erased, per 3.2, and that a relic's ciphertext is kept until deleted, because nothing reaps it by age.
 6. **The network capability of rendered content, and its removal.** Content that renders on the usercontent origin, HTML and JSX, still executes in the recipient's browser, but the frame is served a policy permitting no remote source of any kind, so it cannot fetch, cannot load an external image or font, cannot open a WebSocket or an EventSource, and cannot beacon. The disclosure states this as an enforced property with its cost attached, because the cost is what a publisher actually meets: a page expecting a CDN stylesheet, a CDN script, a remote font, or a remote image renders without them, and a publisher who needs those must inline them. It also states the limit of the claim, since the isolation is about network and cross-origin reach and not about safety: the code still runs locally, can consume CPU, and can render whatever its author wrote. Popups are removed by the sandbox attribute rather than by the policy, because a popup opens a top-level context the frame's policy does not govern. The origin boundary continues to keep such content away from the decryption key, which never leaves the link and the recipient's browser. The viewer page carries a compact marker linked to this statement (`spec-viewer`), rather than reproducing the statement before the content renders.
+7. **Version history. Anyone holding a relic's link can fetch every version it has ever held, so republishing does not withdraw earlier content.** The same fragment key decrypts every version in the recipient's browser. Republishing is not a redaction mechanism.
 
 One more, assigned by `format.md` 3.8: **the length leak.** Ciphertext length reveals plaintext length to within a record, so alongside the class the operator learns something like "an image of roughly 2.4 MB". Whether the container pads to buckets is `shape`'s, and the disclosure appears under either branch.
 

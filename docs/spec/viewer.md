@@ -296,23 +296,65 @@ Everything except the content renders immediately: the branded taskbar, the serv
 
 ### 6.5 The taskbar's element accounting
 
-Version moved into the taskbar, and the row has already overflowed once at narrow width. The accounting is the control, so a future addition has to displace something named.
+Version moved into the taskbar, then Comments did, and the row had already overflowed once at narrow width before either arrived. The accounting is the control, so a future addition has to displace something named.
 
 **Three zones, left to right, each separated by a hairline rule.**
 
 1. **The wordmark zone.** One element: `relik.link`. The domain rather than a product name, because the recipient is deciding whether to trust an unfamiliar address bar.
 2. **The identity zone.** Four elements: the filename, the relic id, the version control, and the zone itself as the only flexible column on the row. Version joins this zone because a version number is artifact metadata of exactly the same kind as the catalog number beside it, and because the identity zone is the one that already absorbs pressure through an ellipsis. Putting a fixed-width control in the actions zone instead would push a control off the row.
-3. **The actions zone.** Five elements: the isolation marker, Compare versions, Copy link, Download, Report. Compare versions is conditional on history being present and diffable.
+3. **The actions zone.** Six elements: the isolation marker, Comments, Compare versions, Copy link, Download, Report. Comments carries a count and is conditional on the relic being renderable. Compare versions is conditional on history being present and diffable.
 
-**Ten elements at the widest.** Nine when a relic has history that cannot be compared, because the version control stays and Compare versions goes. Eight when `current_version == 1`, because both go and §6.1 item 6 says nothing about versions at all. It was nine at the widest before version arrived.
+**Eleven elements at the widest.** Ten when a relic has history that cannot be compared, because the version control stays and Compare versions goes. Nine when `current_version == 1`, because both go and §6.1 item 6 says nothing about versions at all. Ten on a download-only relic, which gets no thread for the same reason §6.1 item 13 gives it no comparison control: nothing rendered, so there is nothing on the page to comment about. It was ten at the widest before Comments arrived and nine before version did.
+
+**Comments went into the actions zone rather than beside version, and the version precedent is what settles it.** A comment count looks like artifact metadata and is not: it changes while the reader is on the page, it is a place to go rather than a fact about the file, and the identity zone's flexibility is the ellipsis on the filename, which a count cannot use. What it does share with version is that it must not push a control off the row, and at every width above the floor it does not.
 
 **The narrow hierarchy is re-derived at a 320 CSS pixel floor.**
 
 - Below 34rem, every action collapses to its icon. That already shipped, and the comment in the stylesheet records why the isolation marker collapses with them rather than keeping its label: exempting it pushed Report off the row at 420px.
+- Below 34rem, **the count survives the collapse that hides the label beside it.** It is two characters, and it is the whole point of the control: a bare speech bubble says a thread might exist, while `2` says what is in it. A reader cannot get that number anywhere else on the row.
 - Below 34rem, **the wordmark is also hidden.** At 320px the actions need about 11.9rem of the available 20rem and the version control needs about 3rem, which leaves nothing for a 6.7rem wordmark and a filename both. The wordmark is the least load bearing element on the row at that width, because the domain is in the address bar directly above it, while the filename, the version, and the four actions are not available anywhere else. Brand gives way before function.
 - The version control collapses its own label from `Version 5 of 5` to `v5/5` at the same breakpoint.
+- **Below 24rem, Comments leaves the row.** Six collapsed actions are about 14.6rem, and about 15.2rem with the count, which with the identity zone's 1.4rem of padding, its 0.4rem gap, and a 3rem version control wants the entire 20rem before the filename gets a pixel. Measured in Chrome at 320px, the row overflowed by 12 pixels with the control present and fit with 33 pixels of filename without it.
 
-**What must never be lost at 320px: the filename, the version, Copy link, Download, and Report.** That is the floor's completion criterion. A future addition has to displace something named rather than overflow the row.
+**Comments is the element that leaves, and it is the only addition so far whose absence costs nothing.** The thread is in the document flow at the end of the reading surface rather than behind the control, so a reader without the button reaches the same thread by scrolling, which is where a comment thread lives on a phone anyway. Every other candidate on the row leads somewhere reachable only through it: the isolation marker is the one place the author-code disclosure appears since §6.3 demoted the banner, and Compare versions is the only entry to comparison on a relic at `current_version == 2`, where the version control is a label rather than a picker. Losing either would cost a reader something the page does not otherwise say.
+
+**What must never be lost at 320px: the filename, the version, Copy link, Download, and Report.** That is the floor's completion criterion, and it is unchanged. Comments is deliberately not on it. A future addition has to displace something named rather than overflow the row, and the two remaining candidates both have the price above attached to them.
+
+### 6.6 The comment thread
+
+`frame.md` reversed the no-identity non-goal and the reversal is what makes this section possible: accounts exist in exactly one form, a verified email address per commenter, and the address is the identity. It reversed nothing else, so nothing here is a dashboard, a "my relics" list, a group, or a permission.
+
+**The thread is in the service-origin chrome and it is not negotiable which side it sits on.** The render frame is network denied, `default-src 'none'` with sandbox exactly `allow-scripts`, so it could not fetch a comment if it tried. The chrome around it can, and it is also the only side of the boundary holding the key the bodies are sealed under.
+
+**Comment bodies are ciphertext to the operator, under a key the fragment already carries.** A comment about content the operator cannot read, stored in the clear, hands the operator exactly what the architecture exists to deny. The comment key is HKDF-SHA256 over the same 16 fragment bytes under a distinct `info`, which is the mechanism `rfc8188.ts` already uses to get a content key and a nonce base out of one input. **The fragment does not change**, and that matters: `format.md` 2.1 says the fragment carries exactly two things and a third field takes a version bump. A third `info` string is not a third field.
+
+**Reading the thread needs no authorization and that is deliberate.** Anyone holding the link can already read the content, and the bodies are ciphertext the server cannot open, so a gate on the read would protect nothing and would turn an unauthenticated reader into somebody who cannot see that a thread exists.
+
+**Ten states, and every one of them has copy.**
+
+1. **Loading**, with its reason attached rather than a bare spinner. The bodies arrive as ciphertext and are opened in this browser, so the list can exist before the words in it do, and the copy says exactly that. No spinner without a reason is the rule §6.4 already set for the three fetch phases, applied here.
+2. **Empty.** "No comments yet." followed by what a comment is for and what happens to it, because an empty thread is a state and not an error. It does not overclaim: the sentence is that Relic stores the text without being able to read it.
+3. **A thread with comments**, oldest first, each carrying the verified address, the optional display name in front of it, and an absolute timestamp. Relative times are wrong here on purpose: a relic is a catalogued object and "3 hours ago" on a page opened next month is worse than useless.
+4. **A comment that will not decrypt is shown as undecryptable, never dropped.** It keeps its author and its time and loses only its body. Dropping it would tell the reader the thread is shorter than it is, which is a lie one bad stored row could induce, and the copy names both plausible causes without claiming to know which: written under a different key for this relic, or altered in storage. That is the same honesty §6.1 item 4 puts on a content decrypt failure.
+5. **A row that arrives without a ciphertext at all is skipped rather than shown sealed.** Sealed means there was a body and it would not open. Saying that about a row with no body is a guess.
+6. **Refused**, with the server's code stated verbatim rather than flattened into an apology, exactly as §6.1 item 3 requires of a refused mint. A retry appears only where pressing it again could plausibly work.
+7. **Rate limited**, which is a refusal with its own copy because it is the one a reader is most likely to hit while behaving normally. It says the limit is per relic and per address, says why an unlimited comment box on a link anybody can hold is an abuse surface, and says nothing was lost.
+8. **Unverified**, where the composer asks for an address.
+9. **Waiting on a link.** The request endpoint answers 202 whether or not anything was sent, so it cannot be used to find out who has commented before, and **the copy must not undo that**: it says that if the address can receive mail a link is on its way, and it never confirms the address exists.
+10. **Verified**, where the composer names the address it will attribute the comment to, before anything is typed.
+
+**The disclosure is at the point of commenting, not only on the policy page.** A reader learns, above the fields and at reading size rather than as fine print, that their verified address is shown with their comment to anyone holding the link, that Relic can see which address commented on which relic, and that a display name sits beside the address rather than instead of it. A second line, at the address field, says that sending the link means handling the address in plain text and that it cannot be done any other way. Both are `frame.md`'s prices, stated where they are actionable. A person should learn this before they submit, not after.
+
+**The display name is untrusted display text and gets §1.9 rule 2's treatment.** It is chosen by whoever holds the link and rendered on the origin that holds the fragment, which is the filename's situation exactly, so the bidirectional formatting characters are stripped rather than escaped. The author runs through the same filter: the server verified that a mailbox answered, which says nothing about how the string draws.
+
+**The magic-link round trip must not cost the reader the key, and the fragment is never what carries it back.** The server has never seen the fragment and cannot put it in a redirect, so nothing on the return path can restore it from the wire. What restores it is the key vault: `load` writes the fragment to storage after a successful mint, so a tab that navigates to the callback and comes back to `/{id}` with no fragment recalls it there, exactly as a reload already does. Four consequences:
+
+- **The auth request carries an address and a relic id, and nothing else.** The relic id is how the callback knows where to send the reader, and the server already has it on every request to this relic. The fragment is not in the body, not in a query string, and not in the return path.
+- **The redirect stays inside the service and therefore omits the fragment**, which is §1.7's inside-the-service half rather than its leaving-the-service half. There is nothing to inherit, and an explicit empty fragment would be worse than nothing: it would strip a key the vault was about to restore.
+- **The common case never navigates at all.** A mail client opens the link in its own tab, so the relic page that asked for it is still sitting there with its key in memory. That tab learns it is verified from a same-origin broadcast carrying a bare marker, no address and no key, and from a re-check when the tab becomes visible again. Neither signal touches the URL.
+- **When this browser is not keeping the key, the reader is told before they leave.** Storage can be absent or refuse to write, and in that case following the link in the same tab loses the key for good. The composer says so, and says to open the link in a new tab and come back to the one that still holds the key in memory. Discovering it afterwards is the §6.1 missing-key screen, which is honest and much too late.
+
+**Two authentication paths exist and only one of them is a browser.** A verified session is the human path. The publish token is the agent and publisher path, attributed as `publisher`, and it is not offered here: the token lives on the publishing machine and a field for it on this origin would be the key-entry surface §6.4 bans, aimed at a different secret. A comment attributed to `publisher` is marked as having published the relic, which is true by construction rather than by claim, since only the machine that published it holds a token.
 
 ## 7. Routed to `shape`
 

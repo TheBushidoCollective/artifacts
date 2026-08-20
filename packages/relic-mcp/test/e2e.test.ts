@@ -489,7 +489,7 @@ describe('publisher-chosen lifetimes', () => {
 });
 
 describe('the MCP surface', () => {
-  test('advertises publish, lookup, republish, and describe with product prefixes', async () => {
+  test('advertises every workflow tool and describe with product prefixes', async () => {
     const response = await handleMessage(
       { jsonrpc: '2.0', id: 1, method: 'tools/list' },
       deps
@@ -499,6 +499,8 @@ describe('the MCP surface', () => {
       'relic_publish',
       'relic_lookup_source',
       'relic_republish',
+      'relic_read_comments',
+      'relic_comment',
       'relic_describe_client',
     ]);
     // The spec's own remedy for cross-server collisions is a name prefix.

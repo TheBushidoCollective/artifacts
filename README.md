@@ -90,6 +90,17 @@ current version, and the download cap is shared across all versions. A relic
 taken down for abuse refuses every future version whatever token is presented,
 because a takedown an abuser could out-publish would not be a takedown.
 
+Two more tools cover comments. `relic_read_comments` and `relic_comment` are
+how an agent takes part in the conversation on a relic rather than only
+creating one. Both take the relic id rather than the share URL, because the
+URL carries the key in its fragment. Comment bodies are encrypted on the
+publishing machine under a key derived from that relic's key, so the service
+stores comment ciphertext it cannot read, and both tools work only on that
+machine for the same reason republish does. An agent has no mailbox to verify,
+so its comments are authorized by the publish token and attributed as
+`publisher` rather than as an email address. What the service does learn is
+who commented on which relic and when.
+
 ```bash
 npx -y relic-mcp@latest   # nothing to clone, nothing to build
 ```

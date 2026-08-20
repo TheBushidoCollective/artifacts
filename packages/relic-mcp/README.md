@@ -96,6 +96,45 @@ created `0600` inside a `0700` directory, and redirectable with
   longer matches the service's, and the relic cannot be republished from
   this machine, though it can still be read.
 
+## Comments
+
+People can comment on a relic, and comments are the only channel back: there
+is no reply-to and no dashboard. `relic_read_comments` reads them, oldest
+first, decrypting on this machine.
+
+```json
+{
+  "name": "relic_read_comments",
+  "arguments": { "relic_id": "0a2c..." }
+}
+```
+
+`relic_comment` writes one, encrypted here before it leaves:
+
+```json
+{
+  "name": "relic_comment",
+  "arguments": { "relic_id": "0a2c...", "body": "Fixed the chart." }
+}
+```
+
+Both take the relic id and refuse a share URL, because the URL carries the key
+in its fragment and passing it would put the key in your transcript again for
+nothing. Both work only on the machine that published the relic: the comment
+key is derived from that relic's key with a distinct HKDF label, and the key
+lives in the same local state file as the publish token.
+
+A human commenter verifies an email address through a magic link, and that
+address is their identity. This client has no mailbox, so its comments are
+authorized by the publish token and attributed as `publisher`; an optional
+`display_name` labels them and never replaces the attribution. A comment that
+does not decrypt is returned marked unreadable with a count, never dropped,
+because a quietly shortened list reads as agreement.
+
+What the service holds is comment ciphertext it cannot read. What it learns is
+who commented on which relic and when, which for a human commenter is a
+verified email address. The content stays private; the participation does not.
+
 ## Why it runs locally
 
 Encryption has to happen where the plaintext is, so a hosted version of this
@@ -113,7 +152,10 @@ binding the tarball to a specific commit and workflow.
 | Tool | Input | Notes |
 |---|---|---|
 | `relic_publish` | `path`, optional `filename`, `ttl_days` | A filesystem path. Inline content is deliberately not accepted, so the plaintext never joins the key in your transcript. A relic is kept until it is deleted; `ttl_days` (an integer, 1 to 3650) gives it a lifetime. Reports the relic as version 1. |
+| `relic_lookup_source` | `path` | Reads local state to find whether this machine already published that file, and returns the exact `relic_republish` call. Calls no server. |
 | `relic_republish` | `relic_id`, `path`, optional `filename`, `ttl_days` | Publishes a new version under the same key, so the share URL is unchanged. Works only on the machine holding that relic's key and publish token; a taken-down relic can never be revived. |
+| `relic_read_comments` | `relic_id` | Returns the relic's comments oldest first, decrypted locally, with the author and a count of any that would not decrypt. Works only on the machine that published. |
+| `relic_comment` | `relic_id`, `body`, optional `display_name` | Leaves a comment, encrypted on this machine, authorized by the publish token and attributed as `publisher`. Body caps at 4096 bytes of UTF-8. |
 | `relic_describe_client` | none | Explains the encryption path. Reads nothing, sends nothing. |
 
 ## Environment

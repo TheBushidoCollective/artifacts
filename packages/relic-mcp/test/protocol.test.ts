@@ -218,6 +218,9 @@ describe('the handshake carries instructions', () => {
     // The frame cannot reach the network, which has to be known before a page
     // is generated rather than after it is published.
     /no network access/i,
+    // Comments exist and are readable, which an agent that is never told
+    // never goes looking for.
+    /relic_read_comments/,
   ];
 
   test('server/discover returns them', async () => {
@@ -239,7 +242,11 @@ describe('the handshake carries instructions', () => {
 
   test('stay short, because they cost context every session', async () => {
     const { INSTRUCTIONS } = await import('../src/server.ts');
-    expect(INSTRUCTIONS.length).toBeLessThan(1200);
+    // The ceiling moved once, from 1200, when comments added a sixth item.
+    // Six items is the budget: what it buys is an agent that knows comments
+    // exist, and an agent never told never reads one. A seventh item is a
+    // reason to cut, not a reason to move this number again.
+    expect(INSTRUCTIONS.length).toBeLessThan(1400);
   });
 
   test('do not drift from the skill on the facts that matter', async () => {

@@ -182,7 +182,7 @@ describe('loading a historical version', () => {
     expect(result.kind).toBe('unavailable');
     if (result.kind !== 'unavailable') return;
     expect(result.code).toBe('comparison_too_large');
-    expect(result.detail).toContain('4 MiB');
+    expect(result.detail).toContain('16 MiB');
     expect(requests).toHaveLength(1);
     expect(current.route).toBe('code');
     expect(new TextDecoder().decode(current.content)).toBe('current\n');

@@ -2,36 +2,21 @@ import { type Change, diffLines, diffWordsWithSpace } from 'diff';
 import type { ReadyView, RenderRoute } from './viewer.ts';
 
 /**
- * The code ceiling. A line comparison keeps two plaintext byte arrays, two
- * decoded strings, and the diff library's change graph alive together. At
- * 4 MiB per version that is 8 MiB of plaintext, up to 16 MiB of UTF-16 text,
- * an 8 MiB ciphertext window, and 32 MiB reserved for change bookkeeping and
- * DOM text. The 64 MiB working set stays well below the separate 100 MiB
- * one-version render ceiling.
+ * One comparison ceiling for every comparable class.
+ *
+ * The 1 MiB rendered split is reversed. Documents (markdown, html, jsx)
+ * need to compare, and a 1 MiB refusal was blocking real ones while the
+ * current version still opened under the 100 MiB one-version ceiling.
+ * 16 MiB per version is large enough for an inlined HTML report and still
+ * a named stop before two 100 MiB trees try to share a tab. A phone may
+ * feel it. A document that cannot be compared is worse.
  */
-export const MAX_DIFF_BYTES = 4 * 1024 * 1024;
-export const DIFF_LIMIT_LABEL = '4 MiB';
+export const MAX_DIFF_BYTES = 16 * 1024 * 1024;
+export const DIFF_LIMIT_LABEL = '16 MiB';
 
-/**
- * The rendered ceiling, and it has to be lower than the code one rather than
- * equal to it, because a rendered comparison allocates two things the line
- * comparison never does: two live DOM trees, and two captured trees to diff.
- *
- * At 1 MiB per version: 2 MiB of plaintext, up to 4 MiB of UTF-16 text, a
- * 2 MiB ciphertext window, two live DOM trees at a conservative eight times
- * source for 16 MiB, two captured trees at four times source for 8 MiB, and
- * 8 MiB for the change graph, the mark set, and the change list. That is
- * roughly 40 MiB, inside the same 64 MiB budget the code ceiling was sized
- * against.
- *
- * Images sit here too, and for a sharper reason: a decoded bitmap is many
- * times the size of its encoded bytes, so a 4 MiB photograph decodes into
- * tens of megabytes and a comparison holds two of them. The same byte budget
- * therefore buys a smaller file, which is the honest trade rather than a
- * conservative one.
- */
-export const MAX_RENDERED_DIFF_BYTES = 1 * 1024 * 1024;
-export const RENDERED_DIFF_LIMIT_LABEL = '1 MiB';
+/** Same ceiling. Kept so existing imports keep compiling. */
+export const MAX_RENDERED_DIFF_BYTES = MAX_DIFF_BYTES;
+export const RENDERED_DIFF_LIMIT_LABEL = DIFF_LIMIT_LABEL;
 
 /**
  * How a pair of versions is compared. `code` is the one text mode left: a
@@ -52,10 +37,8 @@ export interface DiffCeiling {
  * availability check, the historical load's refusal before fetching, and the
  * comparison's own copy.
  */
-export function diffCeilingFor(mode: DiffMode): DiffCeiling {
-  return mode === 'code'
-    ? { bytes: MAX_DIFF_BYTES, label: DIFF_LIMIT_LABEL }
-    : { bytes: MAX_RENDERED_DIFF_BYTES, label: RENDERED_DIFF_LIMIT_LABEL };
+export function diffCeilingFor(_mode: DiffMode): DiffCeiling {
+  return { bytes: MAX_DIFF_BYTES, label: DIFF_LIMIT_LABEL };
 }
 
 export interface DiffSegment {

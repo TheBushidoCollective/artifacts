@@ -1,0 +1,13 @@
+https://www.rfc-editor.org/rfc/rfc8188.txt
+https://www.rfc-editor.org/rfc/rfc4648.txt
+https://www.rfc-editor.org/errata/rfc8188
+https://github.com/webtorrent/wormhole-crypto/blob/master/lib/ece.js
+https://github.com/webtorrent/wormhole-crypto/blob/master/lib/keychain.js
+https://github.com/webtorrent/wormhole-crypto/blob/master/package.json
+https://github.com/mozilla/rust-ece
+https://github.com/crow-misia/http-ece
+https://github.com/web-push-libs/encrypted-content-encoding
+https://www.crockford.com/base32.html
+https://github.github.com/gfm/
+https://github.com/greggman/unzipit
+https://github.com/miscreant/meta/wiki/Nonce-Reuse-Misuse-Resistance

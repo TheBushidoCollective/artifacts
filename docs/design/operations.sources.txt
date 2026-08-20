@@ -1,0 +1,12 @@
+https://www.law.cornell.edu/uscode/text/17/512
+https://www.law.cornell.edu/uscode/text/18/2258A
+https://www.ecfr.gov/current/title-37/section-201.38
+https://publications.europa.eu/resource/celex/32022R2065
+https://publications.europa.eu/resource/celex/32016R0679
+https://docs.cloud.google.com/docs/security/respond-to-abuse-misuse
+https://support.google.com/cloud/answer/7002354
+https://support.google.com/webmasters/answer/9044101
+https://support.google.com/webmasters/answer/9008080
+https://developers.google.com/safe-browsing/reference/URLs.and.Hashing
+https://cloud.google.com/terms/aup
+https://docs.cloud.google.com/storage/docs/access-control/signed-urls

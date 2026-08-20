@@ -6,6 +6,7 @@ import {
   safeDownloadName,
   sniffImageType,
 } from '../src/main.ts';
+import type { Mark } from '../src/rendered-tree.ts';
 import {
   createSandboxHandler,
   isRenderJsxMessage,
@@ -71,12 +72,15 @@ describe('the sandbox handler', () => {
   const makeHandler = () => {
     const html: string[] = [];
     const jsx: string[] = [];
+    const marks: Mark[][] = [];
     return {
       html,
       jsx,
+      marks,
       handle: createSandboxHandler(
         (markup) => html.push(markup),
-        (code) => jsx.push(code)
+        (code) => jsx.push(code),
+        (applied) => marks.push([...applied])
       ),
     };
   };
@@ -170,6 +174,82 @@ describe('the sandbox handler', () => {
     );
     expect(isRenderJsxMessage({ type: 'relic:render-jsx' })).toBe(false);
     expect(isRenderJsxMessage({ type: 'relic:render', html: 'x' })).toBe(false);
+  });
+});
+
+/**
+ * Annotation is the second message type the frame accepts, and it exists
+ * because a rendered comparison has to outline what changed inside a frame the
+ * parent cannot read. It is safe where a second render would not be, so the
+ * boundary between the two gets its own tests.
+ */
+describe('the sandbox handler and annotation', () => {
+  const makeHandler = () => {
+    const html: string[] = [];
+    const marks: Mark[][] = [];
+    return {
+      html,
+      marks,
+      handle: createSandboxHandler(
+        (markup) => html.push(markup),
+        () => {},
+        (applied) => marks.push([...applied])
+      ),
+    };
+  };
+
+  const annotation = {
+    type: 'relic:annotate',
+    marks: [{ path: [1, 0], kind: 'changed' }],
+  };
+
+  test('refuses annotation before a render, because there is nothing to mark', () => {
+    const { marks, handle } = makeHandler();
+
+    expect(handle(annotation)).toBe(false);
+    expect(marks).toEqual([]);
+  });
+
+  test('accepts one annotation after a render and passes its marks through', () => {
+    const { marks, handle } = makeHandler();
+
+    handle({ type: 'relic:render', html: '<p>hi</p>' });
+    expect(handle(annotation)).toBe(true);
+    expect(marks).toEqual([[{ path: [1, 0], kind: 'changed' }]]);
+  });
+
+  test('refuses a second annotation, for the same reason as a second render', () => {
+    const { marks, handle } = makeHandler();
+
+    handle({ type: 'relic:render', html: '<p>hi</p>' });
+    handle(annotation);
+    expect(handle(annotation)).toBe(false);
+    expect(marks).toHaveLength(1);
+  });
+
+  test('refuses a malformed mark rather than salvaging the valid half', () => {
+    const { marks, handle } = makeHandler();
+
+    handle({ type: 'relic:render', html: '<p>hi</p>' });
+    expect(
+      handle({
+        type: 'relic:annotate',
+        marks: [
+          { path: [0], kind: 'added' },
+          { path: [-1], kind: 'added' },
+        ],
+      })
+    ).toBe(false);
+    expect(marks).toEqual([]);
+  });
+
+  test('annotating does not reopen the render guard', () => {
+    const { html, handle } = makeHandler();
+
+    handle({ type: 'relic:render', html: 'first' });
+    handle(annotation);
+    expect(handle({ type: 'relic:render', html: 'second' })).toBe(false);
+    expect(html).toEqual(['first']);
   });
 });
 

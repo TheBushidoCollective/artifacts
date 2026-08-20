@@ -19,13 +19,20 @@ import {
   comparisonAvailability,
   createImageDiff,
   createTextDiff,
-  type DiffMode,
   diffModeForRoutes,
   type TextDiffPart,
   versionHistoryCopy,
 } from './diff.ts';
+import { diffTrees, type RenderedChange, type TreeDiff } from './domdiff.ts';
 import { transpileJsx } from './jsx.ts';
 import { highlightCode, renderMarkdown } from './markdown.ts';
+import {
+  applyMarks,
+  captureTree,
+  isTreeMessage,
+  type Mark,
+  type TreeNode,
+} from './rendered-tree.ts';
 import {
   type DeadView,
   formatBytes,
@@ -68,6 +75,9 @@ const ICONS = {
     'M5.7 3.3 2 7l3.7 3.7.7-.7L3.4 7l3-3-.7-.7zm4.6 0-.7.7 3 3-3 3 .7.7L14 7l-3.7-3.7z',
   rendered: 'M2 3h12v1H2V3zm0 3h12v1H2V6zm0 3h8v1H2V9zm0 3h10v1H2v-1z',
   flag: 'M3 1h1v14H3V1zm2 1h8l-2 3 2 3H5V2z',
+  chevron: 'M3.4 5.7 8 10.3l4.6-4.6-.7-.7L8 8.9 4.1 5l-.7.7z',
+  swipe: 'M7.5 1h1v14h-1V1zM2 7.5h3.5v1H2v-1zm8.5 0H14v1h-3.5v-1z',
+  columns: 'M2 2h5v12H2V2zm1 1v10h3V3H3zm6-1h5v12H9V2zm1 1v10h3V3h-3z',
 } as const;
 
 function icon(path: string): SVGSVGElement {
@@ -184,6 +194,177 @@ function downloadContent(view: ReadyView): void {
 export interface BarOptions {
   readonly onCompare?: () => void;
   readonly comparisonOpen?: boolean;
+  /**
+   * Which version the reader is looking at, when that is not the current
+   * one. Set while a comparison is open so the taskbar names the version
+   * being compared rather than the one behind it.
+   */
+  readonly selectedVersion?: number;
+  /** Offered only when there is more than one historical version to pick. */
+  readonly onSelectVersion?: (version: number) => void;
+}
+
+/**
+ * The version, as the taskbar shows it.
+ *
+ * Two strings rather than one, because the row has already overflowed once at
+ * narrow width and the long form does not fit at 320 CSS pixels. The
+ * stylesheet swaps them, so neither form is built by measuring anything.
+ */
+function versionLabels(
+  shown: number,
+  current: number
+): { readonly long: string; readonly short: string } {
+  return {
+    long: `Version ${shown} of ${current}`,
+    short: `v${shown}/${current}`,
+  };
+}
+
+/**
+ * The version chip in the identity zone, which is a control only when there
+ * is a choice to make.
+ *
+ * A relic on its second version has exactly one historical version, so a
+ * picker there would be a menu with one item: it looks like a decision and
+ * offers none. That case renders a label, and Compare versions in the actions
+ * zone is the only control. From the third version on there is a real choice,
+ * so the chip becomes an owned listbox.
+ *
+ * Owned rather than a native `select`, and that is a platform limit rather
+ * than a styling preference: a native popup cannot be positioned or sized by
+ * the page, and on macOS it rendered as a large panel detached from its
+ * control, floating in empty space. No stylesheet reaches it.
+ */
+function buildVersionControl(
+  view: ReadyView,
+  options: BarOptions
+): HTMLElement | undefined {
+  // A single-version relic says nothing about versions at all. A number with
+  // no history behind it invites a question that has no answer.
+  if (!Number.isInteger(view.currentVersion) || view.currentVersion <= 1) {
+    return undefined;
+  }
+
+  const shown = options.selectedVersion ?? view.version;
+  const labels = versionLabels(shown, view.currentVersion);
+  const wrap = document.createElement('div');
+  wrap.className = 'version';
+
+  const text = (parent: HTMLElement): void => {
+    const long = document.createElement('span');
+    long.className = 'version-long';
+    long.textContent = labels.long;
+    const short = document.createElement('span');
+    short.className = 'version-short';
+    short.setAttribute('aria-hidden', 'true');
+    short.textContent = labels.short;
+    parent.append(long, short);
+  };
+
+  const onSelect = options.onSelectVersion;
+  if (onSelect === undefined || view.currentVersion < 3) {
+    const label = document.createElement('div');
+    label.className = 'version-label';
+    text(label);
+    wrap.appendChild(label);
+    return wrap;
+  }
+
+  const trigger = document.createElement('button');
+  trigger.type = 'button';
+  trigger.className = 'version-label version-trigger';
+  trigger.setAttribute('aria-haspopup', 'listbox');
+  trigger.setAttribute('aria-expanded', 'false');
+  trigger.setAttribute(
+    'aria-label',
+    `${labels.long}. Choose an earlier version to compare`
+  );
+  text(trigger);
+  trigger.appendChild(icon(ICONS.chevron));
+
+  const list = document.createElement('div');
+  list.className = 'version-list';
+  list.setAttribute('role', 'listbox');
+  list.setAttribute('aria-label', 'Earlier version to compare');
+  list.hidden = true;
+
+  const optionElements: HTMLElement[] = [];
+  for (let version = view.currentVersion - 1; version >= 1; version--) {
+    const option = document.createElement('div');
+    option.className = 'version-option';
+    option.setAttribute('role', 'option');
+    option.setAttribute('aria-selected', version === shown ? 'true' : 'false');
+    // Roving focus rather than a tab stop each: a listbox is one stop, and
+    // arrow keys move within it.
+    option.tabIndex = -1;
+    option.textContent = `Version ${version}`;
+    option.addEventListener('click', () => {
+      close();
+      onSelect(version);
+    });
+    list.appendChild(option);
+    optionElements.push(option);
+  }
+
+  let open = false;
+  function close(focusTrigger = false): void {
+    if (!open) return;
+    open = false;
+    list.hidden = true;
+    trigger.setAttribute('aria-expanded', 'false');
+    if (focusTrigger) trigger.focus();
+  }
+
+  const move = (from: number, delta: number): void => {
+    const last = optionElements.length - 1;
+    const next = Math.min(last, Math.max(0, from + delta));
+    optionElements[next]?.focus();
+  };
+
+  function show(index: number): void {
+    open = true;
+    list.hidden = false;
+    trigger.setAttribute('aria-expanded', 'true');
+    optionElements[index]?.focus();
+  }
+
+  trigger.addEventListener('click', () => {
+    if (open) close();
+    else show(0);
+  });
+
+  trigger.addEventListener('keydown', (event: KeyboardEvent) => {
+    if (event.key === 'ArrowDown' || event.key === 'Enter' || event.key === ' ')
+      show(0);
+    else if (event.key === 'ArrowUp') show(optionElements.length - 1);
+    else return;
+    event.preventDefault();
+  });
+
+  list.addEventListener('keydown', (event: KeyboardEvent) => {
+    const index = optionElements.indexOf(event.target as HTMLElement);
+    if (index < 0) return;
+    if (event.key === 'ArrowDown') move(index, 1);
+    else if (event.key === 'ArrowUp') move(index, -1);
+    else if (event.key === 'Home') move(index, -optionElements.length);
+    else if (event.key === 'End') move(index, optionElements.length);
+    else if (event.key === 'Escape' || event.key === 'Tab') close(true);
+    else if (event.key === 'Enter' || event.key === ' ')
+      optionElements[index]?.click();
+    else return;
+    event.preventDefault();
+  });
+
+  // A click anywhere else dismisses it. Bound on the document rather than on
+  // a blur, because focus moves inside the list on every arrow key and a
+  // blur handler would close it mid-navigation.
+  document.addEventListener('click', (event: Event) => {
+    if (!wrap.contains(event.target as Node)) close();
+  });
+
+  wrap.append(trigger, list);
+  return wrap;
 }
 
 /**
@@ -214,11 +395,24 @@ export function buildBar(
   name.textContent = view.filename.length > 0 ? view.filename : 'Untitled';
   name.title = view.filename;
 
+  // The relic id and the version sit on one metadata line, because a version
+  // number is artifact metadata of exactly the same kind as a catalog number.
+  // They share the identity zone rather than joining the actions, and that is
+  // load bearing: identity is the only flexible column on the row, so the
+  // pressure a new element adds lands on an ellipsis that already exists
+  // instead of pushing a control off the end.
+  const meta = document.createElement('div');
+  meta.className = 'identity-meta';
+
   const accession = document.createElement('div');
   accession.className = 'accession';
   accession.textContent = relicId;
+  meta.appendChild(accession);
 
-  identity.append(name, accession);
+  const version = buildVersionControl(view, options);
+  if (version !== undefined) meta.appendChild(version);
+
+  identity.append(name, meta);
   bar.appendChild(identity);
 
   const actions = document.createElement('div');
@@ -381,56 +575,129 @@ function renderImageView(view: ReadyView): HTMLElement {
 }
 
 /**
- * HTML renders on the usercontent origin and nowhere else.
+ * What a render frame is told to render. HTML crosses as markup, a component
+ * crosses as JavaScript this origin transpiled without running.
+ */
+type RenderPayload =
+  | { readonly type: 'relic:render'; readonly html: string }
+  | { readonly type: 'relic:render-jsx'; readonly code: string };
+
+interface FrameHandle {
+  readonly frame: HTMLIFrameElement;
+  /**
+   * Mark this frame's own rendered nodes, once the parent holds a diff.
+   *
+   * The marks carry a child-index path and a kind, and nothing else. That is
+   * what makes a second message safe where a second render would not be: this
+   * channel is structurally incapable of changing what the document says.
+   */
+  annotate(marks: readonly Mark[]): void;
+}
+
+/**
+ * One render frame on the usercontent origin.
  *
  * The iframe carries `sandbox` without `allow-same-origin`, so the document
- * lands in an opaque origin: it cannot reach this origin, it cannot reach
- * the usercontent origin's storage, and it cannot read `parent.location`.
- * The markup is posted in; the key never is.
+ * lands in an opaque origin: it cannot reach this origin, it cannot reach the
+ * usercontent origin's storage, and it cannot read `parent.location`. The
+ * payload is posted in; the key never is.
+ *
+ * Scripts and nothing else. Popups are removed by dropping the flag, not by
+ * CSP: a popup opens a new top-level context this frame's policy does not
+ * govern.
+ *
+ * A comparison needs two renders of untrusted content, and it gets them from
+ * two of these rather than by relaxing the frame's one-render guard. The
+ * guard exists so nothing that can post here can swap the content after the
+ * recipient has decided to trust what they are looking at, and a second
+ * render is exactly that swap.
  */
-export function renderSandboxedHtml(
+function sandboxFrame(
   view: ReadyView,
-  usercontentOrigin: string
-): HTMLElement {
-  const wrapper = document.createElement('div');
-  wrapper.className = 'doc doc-html';
-
+  usercontentOrigin: string,
+  payload: RenderPayload,
+  onTree?: (tree: TreeNode) => void
+): FrameHandle {
   const frame = document.createElement('iframe');
   frame.className = 'usercontent-frame';
-  // Scripts and nothing else. Popups are removed by dropping the flag, not
-  // by CSP: a popup opens a new top-level context this frame's policy does
-  // not govern.
   frame.setAttribute('sandbox', 'allow-scripts');
   frame.setAttribute('referrerpolicy', 'no-referrer');
   frame.src = `${usercontentOrigin}/sandbox.html`;
   frame.title = view.filename;
 
-  const html = decodeText(view.content);
-
   // An opaque-origin frame has no origin to target, so '*' is the only option
   // the platform offers. It is safe here because the payload is the content
   // that frame is about to display anyway. The key is never in it.
-  const post = (): void => {
-    frame.contentWindow?.postMessage({ type: 'relic:render', html }, '*');
+  const post = (message: object): void => {
+    frame.contentWindow?.postMessage(message, '*');
   };
 
   // Both paths, because the race runs in either direction: `load` can fire
   // before the frame's own script attaches its listener, and the frame's
   // ready message can arrive before `load`. The frame renders at most once,
   // so posting twice is harmless and losing the message is not.
-  const onReady = (event: MessageEvent): void => {
-    if (
-      event.source === frame.contentWindow &&
-      (event.data as { type?: unknown } | null)?.type === 'relic:sandbox-ready'
-    ) {
-      post();
-      window.removeEventListener('message', onReady);
+  const onMessage = (event: MessageEvent): void => {
+    if (event.source !== frame.contentWindow) return;
+    const type = (event.data as { type?: unknown } | null)?.type;
+    if (type === 'relic:sandbox-ready') {
+      post(payload);
+      return;
+    }
+    // The captured tree is tag names, a fixed attribute allowlist, and text.
+    // No markup crosses back to this origin, so nothing here has to be
+    // sanitized before it is read: there is nothing to sanitize.
+    if (onTree !== undefined && isTreeMessage(event.data)) {
+      onTree(event.data.tree);
     }
   };
-  window.addEventListener('message', onReady);
-  frame.addEventListener('load', post);
+  window.addEventListener('message', onMessage);
+  frame.addEventListener('load', () => post(payload));
 
-  wrapper.appendChild(frame);
+  return {
+    frame,
+    annotate: (marks) => post({ type: 'relic:annotate', marks }),
+  };
+}
+
+/**
+ * A component's payload, or nothing when it will not compile.
+ *
+ * The service origin must never execute relic content, and the transform
+ * never does: it is a text-to-text rewrite whose output is posted as a
+ * string. The frame turns that string back into running code by importing it
+ * as a module. React is bundled into the inlined frame script because the
+ * opaque origin cannot fetch same-origin assets or any remote dependency.
+ */
+function jsxPayload(view: ReadyView): RenderPayload | undefined {
+  try {
+    return {
+      type: 'relic:render-jsx',
+      code: transpileJsx(decodeText(view.content), view.filename),
+    };
+  } catch {
+    return undefined;
+  }
+}
+
+function payloadFor(view: ReadyView): RenderPayload | undefined {
+  return view.route === 'sandboxed-jsx'
+    ? jsxPayload(view)
+    : { type: 'relic:render', html: decodeText(view.content) };
+}
+
+/** HTML renders on the usercontent origin and nowhere else. */
+export function renderSandboxedHtml(
+  view: ReadyView,
+  usercontentOrigin: string
+): HTMLElement {
+  const wrapper = document.createElement('div');
+  wrapper.className = 'doc doc-html';
+  wrapper.appendChild(
+    sandboxFrame(view, usercontentOrigin, {
+      type: 'relic:render',
+      html: decodeText(view.content),
+    }).frame
+  );
   return wrapper;
 }
 
@@ -438,12 +705,6 @@ export function renderSandboxedHtml(
  * A component renders on the usercontent origin and nowhere else, exactly
  * like HTML, but what crosses the frame boundary is different: the source is
  * transpiled here, on the service origin, into plain JavaScript first.
- *
- * The service origin must never execute relic content, and the transform
- * never does: it is a text-to-text rewrite, and its output is posted as a
- * string. The frame turns that string back into running code by importing it
- * as a module. React is bundled into the inlined frame script because the
- * opaque origin cannot fetch same-origin assets or any remote dependency.
  */
 export function renderSandboxedJsx(
   view: ReadyView,
@@ -452,10 +713,8 @@ export function renderSandboxedJsx(
   const wrapper = document.createElement('div');
   wrapper.className = 'doc doc-jsx';
 
-  let code: string;
-  try {
-    code = transpileJsx(decodeText(view.content), view.filename);
-  } catch {
+  const payload = jsxPayload(view);
+  if (payload === undefined) {
     // Routing already established the bytes parse, so landing here means a
     // path the route decision could not see. Source view is the honest
     // fallback: it shows exactly what was published without running it.
@@ -469,41 +728,7 @@ export function renderSandboxedJsx(
     return wrapper;
   }
 
-  const frame = document.createElement('iframe');
-  frame.className = 'usercontent-frame';
-  // Scripts and nothing else, as with the HTML route: a popup would open a
-  // top-level context this frame's policy does not govern, so the flag is
-  // dropped rather than left to CSP.
-  frame.setAttribute('sandbox', 'allow-scripts');
-  frame.setAttribute('referrerpolicy', 'no-referrer');
-  frame.src = `${usercontentOrigin}/sandbox.html`;
-  frame.title = view.filename;
-
-  // An opaque-origin frame has no origin to target, so '*' is the only option
-  // the platform offers, for the same reason as the HTML route: the payload
-  // is the content that frame is about to display anyway, and the key is
-  // never in it.
-  const post = (): void => {
-    frame.contentWindow?.postMessage({ type: 'relic:render-jsx', code }, '*');
-  };
-
-  // Both paths, as with HTML: `load` can fire before the frame's script
-  // attaches its listener, and the ready message can arrive before `load`.
-  // The frame renders at most once, so posting twice is harmless and losing
-  // the message is not.
-  const onReady = (event: MessageEvent): void => {
-    if (
-      event.source === frame.contentWindow &&
-      (event.data as { type?: unknown } | null)?.type === 'relic:sandbox-ready'
-    ) {
-      post();
-      window.removeEventListener('message', onReady);
-    }
-  };
-  window.addEventListener('message', onReady);
-  frame.addEventListener('load', post);
-
-  wrapper.appendChild(frame);
+  wrapper.appendChild(sandboxFrame(view, usercontentOrigin, payload).frame);
   return wrapper;
 }
 
@@ -618,47 +843,33 @@ function noChanges(summary: string): HTMLElement {
   return empty;
 }
 
-function textModeLabel(mode: Exclude<DiffMode, 'image'>): string {
-  switch (mode) {
-    case 'markdown':
-      return 'Markdown source comparison';
-    case 'code':
-      return 'Code comparison';
-    default:
-      return 'Source text comparison';
-  }
-}
-
-export function renderTextComparison(
+/**
+ * The line comparison, now scoped to code.
+ *
+ * Markdown, HTML and JSX all used to arrive here and be compared as source
+ * text. That is a text diff of markup, which is not a visual diff of anything
+ * a reader looks at, so each of them now compares as it renders. Code stays,
+ * because for code the source is what a reader sees.
+ */
+export function renderCodeComparison(
   current: ReadyView,
-  historical: ReadyView,
-  mode: Exclude<DiffMode, 'image'>
+  historical: ReadyView
 ): HTMLElement {
   const wrapper = document.createElement('section');
-  wrapper.className = `diff-view diff-view-${mode}`;
+  wrapper.className = 'diff-view diff-view-code';
 
   const result = createTextDiff(
-    mode,
     decodeText(historical.content),
     decodeText(current.content)
   );
   const summary = document.createElement('div');
   summary.className = 'diff-summary';
   const label = document.createElement('strong');
-  label.textContent = textModeLabel(mode);
+  label.textContent = 'Code comparison';
   const counts = document.createElement('span');
   counts.textContent = result.summary;
   summary.append(label, counts);
   wrapper.appendChild(summary);
-
-  if (mode === 'source') {
-    const explanation = document.createElement('p');
-    explanation.className = 'diff-source-note';
-    explanation.textContent =
-      'HTML and JSX are compared as source text. Neither historical source ' +
-      'nor diff markup is sent to the rendered-content frame.';
-    wrapper.appendChild(explanation);
-  }
 
   if (!result.changed) {
     wrapper.appendChild(noChanges(result.summary));
@@ -710,6 +921,254 @@ export function renderTextComparison(
   }
 
   wrapper.appendChild(changes);
+  return wrapper;
+}
+
+/** What a reader sees changed, in rendered terms rather than source terms. */
+function renderChangeList(changes: readonly RenderedChange[]): HTMLElement {
+  const list = document.createElement('ul');
+  list.className = 'diff-change-list';
+
+  for (const change of changes) {
+    const item = document.createElement('li');
+    item.className = `diff-change diff-change-${change.kind}`;
+
+    const kind = document.createElement('span');
+    kind.className = 'diff-change-kind';
+    kind.textContent = change.kind;
+
+    const what = document.createElement('span');
+    what.className = 'diff-change-what';
+    what.textContent = change.label;
+
+    // Rendered text from the compared versions, and it reaches the DOM as a
+    // text node. Nothing parses it, so content that is secretly markup shows
+    // as its own source and does nothing, which is the correct outcome on the
+    // origin that holds the key.
+    const detail = document.createElement('span');
+    detail.className = 'diff-change-detail';
+    if (change.kind === 'changed') {
+      const before = document.createElement('del');
+      before.textContent = change.before;
+      const after = document.createElement('ins');
+      after.textContent = change.after;
+      detail.append(before, after);
+    } else {
+      detail.textContent =
+        change.kind === 'added' ? change.after : change.before;
+    }
+
+    item.append(kind, what, detail);
+    list.appendChild(item);
+  }
+
+  return list;
+}
+
+/** One side of a rendered comparison, and how to mark it once a diff exists. */
+interface ComparisonPane {
+  readonly element: HTMLElement;
+  /** Resolves with the pane's captured tree, or never when it cannot render. */
+  readonly tree: Promise<TreeNode>;
+  annotate(marks: readonly Mark[]): void;
+}
+
+/** How long to wait for a frame that renders nothing at all. */
+const TREE_TIMEOUT_MS = 6000;
+
+/**
+ * A markdown pane, rendered here rather than in a frame.
+ *
+ * Markdown renders on the service origin because `renderMarkdown` escapes
+ * before it emits markup and its element and attribute set is fixed by the
+ * viewer, so nothing in the source can become an element. That means both
+ * versions are ordinary DOM on this origin, and the comparison needs no frame
+ * and no protocol.
+ */
+function markdownPane(view: ReadyView): ComparisonPane {
+  const prose = document.createElement('article');
+  prose.className = 'prose';
+  prose.innerHTML = renderMarkdown(decodeText(view.content));
+  return {
+    element: prose,
+    tree: Promise.resolve(captureTree(prose)),
+    annotate: (marks) => {
+      applyMarks(prose, marks);
+    },
+  };
+}
+
+/**
+ * A pane whose content is a page or a component, so it renders in its own
+ * network-denied frame.
+ *
+ * Two frames rather than two renders in one: each keeps the single-render
+ * guarantee it already had. The parent cannot read a frame's DOM, because the
+ * render frame is an opaque origin, so the frame reports its own rendered
+ * structure and the parent posts back marks that carry no content.
+ */
+function framePane(view: ReadyView, usercontentOrigin: string): ComparisonPane {
+  const payload = payloadFor(view);
+  if (payload === undefined) {
+    return {
+      element: notice(
+        `Version ${view.version} is named like a React component and does ` +
+          'not compile as one, so it cannot be rendered for comparison.'
+      ),
+      tree: new Promise<TreeNode>(() => {}),
+      annotate: () => {},
+    };
+  }
+
+  let settle: ((tree: TreeNode) => void) | undefined;
+  const tree = new Promise<TreeNode>((resolve) => {
+    settle = resolve;
+  });
+  const handle = sandboxFrame(view, usercontentOrigin, payload, (reported) =>
+    settle?.(reported)
+  );
+  return { element: handle.frame, tree, annotate: handle.annotate };
+}
+
+/**
+ * The visual comparison for every class that has a rendered form.
+ *
+ * Two panes, each showing one version as it actually renders, stacked under a
+ * swipe control so the reader can wipe between them, or laid side by side.
+ * On top of that, each pane's own changed nodes are outlined where they sit,
+ * so a change is visible without hunting for it. Markdown defaults to side by
+ * side because prose is read, and a page or a component defaults to the swipe
+ * because what matters there is whether the pixels moved.
+ */
+export function renderRenderedComparison(
+  current: ReadyView,
+  historical: ReadyView,
+  mode: 'markdown' | 'rendered',
+  usercontentOrigin: string
+): HTMLElement {
+  const wrapper = document.createElement('section');
+  wrapper.className = `diff-view diff-view-${mode}`;
+
+  const summary = document.createElement('div');
+  summary.className = 'diff-summary';
+  const label = document.createElement('strong');
+  label.textContent = 'Rendered comparison';
+  const counts = document.createElement('span');
+  counts.textContent = 'Rendering both versions.';
+  summary.append(label, counts);
+  wrapper.appendChild(summary);
+
+  const before =
+    mode === 'markdown'
+      ? markdownPane(historical)
+      : framePane(historical, usercontentOrigin);
+  const after =
+    mode === 'markdown'
+      ? markdownPane(current)
+      : framePane(current, usercontentOrigin);
+
+  const stage = document.createElement('div');
+  stage.className = 'compare-stage';
+  stage.dataset['layout'] = mode === 'markdown' ? 'split' : 'swipe';
+  stage.style.setProperty('--split', '50%');
+
+  const beforePane = document.createElement('div');
+  beforePane.className = 'compare-pane compare-pane-before';
+  beforePane.appendChild(before.element);
+
+  const afterPane = document.createElement('div');
+  afterPane.className = 'compare-pane compare-pane-current';
+  afterPane.appendChild(after.element);
+
+  const beforeLabel = document.createElement('span');
+  beforeLabel.className = 'compare-label compare-label-before';
+  beforeLabel.textContent = `Version ${historical.version}`;
+  const afterLabel = document.createElement('span');
+  afterLabel.className = 'compare-label compare-label-current';
+  afterLabel.textContent = `Version ${current.version}, current`;
+  const divider = document.createElement('span');
+  divider.className = 'compare-divider';
+  divider.setAttribute('aria-hidden', 'true');
+
+  stage.append(beforePane, afterPane, beforeLabel, afterLabel, divider);
+
+  const controls = document.createElement('div');
+  controls.className = 'compare-controls';
+
+  const swipeControl = document.createElement('label');
+  swipeControl.className = 'compare-swipe';
+  const swipeText = document.createElement('span');
+  const swipeLabel = `Reveal version ${current.version} over version ${historical.version}`;
+  swipeText.textContent = swipeLabel;
+  const slider = document.createElement('input');
+  slider.type = 'range';
+  slider.min = '0';
+  slider.max = '100';
+  slider.value = '50';
+  slider.setAttribute('aria-label', swipeLabel);
+  slider.addEventListener('input', () => {
+    stage.style.setProperty('--split', `${slider.value}%`);
+  });
+  swipeControl.append(swipeText, slider);
+
+  const layout = document.createElement('div');
+  layout.className = 'compare-layout';
+  const buttons: HTMLButtonElement[] = [];
+  const setLayout = (next: 'swipe' | 'split'): void => {
+    stage.dataset['layout'] = next;
+    for (const candidate of buttons) {
+      const active = candidate.dataset['layout'] === next;
+      candidate.setAttribute('aria-pressed', active ? 'true' : 'false');
+    }
+    swipeControl.hidden = next !== 'swipe';
+  };
+  for (const [value, text, path] of [
+    ['swipe', 'Swipe', ICONS.swipe],
+    ['split', 'Side by side', ICONS.columns],
+  ] as const) {
+    const control = button(text, path, () => setLayout(value));
+    control.dataset['layout'] = value;
+    buttons.push(control);
+    layout.appendChild(control);
+  }
+  setLayout(stage.dataset['layout'] === 'split' ? 'split' : 'swipe');
+
+  controls.append(layout, swipeControl);
+
+  const result = document.createElement('div');
+  result.className = 'diff-rendered-result';
+
+  wrapper.append(stage, controls, result);
+
+  // The structural comparison is the annotation, and the two live renders are
+  // the evidence. So a frame that never reports a tree costs the outlines and
+  // the change list, and leaves the reader everything a swipe can show.
+  const timeout = new Promise<undefined>((resolve) => {
+    setTimeout(() => resolve(undefined), TREE_TIMEOUT_MS);
+  });
+  void Promise.race([Promise.all([before.tree, after.tree]), timeout]).then(
+    (trees) => {
+      if (trees === undefined) {
+        counts.textContent =
+          'Both versions are shown. Relik could not read their rendered ' +
+          'structure, so changes are not outlined.';
+        return;
+      }
+      const [beforeTree, afterTree] = trees;
+      const diff: TreeDiff = diffTrees(beforeTree, afterTree);
+      counts.textContent = diff.summary;
+      before.annotate(diff.removedMarks);
+      after.annotate(diff.addedMarks);
+      if (!diff.changed) {
+        result.replaceChildren(noChanges(diff.summary));
+        return;
+      }
+      if (diff.changes.length > 0) {
+        result.replaceChildren(renderChangeList(diff.changes));
+      }
+    }
+  );
+
   return wrapper;
 }
 
@@ -838,12 +1297,18 @@ export function renderImageComparison(
 interface ComparisonScaffold {
   readonly main: HTMLElement;
   readonly result: HTMLElement;
-  readonly select: HTMLSelectElement;
   readonly headline: HTMLElement;
   readonly historyNote: HTMLElement;
 }
 
-function buildComparisonScaffold(current: ReadyView): ComparisonScaffold {
+/**
+ * The comparison shell, and it carries no version picker of its own.
+ *
+ * The taskbar spans both views and now holds the version, so a second
+ * selector down here would be the same choice offered twice. What is left is
+ * the heading, which names both version numbers, and the result area.
+ */
+function buildComparisonScaffold(): ComparisonScaffold {
   const main = document.createElement('main');
   main.className = 'stage stage-diff';
 
@@ -863,37 +1328,25 @@ function buildComparisonScaffold(current: ReadyView): ComparisonScaffold {
   const historyNote = document.createElement('p');
   historyNote.className = 'diff-history-note';
   copy.append(eyebrow, headline, historyNote);
-
-  const picker = document.createElement('label');
-  picker.className = 'diff-picker';
-  const pickerLabel = document.createElement('span');
-  pickerLabel.textContent = 'Historical version';
-  const select = document.createElement('select');
-  select.setAttribute('aria-label', 'Historical version to compare');
-  for (let version = current.currentVersion - 1; version >= 1; version--) {
-    const option = document.createElement('option');
-    option.value = String(version);
-    option.textContent = `Version ${version}`;
-    select.appendChild(option);
-  }
-  picker.append(pickerLabel, select);
-  toolbar.append(copy, picker);
+  toolbar.appendChild(copy);
 
   const result = document.createElement('div');
   result.className = 'diff-result';
   result.setAttribute('aria-live', 'polite');
   shell.append(toolbar, result);
   main.appendChild(shell);
-  return { main, result, select, headline, historyNote };
+  return { main, result, headline, historyNote };
 }
 
 function renderComparison(
   current: ReadyView,
   relicId: string,
+  usercontentOrigin: string,
   deps: ViewerDeps,
-  onClose: () => void
+  onClose: () => void,
+  initialVersion?: number
 ): void {
-  const scaffold = buildComparisonScaffold(current);
+  const scaffold = buildComparisonScaffold();
   let request = 0;
 
   const loadSelected = async (selectedVersion: number): Promise<void> => {
@@ -922,7 +1375,8 @@ function renderComparison(
       return;
     }
 
-    const mode = diffModeForRoutes(current.route, historical.view.route);
+    const historicalView = historical.view;
+    const mode = diffModeForRoutes(current.route, historicalView.route);
     if (mode === undefined) {
       scaffold.result.replaceChildren(
         notice(
@@ -933,29 +1387,41 @@ function renderComparison(
       return;
     }
 
-    scaffold.result.replaceChildren(
-      mode === 'image'
-        ? renderImageComparison(current, historical.view)
-        : renderTextComparison(current, historical.view, mode)
-    );
+    if (mode === 'image') {
+      scaffold.result.replaceChildren(
+        renderImageComparison(current, historicalView)
+      );
+    } else if (mode === 'code') {
+      scaffold.result.replaceChildren(
+        renderCodeComparison(current, historicalView)
+      );
+    } else {
+      scaffold.result.replaceChildren(
+        renderRenderedComparison(
+          current,
+          historicalView,
+          mode,
+          usercontentOrigin
+        )
+      );
+    }
   };
 
-  scaffold.select.addEventListener('change', () => {
-    const selectedVersion = Number(scaffold.select.value);
+  const show = (selectedVersion: number): void => {
+    document.body.replaceChildren(
+      buildBar(current, relicId, {
+        onCompare: onClose,
+        comparisonOpen: true,
+        selectedVersion,
+        onSelectVersion: show,
+      }),
+      scaffold.main
+    );
+    scaffold.headline.focus();
     void loadSelected(selectedVersion);
-  });
+  };
 
-  const selectedVersion = current.currentVersion - 1;
-  scaffold.select.value = String(selectedVersion);
-  document.body.replaceChildren(
-    buildBar(current, relicId, {
-      onCompare: onClose,
-      comparisonOpen: true,
-    }),
-    scaffold.main
-  );
-  scaffold.headline.focus();
-  void loadSelected(selectedVersion);
+  show(initialVersion ?? current.currentVersion - 1);
 }
 
 function renderReady(
@@ -966,12 +1432,25 @@ function renderReady(
 ): void {
   const showCurrent = (): void => {
     document.body.replaceChildren(
-      buildBar(view, relicId, { onCompare: showComparison }),
+      buildBar(view, relicId, {
+        onCompare: () => showComparison(),
+        // Picking a version from the taskbar while the current version is
+        // open opens the comparison on that version directly, so the reader
+        // does not have to press Compare and then choose again.
+        onSelectVersion: showComparison,
+      }),
       buildCurrentStage(view, usercontentOrigin)
     );
   };
-  const showComparison = (): void => {
-    renderComparison(view, relicId, deps, showCurrent);
+  const showComparison = (selectedVersion?: number): void => {
+    renderComparison(
+      view,
+      relicId,
+      usercontentOrigin,
+      deps,
+      showCurrent,
+      selectedVersion
+    );
   };
   showCurrent();
 }

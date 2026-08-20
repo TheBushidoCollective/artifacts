@@ -37,10 +37,24 @@ describe('the built sandbox.html', () => {
     expect(html).not.toMatch(/<script\b[^>]*\bsrc\s*=/i);
 
     // The diff implementation lands in the service-origin bundle and nowhere
-    // in the frame bundle. A future postMessage diff channel fails this check.
+    // in the frame bundle. The comparison's two new message types are
+    // deliberately named `relic:tree` and `relic:annotate`, and neither
+    // carries a diff: one reports structure, the other carries paths.
     const diffMarker = 'No changes. These versions have identical content.';
     expect(viewer).toContain(diffMarker);
     expect(html).not.toContain(diffMarker);
     expect(html).not.toContain('relic:diff');
+
+    // Same again for the rendered comparison's own algorithm. The frame
+    // captures its structure and marks its nodes; it never compares.
+    const renderedMarker = 'These versions render identically.';
+    expect(viewer).toContain(renderedMarker);
+    expect(html).not.toContain(renderedMarker);
+
+    // The highlight path did ship into the frame, so the absence assertions
+    // above are not passing because the feature never arrived.
+    expect(html).toContain('data-relic-diff');
+    expect(html).toContain('relic:annotate');
+    expect(html).toContain('relic:tree');
   });
 });

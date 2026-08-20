@@ -3,8 +3,10 @@ import {
   comparisonAvailability,
   createImageDiff,
   createTextDiff,
+  diffCeilingFor,
   diffModeForRoutes,
   MAX_DIFF_BYTES,
+  MAX_RENDERED_DIFF_BYTES,
   versionHistoryCopy,
 } from '../src/diff.ts';
 import type { ReadyView } from '../src/viewer.ts';
@@ -28,44 +30,39 @@ function ready(
   };
 }
 
-describe('text version comparisons', () => {
-  for (const mode of ['markdown', 'code', 'source'] as const) {
-    test(`${mode} reports changed lines and inline edits`, () => {
-      const result = createTextDiff(
-        mode,
-        'const answer = 41;\nkeep();\n',
-        'const answer = 42;\nkeep();\n'
-      );
+describe('the code line comparison', () => {
+  test('reports changed lines and inline edits', () => {
+    const result = createTextDiff(
+      'const answer = 41;\nkeep();\n',
+      'const answer = 42;\nkeep();\n'
+    );
 
-      expect(result.changed).toBe(true);
-      expect(result.additions).toBe(1);
-      expect(result.deletions).toBe(1);
-      expect(result.parts.some((part) => part.kind === 'added')).toBe(true);
-      expect(result.parts.some((part) => part.kind === 'removed')).toBe(true);
-      expect(
-        result.parts
-          .flatMap((part) => part.segments ?? [])
-          .some((segment) => segment.kind === 'added' && segment.text === '42')
-      ).toBe(true);
-      expect(
-        result.parts
-          .flatMap((part) => part.segments ?? [])
-          .some(
-            (segment) => segment.kind === 'removed' && segment.text === '41'
-          )
-      ).toBe(true);
-    });
+    expect(result.changed).toBe(true);
+    expect(result.additions).toBe(1);
+    expect(result.deletions).toBe(1);
+    expect(result.parts.some((part) => part.kind === 'added')).toBe(true);
+    expect(result.parts.some((part) => part.kind === 'removed')).toBe(true);
+    expect(
+      result.parts
+        .flatMap((part) => part.segments ?? [])
+        .some((segment) => segment.kind === 'added' && segment.text === '42')
+    ).toBe(true);
+    expect(
+      result.parts
+        .flatMap((part) => part.segments ?? [])
+        .some((segment) => segment.kind === 'removed' && segment.text === '41')
+    ).toBe(true);
+  });
 
-    test(`${mode} names identical content instead of producing an empty diff`, () => {
-      const result = createTextDiff(mode, 'same\ncontent\n', 'same\ncontent\n');
+  test('names identical content instead of producing an empty diff', () => {
+    const result = createTextDiff('same\ncontent\n', 'same\ncontent\n');
 
-      expect(result.changed).toBe(false);
-      expect(result.parts).toEqual([]);
-      expect(result.summary).toBe(
-        'No changes. These versions have identical content.'
-      );
-    });
-  }
+    expect(result.changed).toBe(false);
+    expect(result.parts).toEqual([]);
+    expect(result.summary).toBe(
+      'No changes. These versions have identical content.'
+    );
+  });
 });
 
 describe('image version comparisons', () => {
@@ -115,10 +112,21 @@ describe('comparison availability', () => {
     expect(diffModeForRoutes('markdown', 'markdown')).toBe('markdown');
     expect(diffModeForRoutes('code', 'code')).toBe('code');
     expect(diffModeForRoutes('sandboxed-html', 'sandboxed-html')).toBe(
-      'source'
+      'rendered'
     );
-    expect(diffModeForRoutes('sandboxed-jsx', 'sandboxed-jsx')).toBe('source');
+    expect(diffModeForRoutes('sandboxed-jsx', 'sandboxed-jsx')).toBe(
+      'rendered'
+    );
     expect(diffModeForRoutes('image', 'image')).toBe('image');
+  });
+
+  test('refuses a pair whose two versions render in different modes', () => {
+    // Feeding a rendered page to the prose comparison, or an image to
+    // either, produces a confident result with no meaning.
+    expect(diffModeForRoutes('markdown', 'sandboxed-html')).toBeUndefined();
+    expect(diffModeForRoutes('code', 'markdown')).toBeUndefined();
+    expect(diffModeForRoutes('image', 'code')).toBeUndefined();
+    expect(diffModeForRoutes('markdown', 'download')).toBeUndefined();
   });
 
   test('does not offer history to a version 1 relic', () => {
@@ -159,5 +167,33 @@ describe('comparison availability', () => {
     expect(result.detail).toContain('4 MiB');
     expect(current.route).toBe('code');
     expect(current.content).toHaveLength(MAX_DIFF_BYTES + 1);
+  });
+
+  test('holds a rendered class to the lower per-class ceiling', () => {
+    // A rendered comparison also allocates two live DOM trees and two
+    // captured trees, so the same byte budget buys a smaller file.
+    expect(diffCeilingFor('code').bytes).toBe(MAX_DIFF_BYTES);
+    for (const mode of ['markdown', 'rendered', 'image'] as const) {
+      expect(diffCeilingFor(mode).bytes).toBe(MAX_RENDERED_DIFF_BYTES);
+      expect(diffCeilingFor(mode).label).toBe('1 MiB');
+    }
+    expect(MAX_RENDERED_DIFF_BYTES).toBeLessThan(MAX_DIFF_BYTES);
+  });
+
+  test('refuses a rendered payload the code ceiling would have allowed', () => {
+    const current = ready(
+      'markdown',
+      new Uint8Array(MAX_RENDERED_DIFF_BYTES + 1)
+    );
+    const result = comparisonAvailability(current);
+
+    expect(result.kind).toBe('unavailable');
+    if (result.kind !== 'unavailable') return;
+    expect(result.code).toBe('comparison_too_large');
+    expect(result.detail).toContain('1 MiB');
+    // Still open, still markdown: a refused comparison never disturbs the
+    // version the reader came for.
+    expect(current.route).toBe('markdown');
+    expect(current.content).toHaveLength(MAX_RENDERED_DIFF_BYTES + 1);
   });
 });

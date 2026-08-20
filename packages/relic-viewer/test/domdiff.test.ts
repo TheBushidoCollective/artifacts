@@ -1,0 +1,358 @@
+import { describe, expect, test } from 'bun:test';
+import { diffTrees, MAX_LISTED_CHANGES } from '../src/domdiff.ts';
+import {
+  applyMarks,
+  captureTree,
+  isAnnotateMessage,
+  isTreeMessage,
+  MAX_TREE_NODES,
+  type TreeNode,
+} from '../src/rendered-tree.ts';
+
+function element(tag: string, ...children: TreeNode[]): TreeNode {
+  return { tag, text: '', attrs: [], children };
+}
+
+function attributed(
+  tag: string,
+  attrs: readonly (readonly [string, string])[],
+  ...children: TreeNode[]
+): TreeNode {
+  return { tag, text: '', attrs, children };
+}
+
+function text(value: string): TreeNode {
+  return { tag: '#text', text: value, attrs: [], children: [] };
+}
+
+/**
+ * A DOM stand-in, because Bun tests run without a DOM and `captureTree` is
+ * written against the shape of a node rather than against a library.
+ */
+class NodeStub {
+  readonly nodeType = 1;
+  readonly tagName: string;
+  readonly childNodes: NodeStub[] = [];
+  readonly attrs: Record<string, string> = {};
+  readonly marks: string[] = [];
+
+  constructor(tag: string, children: NodeStub[] = []) {
+    this.tagName = tag.toUpperCase();
+    this.childNodes = children;
+  }
+
+  getAttribute(name: string): string | null {
+    return this.attrs[name] ?? null;
+  }
+
+  setAttribute(name: string, value: string): void {
+    this.attrs[name] = value;
+    if (name === 'data-relic-diff') this.marks.push(value);
+  }
+}
+
+class TextStub {
+  readonly nodeType = 3;
+  readonly childNodes: never[] = [];
+  constructor(readonly nodeValue: string) {}
+}
+
+describe('capturing what a document rendered', () => {
+  test('collapses whitespace and drops whitespace-only text', () => {
+    // A visual comparison must not notice reindentation, because reindenting
+    // moves no pixel.
+    const loose = new NodeStub('p', [
+      new TextStub('\n   Hello\n   world\n '),
+    ] as unknown as NodeStub[]);
+    const tight = new NodeStub('p', [
+      new TextStub('Hello world'),
+    ] as unknown as NodeStub[]);
+
+    expect(diffTrees(captureTree(loose), captureTree(tight)).changed).toBe(
+      false
+    );
+  });
+
+  test('drops the tags whose contents are never rendered', () => {
+    const withScript = new NodeStub('body', [
+      new NodeStub('script', [new TextStub('fetch("/one")')] as never),
+      new NodeStub('p', [new TextStub('same')] as never),
+    ]);
+    const withOtherScript = new NodeStub('body', [
+      new NodeStub('script', [new TextStub('fetch("/two")')] as never),
+      new NodeStub('p', [new TextStub('same')] as never),
+    ]);
+
+    const result = diffTrees(
+      captureTree(withScript),
+      captureTree(withOtherScript)
+    );
+    expect(result.changed).toBe(false);
+    expect(result.summary).toBe(
+      'No changes. These versions render identically.'
+    );
+  });
+
+  test('reads only the attributes a reader can see the effect of', () => {
+    const node = new NodeStub('img');
+    node.attrs['src'] = 'blob:one';
+    node.attrs['data-internal'] = 'ignored';
+    node.attrs['alt'] = 'a chart';
+
+    const captured = captureTree(node);
+    expect(captured.attrs).toEqual([
+      ['alt', 'a chart'],
+      ['src', 'blob:one'],
+    ]);
+  });
+
+  test('stops at the node budget rather than walking a hostile document', () => {
+    let deepest = new NodeStub('span');
+    for (let depth = 0; depth < MAX_TREE_NODES + 50; depth++) {
+      deepest = new NodeStub('span', [deepest]);
+    }
+
+    let counted = 0;
+    let walk: TreeNode | undefined = captureTree(deepest);
+    while (walk !== undefined) {
+      counted += 1;
+      walk = walk.children[0];
+    }
+    expect(counted).toBe(MAX_TREE_NODES);
+  });
+});
+
+describe('comparing two rendered documents', () => {
+  test('identical trees report rendering identically, not an empty result', () => {
+    const tree = element('body', element('p', text('same')));
+    const result = diffTrees(tree, structuredClone(tree));
+
+    expect(result.changed).toBe(false);
+    expect(result.summary).toBe(
+      'No changes. These versions render identically.'
+    );
+    expect(result.addedMarks).toEqual([]);
+    expect(result.removedMarks).toEqual([]);
+    expect(result.changes).toEqual([]);
+  });
+
+  test('an added paragraph marks the current side and not the historical one', () => {
+    const before = element('body', element('p', text('one')));
+    const after = element(
+      'body',
+      element('p', text('one')),
+      element('p', text('two'))
+    );
+
+    const result = diffTrees(before, after);
+    expect(result.changed).toBe(true);
+    expect(result.additions).toBe(2);
+    expect(result.removals).toBe(0);
+    expect(result.addedMarks).toEqual([{ path: [1], kind: 'added' }]);
+    expect(result.removedMarks).toEqual([]);
+    expect(result.summary).toBe('2 added.');
+    expect(result.changes[0]).toEqual({
+      kind: 'added',
+      label: 'paragraph',
+      before: '',
+      after: 'two',
+    });
+  });
+
+  test('a removed paragraph is the mirror of an added one', () => {
+    const before = element(
+      'body',
+      element('p', text('one')),
+      element('p', text('two'))
+    );
+    const after = element('body', element('p', text('one')));
+
+    const result = diffTrees(before, after);
+    expect(result.removals).toBe(2);
+    expect(result.additions).toBe(0);
+    expect(result.removedMarks).toEqual([{ path: [1], kind: 'removed' }]);
+    expect(result.addedMarks).toEqual([]);
+    expect(result.changes[0]?.kind).toBe('removed');
+  });
+
+  test('changed heading text marks both sides and names the heading', () => {
+    const before = element('body', element('h1', text('Q3 report')));
+    const after = element('body', element('h1', text('Q4 report')));
+
+    const result = diffTrees(before, after);
+    expect(result.changed).toBe(true);
+    // The mark lands on the element, because an attribute cannot be set on a
+    // text node.
+    expect(result.removedMarks).toEqual([{ path: [0], kind: 'changed' }]);
+    expect(result.addedMarks).toEqual([{ path: [0], kind: 'changed' }]);
+    expect(result.summary).toBe('1 changed.');
+    expect(result.changes).toEqual([
+      {
+        kind: 'changed',
+        label: 'heading',
+        before: 'Q3 report',
+        after: 'Q4 report',
+      },
+    ]);
+  });
+
+  test('a changed image target is a change, because a reader sees it', () => {
+    const before = element('body', attributed('img', [['src', 'blob:one']]));
+    const after = element('body', attributed('img', [['src', 'blob:two']]));
+
+    const result = diffTrees(before, after);
+    expect(result.changed).toBe(true);
+    expect(result.changes[0]).toEqual({
+      kind: 'changed',
+      label: 'image',
+      before: 'src=blob:one',
+      after: 'src=blob:two',
+    });
+  });
+
+  test('a change deep inside a section is not a whole replaced section', () => {
+    // The child key is shallow on purpose: folding descendants into it would
+    // turn one changed word into a removed section and an added one.
+    const before = element(
+      'section',
+      element('h2', text('Detail')),
+      element('p', text('before'))
+    );
+    const after = element(
+      'section',
+      element('h2', text('Detail')),
+      element('p', text('after'))
+    );
+
+    const result = diffTrees(before, after);
+    expect(result.additions).toBe(0);
+    expect(result.removals).toBe(0);
+    expect(result.addedMarks).toEqual([{ path: [1], kind: 'changed' }]);
+  });
+
+  test('the change list stops while the counts stay exact', () => {
+    const many = (label: string): TreeNode =>
+      element(
+        'body',
+        ...Array.from({ length: MAX_LISTED_CHANGES + 20 }, (_value, index) =>
+          element('p', text(`${label} ${index}`))
+        )
+      );
+
+    const result = diffTrees(many('before'), many('after'));
+    expect(result.changes).toHaveLength(MAX_LISTED_CHANGES);
+    expect(result.summary).toBe(`${MAX_LISTED_CHANGES + 20} changed.`);
+  });
+});
+
+describe('marking a document from a path', () => {
+  test('applies a mark to the addressed element', () => {
+    const child = new NodeStub('p');
+    const root = new NodeStub('body', [new NodeStub('h1'), child]);
+
+    expect(applyMarks(root, [{ path: [1], kind: 'added' }])).toBe(1);
+    expect(child.marks).toEqual(['added']);
+  });
+
+  test('skips a path that no longer resolves instead of throwing', () => {
+    // The document may have moved under the parent, and a stale path must not
+    // take the frame down.
+    const root = new NodeStub('body', [new NodeStub('p')]);
+
+    expect(applyMarks(root, [{ path: [9, 9], kind: 'removed' }])).toBe(0);
+  });
+
+  test('marks the root when the path is empty', () => {
+    const root = new NodeStub('body');
+
+    expect(applyMarks(root, [{ path: [], kind: 'changed' }])).toBe(1);
+    expect(root.marks).toEqual(['changed']);
+  });
+});
+
+describe('validating what crosses the frame boundary', () => {
+  test('accepts a well-formed annotate message', () => {
+    expect(
+      isAnnotateMessage({
+        type: 'relic:annotate',
+        marks: [
+          { path: [0, 2], kind: 'added' },
+          { path: [], kind: 'changed' },
+        ],
+      })
+    ).toBe(true);
+  });
+
+  const rejected: ReadonlyArray<readonly [string, unknown]> = [
+    ['a missing marks array', { type: 'relic:annotate' }],
+    ['a non-array marks', { type: 'relic:annotate', marks: 'all' }],
+    [
+      'a negative path index',
+      { type: 'relic:annotate', marks: [{ path: [-1], kind: 'added' }] },
+    ],
+    [
+      'a fractional path index',
+      { type: 'relic:annotate', marks: [{ path: [1.5], kind: 'added' }] },
+    ],
+    [
+      'a string path index',
+      { type: 'relic:annotate', marks: [{ path: ['1'], kind: 'added' }] },
+    ],
+    [
+      'an unknown kind',
+      { type: 'relic:annotate', marks: [{ path: [0], kind: 'replaced' }] },
+    ],
+    [
+      'a kind carrying markup',
+      {
+        type: 'relic:annotate',
+        marks: [{ path: [0], kind: '<script>alert(1)</script>' }],
+      },
+    ],
+    ['the wrong type', { type: 'relic:render', marks: [] }],
+    ['nothing at all', null],
+  ];
+
+  for (const [what, message] of rejected) {
+    test(`rejects ${what}`, () => {
+      expect(isAnnotateMessage(message)).toBe(false);
+    });
+  }
+
+  test('rejects the whole message when only the second mark is malformed', () => {
+    // Salvaging the valid half would invent an intent nobody sent.
+    expect(
+      isAnnotateMessage({
+        type: 'relic:annotate',
+        marks: [
+          { path: [0], kind: 'added' },
+          { path: [0], kind: 'nope' },
+        ],
+      })
+    ).toBe(false);
+  });
+
+  test('is strict about a reported tree as well', () => {
+    expect(
+      isTreeMessage({
+        type: 'relic:tree',
+        tree: { tag: 'p', text: '', attrs: [], children: [] },
+      })
+    ).toBe(true);
+    expect(isTreeMessage({ type: 'relic:tree', tree: '<p>hi</p>' })).toBe(
+      false
+    );
+    expect(
+      isTreeMessage({
+        type: 'relic:tree',
+        tree: { tag: 'p', text: '', attrs: [['src']], children: [] },
+      })
+    ).toBe(false);
+    expect(
+      isTreeMessage({
+        type: 'relic:tree',
+        tree: { tag: 'p', text: '', attrs: [], children: [{ tag: 1 }] },
+      })
+    ).toBe(false);
+  });
+});

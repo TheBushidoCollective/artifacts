@@ -29,7 +29,7 @@ import {
   UnknownVersionError,
   VersionMismatchError,
 } from '@relic/format';
-import { DIFF_LIMIT_LABEL, MAX_DIFF_BYTES } from './diff.ts';
+import { diffCeilingFor, diffModeForRoute } from './diff.ts';
 import { isComponentSource } from './jsx.ts';
 
 /** Refuse before allocating anything this large. */
@@ -410,7 +410,8 @@ export async function loadHistoricalVersion(
     };
   }
 
-  if (current.route === 'download') {
+  const mode = diffModeForRoute(current.route);
+  if (mode === undefined) {
     return {
       kind: 'unavailable',
       code: 'comparison_not_renderable',
@@ -420,12 +421,15 @@ export async function loadHistoricalVersion(
     };
   }
 
-  if (current.content.length > MAX_DIFF_BYTES) {
+  // The ceiling is per mode, because a rendered comparison holds two live DOM
+  // trees the line comparison never allocates.
+  const ceiling = diffCeilingFor(mode);
+  if (current.content.length > ceiling.bytes) {
     return {
       kind: 'unavailable',
       code: 'comparison_too_large',
       detail:
-        `Version ${current.version} is larger than the ${DIFF_LIMIT_LABEL} ` +
+        `Version ${current.version} is larger than the ${ceiling.label} ` +
         'comparison limit. It remains open normally.',
     };
   }
@@ -472,13 +476,13 @@ export async function loadHistoricalVersion(
   }
 
   const upperBound = plaintextSizeUpperBound(mintResponse.object_length);
-  if (upperBound > MAX_DIFF_BYTES) {
+  if (upperBound > ceiling.bytes) {
     return {
       kind: 'unavailable',
       code: 'comparison_too_large',
       detail:
         `Version ${requestedVersion} can hold up to ${formatBytes(upperBound)}, ` +
-        `past the ${DIFF_LIMIT_LABEL} comparison limit. Version ` +
+        `past the ${ceiling.label} comparison limit. Version ` +
         `${current.version} remains open.`,
     };
   }
@@ -518,12 +522,12 @@ export async function loadHistoricalVersion(
       };
     }
 
-    if (opened.content.length > MAX_DIFF_BYTES) {
+    if (opened.content.length > ceiling.bytes) {
       return {
         kind: 'unavailable',
         code: 'comparison_too_large',
         detail:
-          `Version ${requestedVersion} is larger than the ${DIFF_LIMIT_LABEL} ` +
+          `Version ${requestedVersion} is larger than the ${ceiling.label} ` +
           `comparison limit. Version ${current.version} remains open.`,
       };
     }

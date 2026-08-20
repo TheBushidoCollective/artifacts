@@ -1,0 +1,328 @@
+/**
+ * Capturing and marking a rendered DOM, on either side of the frame boundary.
+ *
+ * This module is bundled into both the service-origin viewer and the
+ * network-denied usercontent frame, so it carries no dependencies at all. That
+ * is not tidiness: the frame's bundle is inlined into its own page and a build
+ * test asserts the comparison algorithm is absent from it, so anything imported
+ * here lands in both places and has to be worth it in both.
+ *
+ * What crosses the boundary is defined here too. A frame reports its own
+ * rendered structure as a `TreeNode`, which is tag names, an attribute
+ * allowlist, and text. The parent replies with `Mark`s, which are a child-index
+ * path and a kind and nothing else. Neither direction carries markup.
+ */
+
+/** A serialisable snapshot of a rendered DOM subtree. */
+export interface TreeNode {
+  /** Lowercase tag name, or '#text' for a text node. */
+  readonly tag: string;
+  /** Normalised text for a '#text' node, empty for an element. */
+  readonly text: string;
+  /** Reader-visible attributes, sorted by name. */
+  readonly attrs: readonly (readonly [string, string])[];
+  readonly children: readonly TreeNode[];
+}
+
+/** Child indices from the captured root, addressing one node. */
+export type NodePath = readonly number[];
+
+export type MarkKind = 'added' | 'removed' | 'changed';
+
+export interface Mark {
+  readonly path: NodePath;
+  readonly kind: MarkKind;
+}
+
+/** Frame to parent: what this frame actually rendered. */
+export interface TreeMessage {
+  readonly type: 'relic:tree';
+  readonly tree: TreeNode;
+}
+
+/** Parent to frame: which of your own nodes differ from the other version. */
+export interface AnnotateMessage {
+  readonly type: 'relic:annotate';
+  readonly marks: readonly Mark[];
+}
+
+/**
+ * A bound on how much of a rendered document is captured.
+ *
+ * A page can hold far more nodes than a reader will ever look at, and the
+ * capture runs inside a frame that must stay responsive. Past this the tree is
+ * truncated rather than refused, because the two live renders are the evidence
+ * and the marks are only the annotation.
+ */
+export const MAX_TREE_NODES = 5000;
+
+/**
+ * Attributes a reader can see the effect of.
+ *
+ * A visual comparison should notice a changed image target or a changed colour,
+ * so `src`, `class`, and `style` are in. Anything whose change a reader cannot
+ * see is out, because it would inflate the count with something invisible.
+ */
+export const VISIBLE_ATTRS: readonly string[] = [
+  'alt',
+  'class',
+  'colspan',
+  'height',
+  'href',
+  'rowspan',
+  'src',
+  'style',
+  'title',
+  'type',
+  'value',
+  'width',
+];
+
+/**
+ * Tags whose contents are never rendered.
+ *
+ * A change inside one of these is invisible to a reader, so counting it would
+ * report a change nobody can see. Reformatting a stylesheet is the obvious
+ * case: every byte moved and no pixel did.
+ */
+const UNRENDERED_TAGS: Record<string, true> = {
+  head: true,
+  link: true,
+  meta: true,
+  noscript: true,
+  script: true,
+  style: true,
+  template: true,
+  title: true,
+};
+
+/** What a reader would call a tag, for the change list. */
+const TAG_LABELS: Record<string, string> = {
+  '#text': 'text',
+  a: 'link',
+  blockquote: 'quote',
+  code: 'code block',
+  h1: 'heading',
+  h2: 'heading',
+  h3: 'heading',
+  h4: 'heading',
+  h5: 'heading',
+  h6: 'heading',
+  hr: 'divider',
+  img: 'image',
+  li: 'list item',
+  ol: 'list',
+  p: 'paragraph',
+  pre: 'code block',
+  table: 'table',
+  td: 'table cell',
+  th: 'table cell',
+  tr: 'table row',
+  ul: 'list',
+};
+
+export function labelForTag(tag: string): string {
+  return TAG_LABELS[tag] ?? 'element';
+}
+
+/**
+ * The highlight, injected by the frame into the document it rendered.
+ *
+ * Every declaration is `!important` because the document being annotated is
+ * the author's own page, its stylesheet would otherwise win, and a highlight a
+ * reader cannot see is not a highlight. Outline rather than border, so nothing
+ * reflows and a marked node stays where the unmarked one was.
+ */
+export const HIGHLIGHT_CSS = `
+[data-relic-diff] {
+  outline-offset: 2px !important;
+}
+[data-relic-diff='added'] {
+  outline: 2px solid #1f6b64 !important;
+  background-color: rgb(31 107 100 / 18%) !important;
+}
+[data-relic-diff='removed'] {
+  outline: 2px solid #8c4a2f !important;
+  background-color: rgb(140 74 47 / 18%) !important;
+}
+[data-relic-diff='changed'] {
+  outline: 2px solid #8a6d1f !important;
+  background-color: rgb(138 109 31 / 18%) !important;
+}
+`;
+
+/** The shape of a DOM node this module reads, so a stub can stand in for one. */
+interface NodeLike {
+  readonly nodeType?: unknown;
+  readonly tagName?: unknown;
+  readonly nodeValue?: unknown;
+  readonly childNodes?: unknown;
+  getAttribute?: (name: string) => unknown;
+  setAttribute?: (name: string, value: string) => void;
+}
+
+const ELEMENT_NODE = 1;
+const TEXT_NODE = 3;
+
+function asNode(value: unknown): NodeLike | undefined {
+  return typeof value === 'object' && value !== null
+    ? (value as NodeLike)
+    : undefined;
+}
+
+function childrenOf(node: NodeLike): readonly unknown[] {
+  const list = node.childNodes;
+  if (Array.isArray(list)) return list;
+  if (
+    typeof list === 'object' &&
+    list !== null &&
+    typeof (list as { length?: unknown }).length === 'number'
+  ) {
+    return Array.from(list as ArrayLike<unknown>);
+  }
+  return [];
+}
+
+function attrsOf(node: NodeLike): readonly (readonly [string, string])[] {
+  const read = node.getAttribute;
+  if (typeof read !== 'function') return [];
+  const found: [string, string][] = [];
+  for (const name of VISIBLE_ATTRS) {
+    const value = read.call(node, name);
+    if (typeof value === 'string') found.push([name, value]);
+  }
+  return found;
+}
+
+/**
+ * Snapshot what a document actually rendered.
+ *
+ * Text is collapsed to single spaces and trimmed, and whitespace-only text is
+ * dropped entirely, because this feeds a visual comparison and reindenting a
+ * source file moves no pixel. Without it, reformatting a document would report
+ * every line as changed and the result would be a source diff wearing a
+ * rendered diff's clothes.
+ *
+ * The cost is named rather than hidden: a change that is only inline spacing,
+ * a word separator gained or lost between two inline elements, reads here as
+ * no change. That is the same trade in both directions, and reflow noise is
+ * the far more common case.
+ */
+export function captureTree(root: unknown): TreeNode {
+  let budget = MAX_TREE_NODES;
+
+  const walk = (value: unknown): TreeNode | undefined => {
+    if (budget <= 0) return undefined;
+    const node = asNode(value);
+    if (node === undefined) return undefined;
+
+    if (node.nodeType === TEXT_NODE) {
+      const raw = typeof node.nodeValue === 'string' ? node.nodeValue : '';
+      const text = raw.replace(/\s+/g, ' ').trim();
+      if (text.length === 0) return undefined;
+      budget -= 1;
+      return { tag: '#text', text, attrs: [], children: [] };
+    }
+
+    if (node.nodeType !== ELEMENT_NODE) return undefined;
+    const tag =
+      typeof node.tagName === 'string' ? node.tagName.toLowerCase() : '';
+    if (UNRENDERED_TAGS[tag] === true) return undefined;
+
+    budget -= 1;
+    const children: TreeNode[] = [];
+    for (const child of childrenOf(node)) {
+      const captured = walk(child);
+      if (captured !== undefined) children.push(captured);
+    }
+    return { tag, text: '', attrs: attrsOf(node), children };
+  };
+
+  return walk(root) ?? { tag: '#root', text: '', attrs: [], children: [] };
+}
+
+/**
+ * Mark this document's own nodes, and nothing else.
+ *
+ * This function never reads or writes text or markup. That is the whole reason
+ * a second message type is safe inside a frame that renders exactly once: the
+ * channel cannot change what the document says, only how it is outlined.
+ *
+ * A path that no longer resolves is skipped rather than thrown, because the
+ * document may have moved under the parent and a stale path must not take the
+ * frame down. Returns how many marks actually landed.
+ */
+export function applyMarks(root: unknown, marks: readonly Mark[]): number {
+  let applied = 0;
+
+  for (const mark of marks) {
+    let node = asNode(root);
+    for (const index of mark.path) {
+      if (node === undefined) break;
+      node = asNode(childrenOf(node)[index]);
+    }
+    if (node === undefined) continue;
+    if (node.nodeType !== ELEMENT_NODE) continue;
+    if (typeof node.setAttribute !== 'function') continue;
+    node.setAttribute('data-relic-diff', mark.kind);
+    applied += 1;
+  }
+
+  return applied;
+}
+
+function isTreeNode(value: unknown): value is TreeNode {
+  if (typeof value !== 'object' || value === null) return false;
+  const node = value as Record<string, unknown>;
+  if (typeof node['tag'] !== 'string') return false;
+  if (typeof node['text'] !== 'string') return false;
+  if (!Array.isArray(node['attrs'])) return false;
+  for (const attr of node['attrs']) {
+    if (!Array.isArray(attr) || attr.length !== 2) return false;
+    if (typeof attr[0] !== 'string' || typeof attr[1] !== 'string')
+      return false;
+  }
+  if (!Array.isArray(node['children'])) return false;
+  return node['children'].every(isTreeNode);
+}
+
+export function isTreeMessage(data: unknown): data is TreeMessage {
+  if (typeof data !== 'object' || data === null) return false;
+  const message = data as Record<string, unknown>;
+  return message['type'] === 'relic:tree' && isTreeNode(message['tree']);
+}
+
+const MARK_KINDS: Record<string, true> = {
+  added: true,
+  changed: true,
+  removed: true,
+};
+
+/**
+ * Validate an annotate message totally.
+ *
+ * One malformed entry rejects the whole message rather than being filtered out.
+ * A partially valid message from an opaque origin is attacker input, and
+ * salvaging part of it invents an intent nobody sent.
+ */
+export function isAnnotateMessage(data: unknown): data is AnnotateMessage {
+  if (typeof data !== 'object' || data === null) return false;
+  const message = data as Record<string, unknown>;
+  if (message['type'] !== 'relic:annotate') return false;
+  const marks = message['marks'];
+  if (!Array.isArray(marks)) return false;
+
+  for (const entry of marks) {
+    if (typeof entry !== 'object' || entry === null) return false;
+    const mark = entry as Record<string, unknown>;
+    if (MARK_KINDS[String(mark['kind'])] !== true) return false;
+    const path = mark['path'];
+    if (!Array.isArray(path)) return false;
+    for (const index of path) {
+      if (typeof index !== 'number') return false;
+      if (!Number.isSafeInteger(index) || index < 0) return false;
+    }
+  }
+
+  return true;
+}

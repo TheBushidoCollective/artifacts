@@ -2,16 +2,61 @@ import { type Change, diffLines, diffWordsWithSpace } from 'diff';
 import type { ReadyView, RenderRoute } from './viewer.ts';
 
 /**
- * A comparison keeps two plaintext byte arrays, two decoded strings, and the
- * diff library's change graph alive together. At 4 MiB per version that is
- * 8 MiB of plaintext, up to 16 MiB of UTF-16 text, an 8 MiB ciphertext window,
- * and 32 MiB reserved for change bookkeeping and DOM text. The 64 MiB working
- * set stays well below the separate 100 MiB one-version render ceiling.
+ * The code ceiling. A line comparison keeps two plaintext byte arrays, two
+ * decoded strings, and the diff library's change graph alive together. At
+ * 4 MiB per version that is 8 MiB of plaintext, up to 16 MiB of UTF-16 text,
+ * an 8 MiB ciphertext window, and 32 MiB reserved for change bookkeeping and
+ * DOM text. The 64 MiB working set stays well below the separate 100 MiB
+ * one-version render ceiling.
  */
 export const MAX_DIFF_BYTES = 4 * 1024 * 1024;
 export const DIFF_LIMIT_LABEL = '4 MiB';
 
-export type DiffMode = 'markdown' | 'code' | 'source' | 'image';
+/**
+ * The rendered ceiling, and it has to be lower than the code one rather than
+ * equal to it, because a rendered comparison allocates two things the line
+ * comparison never does: two live DOM trees, and two captured trees to diff.
+ *
+ * At 1 MiB per version: 2 MiB of plaintext, up to 4 MiB of UTF-16 text, a
+ * 2 MiB ciphertext window, two live DOM trees at a conservative eight times
+ * source for 16 MiB, two captured trees at four times source for 8 MiB, and
+ * 8 MiB for the change graph, the mark set, and the change list. That is
+ * roughly 40 MiB, inside the same 64 MiB budget the code ceiling was sized
+ * against.
+ *
+ * Images sit here too, and for a sharper reason: a decoded bitmap is many
+ * times the size of its encoded bytes, so a 4 MiB photograph decodes into
+ * tens of megabytes and a comparison holds two of them. The same byte budget
+ * therefore buys a smaller file, which is the honest trade rather than a
+ * conservative one.
+ */
+export const MAX_RENDERED_DIFF_BYTES = 1 * 1024 * 1024;
+export const RENDERED_DIFF_LIMIT_LABEL = '1 MiB';
+
+/**
+ * How a pair of versions is compared. `code` is the one text mode left: a
+ * line diff is the visual form of code, because code is text. Everything
+ * else is compared as it renders.
+ */
+export type DiffMode = 'markdown' | 'code' | 'rendered' | 'image';
+
+export interface DiffCeiling {
+  readonly bytes: number;
+  /** The same ceiling as the recipient is told it. */
+  readonly label: string;
+}
+
+/**
+ * The ceiling for a mode, carried as one value so the number and the copy
+ * that names it cannot drift apart. Three call sites read it: the taskbar's
+ * availability check, the historical load's refusal before fetching, and the
+ * comparison's own copy.
+ */
+export function diffCeilingFor(mode: DiffMode): DiffCeiling {
+  return mode === 'code'
+    ? { bytes: MAX_DIFF_BYTES, label: DIFF_LIMIT_LABEL }
+    : { bytes: MAX_RENDERED_DIFF_BYTES, label: RENDERED_DIFF_LIMIT_LABEL };
+}
 
 export interface DiffSegment {
   readonly kind: 'unchanged' | 'added' | 'removed';
@@ -29,7 +74,6 @@ export interface TextDiffPart {
 }
 
 export interface TextDiff {
-  readonly mode: Exclude<DiffMode, 'image'>;
   readonly changed: boolean;
   readonly additions: number;
   readonly deletions: number;
@@ -93,17 +137,13 @@ function wordSegments(
 }
 
 /**
- * Compare source lines. Markdown is compared as Markdown source, code as code
- * source, and HTML or JSX as source rather than as a rendered DOM.
+ * Compare code line by line. Code is the one class where a line diff is the
+ * visual form, because code is text: what a reader sees is the source. Every
+ * other class is compared as it renders.
  */
-export function createTextDiff(
-  mode: Exclude<DiffMode, 'image'>,
-  before: string,
-  current: string
-): TextDiff {
+export function createTextDiff(before: string, current: string): TextDiff {
   if (before === current) {
     return {
-      mode,
       changed: false,
       additions: 0,
       deletions: 0,
@@ -165,7 +205,6 @@ export function createTextDiff(
   }
 
   return {
-    mode,
     changed: true,
     additions,
     deletions,
@@ -210,7 +249,12 @@ export function createImageDiff(
   };
 }
 
-function modeForRoute(route: RenderRoute): DiffMode | undefined {
+/**
+ * How one version would be compared. Exported because the historical load
+ * refuses against a ceiling before it fetches anything, and that ceiling is
+ * per mode.
+ */
+export function diffModeForRoute(route: RenderRoute): DiffMode | undefined {
   switch (route) {
     case 'markdown':
       return 'markdown';
@@ -218,7 +262,7 @@ function modeForRoute(route: RenderRoute): DiffMode | undefined {
       return 'code';
     case 'sandboxed-html':
     case 'sandboxed-jsx':
-      return 'source';
+      return 'rendered';
     case 'image':
       return 'image';
     default:
@@ -227,23 +271,22 @@ function modeForRoute(route: RenderRoute): DiffMode | undefined {
 }
 
 /**
- * All text render routes can be compared as source. Images need another image
- * because parsing an image as text would invent a result with no visual use.
+ * Both versions have to reach the same mode, and the rule is equality rather
+ * than a fallback to the current version's mode. Each mode compares a
+ * different kind of thing: rendered prose the viewer builds, a page the
+ * usercontent frame builds, an image the browser decodes, or lines of text.
+ * Feeding one mode the other's bytes would produce a confident result with no
+ * meaning, so a pair that disagrees is refused and the recipient is told why.
  */
 export function diffModeForRoutes(
   currentRoute: RenderRoute,
   historicalRoute: RenderRoute
 ): DiffMode | undefined {
-  const currentMode = modeForRoute(currentRoute);
-  const historicalMode = modeForRoute(historicalRoute);
-  if (currentMode === undefined || historicalMode === undefined)
-    return undefined;
-  if (currentMode === 'image' || historicalMode === 'image') {
-    return currentMode === 'image' && historicalMode === 'image'
-      ? 'image'
-      : undefined;
-  }
-  return currentMode;
+  const currentMode = diffModeForRoute(currentRoute);
+  if (currentMode === undefined) return undefined;
+  return currentMode === diffModeForRoute(historicalRoute)
+    ? currentMode
+    : undefined;
 }
 
 export function comparisonAvailability(
@@ -253,7 +296,7 @@ export function comparisonAvailability(
     return { kind: 'none' };
   }
 
-  const mode = modeForRoute(view.route);
+  const mode = diffModeForRoute(view.route);
   if (mode === undefined) {
     return {
       kind: 'unavailable',
@@ -264,12 +307,13 @@ export function comparisonAvailability(
     };
   }
 
-  if (view.content.length > MAX_DIFF_BYTES) {
+  const ceiling = diffCeilingFor(mode);
+  if (view.content.length > ceiling.bytes) {
     return {
       kind: 'unavailable',
       code: 'comparison_too_large',
       detail:
-        `Earlier versions exist, but this version is larger than the ${DIFF_LIMIT_LABEL} ` +
+        `Earlier versions exist, but this version is larger than the ${ceiling.label} ` +
         'comparison limit. The current version is still open normally.',
     };
   }

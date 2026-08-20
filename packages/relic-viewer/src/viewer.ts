@@ -29,6 +29,7 @@ import {
   UnknownVersionError,
   VersionMismatchError,
 } from '@relic/format';
+import { DIFF_LIMIT_LABEL, MAX_DIFF_BYTES } from './diff.ts';
 import { isComponentSource } from './jsx.ts';
 
 /** Refuse before allocating anything this large. */
@@ -52,6 +53,10 @@ export interface ReadyView {
   readonly downgradeNotice: string | undefined;
   /** Backs the copy-link affordance the fragment strip obliges. */
   readonly shareUrl: string;
+  /** The ciphertext revision this view was decrypted from. */
+  readonly version: number;
+  /** The newest revision available to this link holder. */
+  readonly currentVersion: number;
 }
 
 /** Where content is allowed to render. Never derived from the server. */
@@ -74,11 +79,23 @@ export interface DeadView {
 export interface MintResponse {
   readonly url: string;
   readonly url_expires_at: string;
-  readonly relic_expires_at: string;
+  readonly relic_expires_at: string | null;
   readonly object_length: number;
   readonly object_crc32c: string;
   readonly mints_remaining: number;
+  /** The revision this URL signs. */
+  readonly version: number;
+  /** The newest revision retained for this relic. */
+  readonly current_version: number;
 }
+
+export type HistoricalVersionState =
+  | { readonly kind: 'ready'; readonly view: ReadyView }
+  | {
+      readonly kind: 'unavailable';
+      readonly code: string;
+      readonly detail: string;
+    };
 
 /**
  * Somewhere to keep a key so a reload does not lose it.
@@ -296,6 +313,8 @@ export async function load(
         route: route.route,
         downgradeNotice: route.notice,
         shareUrl,
+        version: mintResponse.version,
+        currentVersion: mintResponse.current_version,
       },
     };
   } catch (error) {
@@ -340,11 +359,18 @@ export async function load(
 
 async function mint(
   relicId: string,
-  deps: ViewerDeps
+  deps: ViewerDeps,
+  requestedVersion?: number
 ): Promise<{ mint: MintResponse } | { dead: DeadView }> {
   const response = await deps.fetch(
     `${deps.serviceOrigin}/api/relics/${relicId}/mint`,
-    { method: 'POST' }
+    requestedVersion === undefined
+      ? { method: 'POST' }
+      : {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ version: requestedVersion }),
+        }
   );
 
   if (response.ok) {
@@ -356,6 +382,175 @@ async function mint(
     unknown
   >;
   return { dead: deadFromProblem(String(problem['code'] ?? 'unknown')) };
+}
+
+/**
+ * Mint, fetch, and decrypt one retained revision without disturbing the
+ * current view. The key is recovered from the in-memory share URL that already
+ * backs Copy link. Neither plaintext nor a comparison result crosses the
+ * service boundary.
+ */
+export async function loadHistoricalVersion(
+  relicId: string,
+  requestedVersion: number,
+  current: ReadyView,
+  deps: ViewerDeps
+): Promise<HistoricalVersionState> {
+  if (
+    !Number.isInteger(requestedVersion) ||
+    requestedVersion < 1 ||
+    requestedVersion >= current.currentVersion
+  ) {
+    return {
+      kind: 'unavailable',
+      code: 'comparison_version_invalid',
+      detail:
+        `Version ${requestedVersion} is not available for comparison. Choose ` +
+        `a version from 1 through ${current.currentVersion - 1}.`,
+    };
+  }
+
+  if (current.route === 'download') {
+    return {
+      kind: 'unavailable',
+      code: 'comparison_not_renderable',
+      detail:
+        'Earlier versions exist, but this file is download-only. Relik cannot ' +
+        'compare media, archives, or binary files in the browser.',
+    };
+  }
+
+  if (current.content.length > MAX_DIFF_BYTES) {
+    return {
+      kind: 'unavailable',
+      code: 'comparison_too_large',
+      detail:
+        `Version ${current.version} is larger than the ${DIFF_LIMIT_LABEL} ` +
+        'comparison limit. It remains open normally.',
+    };
+  }
+
+  let key: Uint8Array;
+  let formatVersion: number;
+  try {
+    ({ key, version: formatVersion } = parseFragment(
+      new URL(current.shareUrl).hash
+    ));
+  } catch {
+    return {
+      kind: 'unavailable',
+      code: 'comparison_key_unavailable',
+      detail:
+        'The in-memory key is no longer available for this comparison. Reopen ' +
+        'the original link.',
+    };
+  }
+
+  const minted = await mint(relicId, deps, requestedVersion);
+  if ('dead' in minted) {
+    return {
+      kind: 'unavailable',
+      code: minted.dead.code,
+      detail:
+        `Version ${requestedVersion} could not be loaded for comparison. ` +
+        `${minted.dead.detail} Version ${current.version} remains open.`,
+    };
+  }
+  const mintResponse = minted.mint;
+
+  if (
+    mintResponse.version !== requestedVersion ||
+    mintResponse.current_version !== current.currentVersion
+  ) {
+    return {
+      kind: 'unavailable',
+      code: 'comparison_version_mismatch',
+      detail:
+        'The service signed a different version than the viewer requested. ' +
+        `Version ${current.version} remains open.`,
+    };
+  }
+
+  const upperBound = plaintextSizeUpperBound(mintResponse.object_length);
+  if (upperBound > MAX_DIFF_BYTES) {
+    return {
+      kind: 'unavailable',
+      code: 'comparison_too_large',
+      detail:
+        `Version ${requestedVersion} can hold up to ${formatBytes(upperBound)}, ` +
+        `past the ${DIFF_LIMIT_LABEL} comparison limit. Version ` +
+        `${current.version} remains open.`,
+    };
+  }
+
+  const fetched = await deps.fetch(mintResponse.url);
+  if (!fetched.ok) {
+    return {
+      kind: 'unavailable',
+      code: 'comparison_fetch_failed',
+      detail:
+        `Version ${requestedVersion} could not be downloaded. Version ` +
+        `${current.version} remains open.`,
+    };
+  }
+
+  const bytes = new Uint8Array(await fetched.arrayBuffer());
+  if (bytes.length !== mintResponse.object_length) {
+    return {
+      kind: 'unavailable',
+      code: 'comparison_truncated',
+      detail:
+        `Version ${requestedVersion} did not finish downloading. Version ` +
+        `${current.version} remains open.`,
+    };
+  }
+
+  try {
+    const opened = await openRelic(bytes, key, formatVersion);
+    const entry = opened.envelope.entries[0];
+    if (entry === undefined) {
+      return {
+        kind: 'unavailable',
+        code: 'comparison_empty',
+        detail:
+          `Version ${requestedVersion} has no content to compare. Version ` +
+          `${current.version} remains open.`,
+      };
+    }
+
+    if (opened.content.length > MAX_DIFF_BYTES) {
+      return {
+        kind: 'unavailable',
+        code: 'comparison_too_large',
+        detail:
+          `Version ${requestedVersion} is larger than the ${DIFF_LIMIT_LABEL} ` +
+          `comparison limit. Version ${current.version} remains open.`,
+      };
+    }
+
+    const route = routeFor(entry.filename, entry.mimetype, opened.content);
+    return {
+      kind: 'ready',
+      view: {
+        filename: entry.filename,
+        declaredMimetype: entry.mimetype,
+        content: opened.content,
+        route: route.route,
+        downgradeNotice: route.notice,
+        shareUrl: current.shareUrl,
+        version: mintResponse.version,
+        currentVersion: mintResponse.current_version,
+      },
+    };
+  } catch {
+    return {
+      kind: 'unavailable',
+      code: 'comparison_decrypt_failed',
+      detail:
+        `Version ${requestedVersion} could not be decrypted. Version ` +
+        `${current.version} remains open.`,
+    };
+  }
 }
 
 /** Maps the server's codes onto what a recipient should actually be told. */

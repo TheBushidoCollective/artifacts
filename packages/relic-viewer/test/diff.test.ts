@@ -1,10 +1,11 @@
 import { describe, expect, test } from 'bun:test';
 import {
-  MAX_DIFF_BYTES,
   comparisonAvailability,
   createImageDiff,
   createTextDiff,
   diffModeForRoutes,
+  MAX_DIFF_BYTES,
+  versionHistoryCopy,
 } from '../src/diff.ts';
 import type { ReadyView } from '../src/viewer.ts';
 
@@ -42,14 +43,16 @@ describe('text version comparisons', () => {
       expect(result.parts.some((part) => part.kind === 'added')).toBe(true);
       expect(result.parts.some((part) => part.kind === 'removed')).toBe(true);
       expect(
-        result.parts.flatMap((part) => part.segments ?? []).some(
-          (segment) => segment.kind === 'added' && segment.text === '42'
-        )
+        result.parts
+          .flatMap((part) => part.segments ?? [])
+          .some((segment) => segment.kind === 'added' && segment.text === '42')
       ).toBe(true);
       expect(
-        result.parts.flatMap((part) => part.segments ?? []).some(
-          (segment) => segment.kind === 'removed' && segment.text === '41'
-        )
+        result.parts
+          .flatMap((part) => part.segments ?? [])
+          .some(
+            (segment) => segment.kind === 'removed' && segment.text === '41'
+          )
       ).toBe(true);
     });
 
@@ -58,7 +61,9 @@ describe('text version comparisons', () => {
 
       expect(result.changed).toBe(false);
       expect(result.parts).toEqual([]);
-      expect(result.summary).toBe('No changes. These versions have identical content.');
+      expect(result.summary).toBe(
+        'No changes. These versions have identical content.'
+      );
     });
   }
 });
@@ -88,7 +93,20 @@ describe('image version comparisons', () => {
     );
 
     expect(result.changed).toBe(false);
-    expect(result.summary).toBe('No changes. These versions have identical content.');
+    expect(result.summary).toBe(
+      'No changes. These versions have identical content.'
+    );
+  });
+});
+
+describe('version history labels', () => {
+  test('names both versions and says which one is current history', () => {
+    expect(versionHistoryCopy(5, 2)).toEqual({
+      headline: 'Comparing version 2 with version 5',
+      detail:
+        'Version 5 is current. Version 2 is retained history and may contain ' +
+        'content removed from the current artifact.',
+    });
   });
 });
 
@@ -96,19 +114,25 @@ describe('comparison availability', () => {
   test('maps all five renderable classes onto four comparison modes', () => {
     expect(diffModeForRoutes('markdown', 'markdown')).toBe('markdown');
     expect(diffModeForRoutes('code', 'code')).toBe('code');
-    expect(diffModeForRoutes('sandboxed-html', 'sandboxed-html')).toBe('source');
+    expect(diffModeForRoutes('sandboxed-html', 'sandboxed-html')).toBe(
+      'source'
+    );
     expect(diffModeForRoutes('sandboxed-jsx', 'sandboxed-jsx')).toBe('source');
     expect(diffModeForRoutes('image', 'image')).toBe('image');
   });
 
   test('does not offer history to a version 1 relic', () => {
-    expect(comparisonAvailability(ready('code', encoder.encode('one'), 1))).toEqual({
+    expect(
+      comparisonAvailability(ready('code', encoder.encode('one'), 1))
+    ).toEqual({
       kind: 'none',
     });
   });
 
   test('offers history to a diffable version 2 or higher relic', () => {
-    expect(comparisonAvailability(ready('code', encoder.encode('two'), 2))).toEqual({
+    expect(
+      comparisonAvailability(ready('code', encoder.encode('two'), 2))
+    ).toEqual({
       kind: 'available',
       mode: 'code',
     });

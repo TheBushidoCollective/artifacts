@@ -14,6 +14,16 @@
  *    key.
  */
 
+import {
+  bytesEqual,
+  comparisonAvailability,
+  createImageDiff,
+  createTextDiff,
+  type DiffMode,
+  diffModeForRoutes,
+  type TextDiffPart,
+  versionHistoryCopy,
+} from './diff.ts';
 import { transpileJsx } from './jsx.ts';
 import { highlightCode, renderMarkdown } from './markdown.ts';
 import {
@@ -21,6 +31,7 @@ import {
   formatBytes,
   type KeyVault,
   load,
+  loadHistoricalVersion,
   type ReadyView,
   type ViewerDeps,
 } from './viewer.ts';
@@ -49,6 +60,8 @@ const MARKER_LABEL = 'Runs author code, isolated';
 
 const ICONS = {
   copy: 'M5 2h7a1 1 0 0 1 1 1v8h-1V3H5V2zM3 4h7a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1zm0 1v8h7V5H3z',
+  compare:
+    'M2 4h9L9 2l.7-.7L13 4.5 9.7 8 9 7.3l2-2H2V4zm12 8H5l2 2-.7.7L3 11.5 6.3 8l.7.7-2 2h9V12z',
   download:
     'M7.5 1h1v7.3l2.6-2.6.7.7L8 10.2 4.2 6.4l.7-.7 2.6 2.6V1zM2 12h12v1H2v-1z',
   source:
@@ -168,6 +181,11 @@ function downloadContent(view: ReadyView): void {
   URL.revokeObjectURL(url);
 }
 
+export interface BarOptions {
+  readonly onCompare?: () => void;
+  readonly comparisonOpen?: boolean;
+}
+
 /**
  * The taskbar, built as an accession label rather than app chrome.
  *
@@ -175,7 +193,11 @@ function downloadContent(view: ReadyView): void {
  * selectable. The filename is untrusted display text and goes in through
  * `textContent`.
  */
-export function buildBar(view: ReadyView, relicId: string): HTMLElement {
+export function buildBar(
+  view: ReadyView,
+  relicId: string,
+  options: BarOptions = {}
+): HTMLElement {
   const bar = document.createElement('header');
   bar.className = 'bar';
 
@@ -225,6 +247,22 @@ export function buildBar(view: ReadyView, relicId: string): HTMLElement {
   markerText.textContent = MARKER_LABEL;
   marker.appendChild(markerText);
   actions.appendChild(marker);
+
+  const availability = comparisonAvailability(view);
+  if (availability.kind === 'available' && options.onCompare !== undefined) {
+    const label =
+      options.comparisonOpen === true ? 'View current' : 'Compare versions';
+    const compare = button(label, ICONS.compare, options.onCompare);
+    compare.setAttribute(
+      'aria-pressed',
+      options.comparisonOpen === true ? 'true' : 'false'
+    );
+    compare.title =
+      options.comparisonOpen === true
+        ? `Return to version ${view.currentVersion}`
+        : `Compare version ${view.currentVersion} with its history`;
+    actions.appendChild(compare);
+  }
 
   // The fragment was stripped from the address bar, so re-sharing has to come
   // from somewhere. This is that affordance, backed by the in-memory key.
@@ -404,8 +442,8 @@ export function renderSandboxedHtml(
  * The service origin must never execute relic content, and the transform
  * never does: it is a text-to-text rewrite, and its output is posted as a
  * string. The frame turns that string back into running code by importing it
- * as a module, and supplies React from a CDN because an opaque origin cannot
- * fetch same-origin assets.
+ * as a module. React is bundled into the inlined frame script because the
+ * opaque origin cannot fetch same-origin assets or any remote dependency.
  */
 export function renderSandboxedJsx(
   view: ReadyView,
@@ -500,15 +538,17 @@ function renderDownloadView(view: ReadyView): HTMLElement {
   return wrapper;
 }
 
-function renderReady(
+export function buildCurrentStage(
   view: ReadyView,
-  relicId: string,
   usercontentOrigin: string
-): void {
-  document.body.replaceChildren(buildBar(view, relicId));
-
+): HTMLElement {
   const main = document.createElement('main');
   main.className = `stage stage-${view.route}`;
+
+  const availability = comparisonAvailability(view);
+  if (availability.kind === 'unavailable') {
+    main.appendChild(notice(availability.detail));
+  }
 
   if (view.downgradeNotice !== undefined) {
     main.appendChild(notice(view.downgradeNotice));
@@ -535,7 +575,405 @@ function renderReady(
       break;
   }
 
-  document.body.appendChild(main);
+  return main;
+}
+
+function lineNumbers(
+  start: number | undefined,
+  count: number,
+  displayedLines: number
+): string {
+  let value = '';
+  for (let index = 0; index < displayedLines; index++) {
+    if (index > 0) value += '\n';
+    if (start !== undefined && index < count) value += String(start + index);
+  }
+  return value;
+}
+
+function appendDiffText(body: HTMLElement, part: TextDiffPart): void {
+  if (part.segments === undefined) {
+    body.textContent = part.value;
+    return;
+  }
+
+  for (const segment of part.segments) {
+    const span = document.createElement('span');
+    span.className =
+      segment.kind === 'unchanged' ? '' : `diff-inline-${segment.kind}`;
+    span.textContent = segment.text;
+    body.appendChild(span);
+  }
+}
+
+function noChanges(summary: string): HTMLElement {
+  const empty = document.createElement('div');
+  empty.className = 'diff-empty';
+  empty.setAttribute('role', 'status');
+  const headline = document.createElement('strong');
+  headline.textContent = 'No changes';
+  const detail = document.createElement('span');
+  detail.textContent = summary;
+  empty.append(headline, detail);
+  return empty;
+}
+
+function textModeLabel(mode: Exclude<DiffMode, 'image'>): string {
+  switch (mode) {
+    case 'markdown':
+      return 'Markdown source comparison';
+    case 'code':
+      return 'Code comparison';
+    default:
+      return 'Source text comparison';
+  }
+}
+
+export function renderTextComparison(
+  current: ReadyView,
+  historical: ReadyView,
+  mode: Exclude<DiffMode, 'image'>
+): HTMLElement {
+  const wrapper = document.createElement('section');
+  wrapper.className = `diff-view diff-view-${mode}`;
+
+  const result = createTextDiff(
+    mode,
+    decodeText(historical.content),
+    decodeText(current.content)
+  );
+  const summary = document.createElement('div');
+  summary.className = 'diff-summary';
+  const label = document.createElement('strong');
+  label.textContent = textModeLabel(mode);
+  const counts = document.createElement('span');
+  counts.textContent = result.summary;
+  summary.append(label, counts);
+  wrapper.appendChild(summary);
+
+  if (mode === 'source') {
+    const explanation = document.createElement('p');
+    explanation.className = 'diff-source-note';
+    explanation.textContent =
+      'HTML and JSX are compared as source text. Neither historical source ' +
+      'nor diff markup is sent to the rendered-content frame.';
+    wrapper.appendChild(explanation);
+  }
+
+  if (!result.changed) {
+    wrapper.appendChild(noChanges(result.summary));
+    return wrapper;
+  }
+
+  const changes = document.createElement('div');
+  changes.className = 'diff-changes';
+  changes.setAttribute(
+    'aria-label',
+    `Changes from version ${historical.version} to version ${current.version}`
+  );
+
+  for (const part of result.parts) {
+    const row = document.createElement('div');
+    row.className = `diff-part diff-part-${part.kind}`;
+    row.setAttribute(
+      'aria-label',
+      part.kind === 'unchanged'
+        ? 'Unchanged lines'
+        : `${part.kind === 'added' ? 'Added' : 'Removed'} lines`
+    );
+
+    const displayedLines = Math.max(part.beforeLines, part.currentLines);
+    const beforeNumbers = document.createElement('pre');
+    beforeNumbers.className = 'diff-gutter diff-gutter-before';
+    beforeNumbers.setAttribute('aria-hidden', 'true');
+    beforeNumbers.textContent = lineNumbers(
+      part.beforeStart,
+      part.beforeLines,
+      displayedLines
+    );
+
+    const currentNumbers = document.createElement('pre');
+    currentNumbers.className = 'diff-gutter diff-gutter-current';
+    currentNumbers.setAttribute('aria-hidden', 'true');
+    currentNumbers.textContent = lineNumbers(
+      part.currentStart,
+      part.currentLines,
+      displayedLines
+    );
+
+    const body = document.createElement('pre');
+    body.className = 'diff-body';
+    appendDiffText(body, part);
+
+    row.append(beforeNumbers, currentNumbers, body);
+    changes.appendChild(row);
+  }
+
+  wrapper.appendChild(changes);
+  return wrapper;
+}
+
+async function loadImage(
+  image: HTMLImageElement,
+  url: string
+): Promise<HTMLImageElement> {
+  image.src = url;
+  try {
+    await image.decode();
+    return image;
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
+export function renderImageComparison(
+  current: ReadyView,
+  historical: ReadyView
+): HTMLElement {
+  const wrapper = document.createElement('section');
+  wrapper.className = 'diff-view diff-view-image';
+
+  const heading = document.createElement('div');
+  heading.className = 'diff-summary';
+  const label = document.createElement('strong');
+  label.textContent = 'Image comparison';
+  const status = document.createElement('span');
+  status.textContent = 'Loading image dimensions.';
+  heading.append(label, status);
+  wrapper.appendChild(heading);
+
+  if (bytesEqual(historical.content, current.content)) {
+    status.textContent = 'No changed pixels or metadata bytes.';
+    wrapper.appendChild(
+      noChanges('No changes. These versions have identical content.')
+    );
+    return wrapper;
+  }
+
+  const canvas = document.createElement('div');
+  canvas.className = 'image-diff-canvas';
+  canvas.style.setProperty('--split', '50%');
+
+  const before = document.createElement('img');
+  before.className = 'image-diff-before';
+  before.alt = `Version ${historical.version}`;
+
+  const after = document.createElement('img');
+  after.className = 'image-diff-current';
+  after.alt = `Version ${current.version}`;
+
+  const historicalUrl = URL.createObjectURL(
+    new Blob([historical.content as unknown as BlobPart], {
+      type: sniffImageType(historical.content),
+    })
+  );
+  const currentUrl = URL.createObjectURL(
+    new Blob([current.content as unknown as BlobPart], {
+      type: sniffImageType(current.content),
+    })
+  );
+
+  const beforeLabel = document.createElement('span');
+  beforeLabel.className = 'image-diff-label image-diff-label-before';
+  beforeLabel.textContent = `Version ${historical.version}`;
+  const currentLabel = document.createElement('span');
+  currentLabel.className = 'image-diff-label image-diff-label-current';
+  currentLabel.textContent = `Version ${current.version}, current`;
+  const divider = document.createElement('span');
+  divider.className = 'image-diff-divider';
+  divider.setAttribute('aria-hidden', 'true');
+  canvas.append(before, after, beforeLabel, currentLabel, divider);
+
+  const control = document.createElement('label');
+  control.className = 'image-diff-control';
+  const controlText = document.createElement('span');
+  controlText.textContent = `Reveal version ${current.version} over version ${historical.version}`;
+  const slider = document.createElement('input');
+  slider.type = 'range';
+  slider.min = '0';
+  slider.max = '100';
+  slider.value = '50';
+  slider.setAttribute(
+    'aria-label',
+    `Reveal version ${current.version} over version ${historical.version}`
+  );
+  slider.addEventListener('input', () => {
+    canvas.style.setProperty('--split', `${slider.value}%`);
+  });
+  control.append(controlText, slider);
+
+  wrapper.append(canvas, control);
+
+  void Promise.all([
+    loadImage(before, historicalUrl),
+    loadImage(after, currentUrl),
+  ]).then(
+    ([loadedBefore, loadedCurrent]) => {
+      const result = createImageDiff(
+        historical.content,
+        current.content,
+        {
+          width: loadedBefore.naturalWidth,
+          height: loadedBefore.naturalHeight,
+        },
+        {
+          width: loadedCurrent.naturalWidth,
+          height: loadedCurrent.naturalHeight,
+        }
+      );
+      status.textContent = result.summary;
+    },
+    () => {
+      wrapper.replaceChildren(
+        notice(
+          'One of these image versions could not be decoded by the browser.'
+        )
+      );
+    }
+  );
+
+  return wrapper;
+}
+
+interface ComparisonScaffold {
+  readonly main: HTMLElement;
+  readonly result: HTMLElement;
+  readonly select: HTMLSelectElement;
+  readonly headline: HTMLElement;
+  readonly historyNote: HTMLElement;
+}
+
+function buildComparisonScaffold(current: ReadyView): ComparisonScaffold {
+  const main = document.createElement('main');
+  main.className = 'stage stage-diff';
+
+  const shell = document.createElement('div');
+  shell.className = 'diff-shell';
+
+  const toolbar = document.createElement('header');
+  toolbar.className = 'diff-toolbar';
+
+  const copy = document.createElement('div');
+  copy.className = 'diff-heading';
+  const eyebrow = document.createElement('div');
+  eyebrow.className = 'diff-eyebrow';
+  eyebrow.textContent = 'Version history';
+  const headline = document.createElement('h1');
+  headline.tabIndex = -1;
+  const historyNote = document.createElement('p');
+  historyNote.className = 'diff-history-note';
+  copy.append(eyebrow, headline, historyNote);
+
+  const picker = document.createElement('label');
+  picker.className = 'diff-picker';
+  const pickerLabel = document.createElement('span');
+  pickerLabel.textContent = 'Historical version';
+  const select = document.createElement('select');
+  select.setAttribute('aria-label', 'Historical version to compare');
+  for (let version = current.currentVersion - 1; version >= 1; version--) {
+    const option = document.createElement('option');
+    option.value = String(version);
+    option.textContent = `Version ${version}`;
+    select.appendChild(option);
+  }
+  picker.append(pickerLabel, select);
+  toolbar.append(copy, picker);
+
+  const result = document.createElement('div');
+  result.className = 'diff-result';
+  result.setAttribute('aria-live', 'polite');
+  shell.append(toolbar, result);
+  main.appendChild(shell);
+  return { main, result, select, headline, historyNote };
+}
+
+function renderComparison(
+  current: ReadyView,
+  relicId: string,
+  deps: ViewerDeps,
+  onClose: () => void
+): void {
+  const scaffold = buildComparisonScaffold(current);
+  let request = 0;
+
+  const loadSelected = async (selectedVersion: number): Promise<void> => {
+    const thisRequest = ++request;
+    const copy = versionHistoryCopy(current.version, selectedVersion);
+    scaffold.headline.textContent = copy.headline;
+    scaffold.historyNote.textContent = copy.detail;
+    scaffold.result.setAttribute('aria-busy', 'true');
+    const loading = document.createElement('p');
+    loading.className = 'diff-loading';
+    loading.setAttribute('role', 'status');
+    loading.textContent = `Loading version ${selectedVersion} for comparison.`;
+    scaffold.result.replaceChildren(loading);
+
+    const historical = await loadHistoricalVersion(
+      relicId,
+      selectedVersion,
+      current,
+      deps
+    );
+    if (thisRequest !== request) return;
+    scaffold.result.setAttribute('aria-busy', 'false');
+
+    if (historical.kind === 'unavailable') {
+      scaffold.result.replaceChildren(notice(historical.detail));
+      return;
+    }
+
+    const mode = diffModeForRoutes(current.route, historical.view.route);
+    if (mode === undefined) {
+      scaffold.result.replaceChildren(
+        notice(
+          `Version ${selectedVersion} and version ${current.version} use ` +
+            'different display modes, so Relik cannot compare them here.'
+        )
+      );
+      return;
+    }
+
+    scaffold.result.replaceChildren(
+      mode === 'image'
+        ? renderImageComparison(current, historical.view)
+        : renderTextComparison(current, historical.view, mode)
+    );
+  };
+
+  scaffold.select.addEventListener('change', () => {
+    const selectedVersion = Number(scaffold.select.value);
+    void loadSelected(selectedVersion);
+  });
+
+  const selectedVersion = current.currentVersion - 1;
+  scaffold.select.value = String(selectedVersion);
+  document.body.replaceChildren(
+    buildBar(current, relicId, {
+      onCompare: onClose,
+      comparisonOpen: true,
+    }),
+    scaffold.main
+  );
+  scaffold.headline.focus();
+  void loadSelected(selectedVersion);
+}
+
+function renderReady(
+  view: ReadyView,
+  relicId: string,
+  usercontentOrigin: string,
+  deps: ViewerDeps
+): void {
+  const showCurrent = (): void => {
+    document.body.replaceChildren(
+      buildBar(view, relicId, { onCompare: showComparison }),
+      buildCurrentStage(view, usercontentOrigin)
+    );
+  };
+  const showComparison = (): void => {
+    renderComparison(view, relicId, deps, showCurrent);
+  };
+  showCurrent();
 }
 
 function renderDead(dead: DeadView): void {
@@ -725,11 +1163,11 @@ async function main(): Promise<void> {
   const root = document.getElementById('relic-root');
   const relicId = root?.dataset['relicId'] ?? '';
   const usercontentOrigin = root?.dataset['usercontentOrigin'] ?? '';
-
-  const state = await load(relicId, makeBrowserDeps());
+  const deps = makeBrowserDeps();
+  const state = await load(relicId, deps);
 
   if (state.kind === 'ready')
-    renderReady(state.view, relicId, usercontentOrigin);
+    renderReady(state.view, relicId, usercontentOrigin, deps);
   else if (state.kind === 'dead') renderDead(state.dead);
 }
 

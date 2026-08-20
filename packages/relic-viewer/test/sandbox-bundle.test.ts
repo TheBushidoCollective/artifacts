@@ -22,6 +22,7 @@ describe('the built sandbox.html', () => {
     expect(built.exitCode).toBe(0);
 
     const html = await Bun.file(`${pkgDir}dist/sandbox.html`).text();
+    const viewer = await Bun.file(`${pkgDir}dist/viewer.js`).text();
 
     // The inline script must be present, or the assertions below would
     // pass vacuously against an empty page.
@@ -34,5 +35,12 @@ describe('the built sandbox.html', () => {
     // No CDN reference and no script that the frame would have to fetch.
     expect(html).not.toContain('https://esm.sh');
     expect(html).not.toMatch(/<script\b[^>]*\bsrc\s*=/i);
+
+    // The diff implementation lands in the service-origin bundle and nowhere
+    // in the frame bundle. A future postMessage diff channel fails this check.
+    const diffMarker = 'No changes. These versions have identical content.';
+    expect(viewer).toContain(diffMarker);
+    expect(html).not.toContain(diffMarker);
+    expect(html).not.toContain('relic:diff');
   });
 });

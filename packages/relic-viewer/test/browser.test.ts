@@ -136,6 +136,7 @@ describe('the sandbox handler', () => {
     { type: 'relic:render-jsx' },
     { type: 'relic:render-jsx', code: 123 },
     { type: 'relic:render-jsx', html: 'wrong field' },
+    { type: 'relic:diff', before: 'old', current: 'new' },
   ];
 
   for (const data of junk) {
@@ -285,6 +286,8 @@ describe('the usercontent frame the render routes build', () => {
     route,
     downgradeNotice: undefined,
     shareUrl: 'https://relik.example/aaaaaaaaaaaaaaaaaaaaaaaaaa#k',
+    version: 1,
+    currentVersion: 1,
   });
 
   const sandboxAttributeOf = (wrapper: HTMLElement): string => {

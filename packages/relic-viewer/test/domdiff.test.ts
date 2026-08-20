@@ -268,6 +268,40 @@ describe('marking a document from a path', () => {
     expect(applyMarks(root, [{ path: [], kind: 'changed' }])).toBe(1);
     expect(root.marks).toEqual(['changed']);
   });
+
+  test('a path lands on the node the capture meant, past dropped children', () => {
+    // Found in a browser, not here: the capture drops whitespace text and
+    // unrendered tags, so a path resolved against raw childNodes landed on a
+    // different node than the diff addressed. Both sides now walk the same
+    // filtered index space, and this pretty-printed shape is what proves it.
+    const target = new NodeStub('p', [
+      new TextStub('after') as unknown as NodeStub,
+    ]);
+    const pretty = (): NodeStub =>
+      new NodeStub('body', [
+        new TextStub('\n  ') as unknown as NodeStub,
+        new NodeStub('style', [
+          new TextStub('p { color: red }') as unknown as NodeStub,
+        ]),
+        new TextStub('\n  ') as unknown as NodeStub,
+        new NodeStub('h1', [new TextStub('Title') as unknown as NodeStub]),
+        new TextStub('\n  ') as unknown as NodeStub,
+        target,
+        new TextStub('\n') as unknown as NodeStub,
+      ]);
+
+    const before = new NodeStub('body', [
+      new NodeStub('h1', [new TextStub('Title') as unknown as NodeStub]),
+      new NodeStub('p', [new TextStub('before') as unknown as NodeStub]),
+    ]);
+    const live = pretty();
+
+    const diff = diffTrees(captureTree(before), captureTree(live));
+    expect(diff.changed).toBe(true);
+    expect(applyMarks(live, diff.addedMarks)).toBe(diff.addedMarks.length);
+    // The changed paragraph, not the heading and not a whitespace node.
+    expect(target.marks).toEqual(['changed']);
+  });
 });
 
 describe('validating what crosses the frame boundary', () => {

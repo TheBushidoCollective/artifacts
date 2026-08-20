@@ -183,6 +183,41 @@ function childrenOf(node: NodeLike): readonly unknown[] {
   return [];
 }
 
+/** The collapsed text a node contributes, or nothing if it contributes none. */
+function textOfNode(node: NodeLike): string | undefined {
+  if (node.nodeType !== TEXT_NODE) return undefined;
+  const raw = typeof node.nodeValue === 'string' ? node.nodeValue : '';
+  const text = raw.replace(/\s+/g, ' ').trim();
+  return text.length === 0 ? undefined : text;
+}
+
+/**
+ * The children the capture keeps, which is also the index space a path walks.
+ *
+ * Both sides go through this one function on purpose. A path is a list of
+ * child indices into a captured tree, and the capture drops whitespace and
+ * unrendered tags, so resolving a path against raw `childNodes` would land on
+ * a different node than the one the diff meant. That was a real defect: marks
+ * were computed correctly and applied to the wrong nodes.
+ */
+function keptChildren(node: NodeLike): NodeLike[] {
+  const kept: NodeLike[] = [];
+  for (const value of childrenOf(node)) {
+    const child = asNode(value);
+    if (child === undefined) continue;
+    if (child.nodeType === TEXT_NODE) {
+      if (textOfNode(child) !== undefined) kept.push(child);
+      continue;
+    }
+    if (child.nodeType !== ELEMENT_NODE) continue;
+    const tag =
+      typeof child.tagName === 'string' ? child.tagName.toLowerCase() : '';
+    if (UNRENDERED_TAGS[tag] === true) continue;
+    kept.push(child);
+  }
+  return kept;
+}
+
 function attrsOf(node: NodeLike): readonly (readonly [string, string])[] {
   const read = node.getAttribute;
   if (typeof read !== 'function') return [];
@@ -217,9 +252,8 @@ export function captureTree(root: unknown): TreeNode {
     if (node === undefined) return undefined;
 
     if (node.nodeType === TEXT_NODE) {
-      const raw = typeof node.nodeValue === 'string' ? node.nodeValue : '';
-      const text = raw.replace(/\s+/g, ' ').trim();
-      if (text.length === 0) return undefined;
+      const text = textOfNode(node);
+      if (text === undefined) return undefined;
       budget -= 1;
       return { tag: '#text', text, attrs: [], children: [] };
     }
@@ -231,7 +265,7 @@ export function captureTree(root: unknown): TreeNode {
 
     budget -= 1;
     const children: TreeNode[] = [];
-    for (const child of childrenOf(node)) {
+    for (const child of keptChildren(node)) {
       const captured = walk(child);
       if (captured !== undefined) children.push(captured);
     }
@@ -259,7 +293,7 @@ export function applyMarks(root: unknown, marks: readonly Mark[]): number {
     let node = asNode(root);
     for (const index of mark.path) {
       if (node === undefined) break;
-      node = asNode(childrenOf(node)[index]);
+      node = keptChildren(node)[index];
     }
     if (node === undefined) continue;
     if (node.nodeType !== ELEMENT_NODE) continue;

@@ -214,6 +214,13 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') {
       document.open();
       document.write(html);
       document.close();
+      // `document.open()` removes every event listener registered on the
+      // document, on its nodes, and on its window, so the frame went deaf the
+      // instant it rendered. Reporting still worked, because that is a
+      // callback this closure already holds, which is exactly why the loss was
+      // invisible: the parent got a tree, computed a diff, posted marks, and
+      // nothing was listening. Re-register, or annotation can never arrive.
+      listen();
       scheduleReport();
     },
     (code) => {
@@ -230,9 +237,13 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') {
     }
   );
 
-  window.addEventListener('message', (event: MessageEvent) => {
+  const onMessage = (event: MessageEvent): void => {
     handle(event.data);
-  });
+  };
+  function listen(): void {
+    window.addEventListener('message', onMessage);
+  }
+  listen();
 
   // Tell the parent the frame is listening, so a message posted before this
   // script ran is not simply lost.

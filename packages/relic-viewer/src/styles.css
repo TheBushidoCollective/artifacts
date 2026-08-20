@@ -145,9 +145,12 @@ body {
   min-width: 0;
 }
 
+/* The id gives way, the version does not: this row is left packed so the
+   version sits against the catalog number it belongs with, rather than being
+   pushed to the far edge of the zone and reading as part of the actions. */
 .identity-meta .accession {
   min-width: 0;
-  flex: 1;
+  flex: 0 1 auto;
 }
 
 .version {
@@ -706,6 +709,20 @@ body {
   letter-spacing: -0.02em;
 }
 
+/*
+ * The heading takes focus when a comparison opens, so a screen reader lands on
+ * what changed rather than at the top of the taskbar. A mouse user should not
+ * see a ring for a focus they did not ask for, and a keyboard user must.
+ */
+.diff-heading h1:focus {
+  outline: none;
+}
+
+.diff-heading h1:focus-visible {
+  outline: 2px solid var(--patina);
+  outline-offset: 4px;
+}
+
 .diff-history-note {
   max-width: 52rem;
   margin: 0.45rem 0 0;
@@ -804,12 +821,29 @@ body {
   pointer-events: none;
 }
 
+/*
+ * Swipe reveals the current version from the left, so its label sits left and
+ * the historical one sits right. Side by side puts the panes in DOM order,
+ * historical then current, so the labels swap with them. They are stage
+ * children rather than pane children because a label inside the current pane
+ * would be clipped away with it at the far end of the swipe.
+ */
 .compare-label-before {
   right: 0.6rem;
 }
 
 .compare-label-current {
   left: 0.6rem;
+}
+
+.compare-stage[data-layout='split'] .compare-label-before {
+  right: auto;
+  left: 0.6rem;
+}
+
+.compare-stage[data-layout='split'] .compare-label-current {
+  left: auto;
+  right: 0.6rem;
 }
 
 .compare-controls {
@@ -1108,6 +1142,14 @@ body {
   .compare-stage[data-layout='split'] .compare-pane-before {
     border-right: 0;
     border-bottom: 1px solid var(--rule-strong);
+  }
+
+  /* Stacked, the two labels would both sit at the top of the stage and the
+     current one would name the historical pane. It moves to the foot, which
+     is where its pane now is. */
+  .compare-stage[data-layout='split'] .compare-label-current {
+    top: auto;
+    bottom: 0.6rem;
   }
 
   .compare-pane,

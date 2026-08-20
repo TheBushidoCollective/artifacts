@@ -213,6 +213,8 @@ describe('the handshake carries instructions', () => {
     /relic_lookup_source/,
     // Republish is bound to the publishing machine.
     /republished only from the machine/i,
+    // Every version remains readable to a holder of the relic's link.
+    /every version it has ever held/i,
     // The frame cannot reach the network, which has to be known before a page
     // is generated rather than after it is published.
     /no network access/i,
@@ -253,6 +255,7 @@ describe('the handshake carries instructions', () => {
     expect(skill).toMatch(/relic_lookup_source/);
     expect(skill).toMatch(/no network access/i);
     expect(skill).toMatch(/machine that published/i);
+    expect(skill).toMatch(/every version it has ever held/i);
   });
 });
 

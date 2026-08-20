@@ -11,6 +11,9 @@ import { handleMessage, LOOKUP_TOOL_NAME, TOOL_NAME } from '../src/server.ts';
 import { publishStatePath } from '../src/state.ts';
 
 const SERVICE = 'https://relic.example';
+const VERSION_HISTORY_DISCLOSURE =
+  "Anyone holding a relic's link can fetch every version it has ever held, " +
+  'so republishing does not withdraw earlier content.';
 const runFile = promisify(execFile);
 const packageRoot = fileURLToPath(new URL('../', import.meta.url));
 const scratch = await mkdtemp(join(tmpdir(), 'relic-source-path-'));
@@ -137,6 +140,15 @@ try {
   const relicId = publishedContent['relic_id'];
   assert.equal(typeof relicId, 'string');
   console.log(`PUBLISHED relic_id=${relicId}`);
+  const disclosure = (
+    published['content'] as { type: string; text: string }[]
+  ).find(({ text }) => text === VERSION_HISTORY_DISCLOSURE);
+  assert.ok(disclosure);
+  assert.deepEqual(disclosure, {
+    type: 'text',
+    text: VERSION_HISTORY_DISCLOSURE,
+  });
+  console.log(`PUBLISH_DISCLOSURE ${disclosure.text}`);
 
   const lookupResponse = await callFresh(LOOKUP_TOOL_NAME, secondPath);
   const lookupResult = lookupResponse['result'] as Record<string, unknown>;

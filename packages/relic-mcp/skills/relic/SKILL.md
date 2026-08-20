@@ -39,6 +39,11 @@ Do not publish an update as a new relic. That costs a second URL that nobody
 holding the first one will ever see. `relic_publish` enforces this: when local
 state matches the source, it refuses and points to `relic_republish`.
 
+Anyone holding a relic's link can fetch every version it has ever held, so
+republishing does not withdraw earlier content. Republishing moves the artifact
+forward without retracting what came before. Deleting the relic still removes
+every version.
+
 Optional arguments worth knowing:
 
 - `filename` overrides the display name shown to the recipient.

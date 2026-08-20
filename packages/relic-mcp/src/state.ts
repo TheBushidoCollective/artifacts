@@ -15,9 +15,36 @@
  * or the token into a message, a log line, or an error.
  */
 
-import { mkdir, readFile, rename, stat, writeFile } from 'node:fs/promises';
+import { execFile } from 'node:child_process';
+import {
+  mkdir,
+  readFile,
+  realpath,
+  rename,
+  stat,
+  writeFile,
+} from 'node:fs/promises';
 import { homedir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { basename, dirname, isAbsolute, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { promisify } from 'node:util';
+
+export type SourceIdentityKind = 'git_remote' | 'git_common_dir' | 'realpath';
+
+/**
+ * A stable name for one source file, plus the facts used to explain a match.
+ *
+ * The identity is an on-disk index key. The description is safe to return to
+ * the publisher: it contains paths and repository locations, never a content
+ * key or publish token.
+ */
+export interface SourceIdentity {
+  readonly identity: string;
+  readonly kind: SourceIdentityKind;
+  readonly path: string;
+  readonly repository?: string | undefined;
+  readonly description: string;
+}
 
 /** What this machine remembers about one published relic. */
 export interface PublishState {
@@ -30,10 +57,24 @@ export interface PublishState {
   readonly publish_token: string;
   /** How many versions this machine has published; 1 after the first. */
   readonly version: number;
+  /**
+   * Absent on state written before source lookup shipped. Absence is valid
+   * legacy state and means this entry cannot take part in prior-publish
+   * detection.
+   */
+  readonly source?: SourceIdentity | undefined;
 }
 
 interface StateFile {
   readonly relics: Record<string, PublishState>;
+  readonly sources?: Record<string, string> | undefined;
+  readonly [key: string]: unknown;
+}
+
+export interface PublishedSource {
+  readonly relic_id: string;
+  readonly state: PublishState;
+  readonly source: SourceIdentity;
 }
 
 /**
@@ -57,6 +98,151 @@ export function publishStatePath(): string {
   return join(configRoot, 'relic-mcp', 'publish-state.json');
 }
 
+const runFile = promisify(execFile);
+
+/**
+ * Reduce equivalent Git transport URLs to one repository name.
+ *
+ * Credentials and transport do not identify a repository. Host and path do,
+ * and the hosts this client targets treat both without case.
+ */
+export function normalizeGitRemote(remote: string): string {
+  const value = remote.trim().replace(/^git\+/i, '');
+  try {
+    const url = new URL(value);
+    if (url.protocol === 'file:') {
+      return fileURLToPath(url)
+        .replaceAll('\\', '/')
+        .replace(/\/+$/g, '')
+        .replace(/\.git$/i, '');
+    }
+    if (url.hostname.length > 0) {
+      const host =
+        url.port.length > 0 ? `${url.hostname}:${url.port}` : url.hostname;
+      const path = url.pathname
+        .replace(/^\/+|\/+$/g, '')
+        .replace(/\.git$/i, '');
+      return `${host}/${path}`.toLowerCase();
+    }
+  } catch {
+    // SCP-style and local remotes are not URL syntax.
+  }
+
+  const scp = value.match(/^(?:[^@/\s]+@)?([^:/\s]+):(.+)$/);
+  if (scp?.[1] !== undefined && scp[2] !== undefined) {
+    const path = scp[2].replace(/^\/+|\/+$/g, '').replace(/\.git$/i, '');
+    return `${scp[1]}/${path}`.toLowerCase();
+  }
+
+  return value
+    .replaceAll('\\', '/')
+    .replace(/\/+$/g, '')
+    .replace(/\.git$/i, '');
+}
+
+async function gitOutput(
+  directory: string,
+  args: readonly string[]
+): Promise<string | undefined> {
+  try {
+    const { stdout } = await runFile('git', ['-C', directory, ...args], {
+      encoding: 'utf8',
+      maxBuffer: 1024 * 1024,
+    });
+    const output = String(stdout).trim();
+    return output.length === 0 ? undefined : output;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Name a source across sessions without binding it to one worktree.
+ *
+ * A repository remote is the strongest identity because it also crosses
+ * clones. A repository with no remote falls back to Git's shared common
+ * directory, which crosses worktrees from one clone. A file outside Git is
+ * named by realpath so symlink aliases do not create duplicate relics.
+ */
+export async function resolveSourceIdentity(
+  path: string
+): Promise<SourceIdentity> {
+  const absolutePath = resolve(path);
+  const sourceDirectory = dirname(absolutePath);
+  const repositoryRoot = await gitOutput(sourceDirectory, [
+    'rev-parse',
+    '--show-toplevel',
+  ]);
+
+  if (repositoryRoot !== undefined) {
+    const repositoryPrefix = await gitOutput(sourceDirectory, [
+      'rev-parse',
+      '--show-prefix',
+    ]);
+    const repositoryPath =
+      `${repositoryPrefix ?? ''}${basename(absolutePath)}`.replaceAll(
+        '\\',
+        '/'
+      );
+    const remoteNames = ((await gitOutput(repositoryRoot, ['remote'])) ?? '')
+      .split(/\r?\n/)
+      .filter((name) => name.length > 0)
+      .sort();
+    const remoteName = remoteNames.includes('origin')
+      ? 'origin'
+      : remoteNames[0];
+
+    if (remoteName !== undefined) {
+      const remote = await gitOutput(repositoryRoot, [
+        'remote',
+        'get-url',
+        remoteName,
+      ]);
+      if (remote !== undefined) {
+        const repository = normalizeGitRemote(remote);
+        return {
+          identity:
+            `git-remote:${encodeURIComponent(repository)}:` +
+            encodeURIComponent(repositoryPath),
+          kind: 'git_remote',
+          path: repositoryPath,
+          repository,
+          description: `${repositoryPath} in ${repository}`,
+        };
+      }
+    }
+
+    const commonDirectory = await gitOutput(repositoryRoot, [
+      'rev-parse',
+      '--git-common-dir',
+    ]);
+    if (commonDirectory !== undefined) {
+      const repository = await realpath(
+        isAbsolute(commonDirectory)
+          ? commonDirectory
+          : resolve(repositoryRoot, commonDirectory)
+      );
+      return {
+        identity:
+          `git-common-dir:${encodeURIComponent(repository)}:` +
+          encodeURIComponent(repositoryPath),
+        kind: 'git_common_dir',
+        path: repositoryPath,
+        repository,
+        description: `${repositoryPath} in Git repository ${repository}`,
+      };
+    }
+  }
+
+  const canonicalPath = await realpath(absolutePath);
+  return {
+    identity: `realpath:${encodeURIComponent(canonicalPath)}`,
+    kind: 'realpath',
+    path: canonicalPath,
+    description: canonicalPath,
+  };
+}
+
 /**
  * Writers queue behind one chain, so two publishes finishing close together
  * cannot read-modify-write past each other and silently drop one relic's
@@ -69,43 +255,89 @@ let writeChain: Promise<void> = Promise.resolve();
 export async function loadPublishState(
   relicId: string
 ): Promise<PublishState | undefined> {
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(await readFile(publishStatePath(), 'utf8'));
-  } catch (error) {
-    const code = (error as NodeJS.ErrnoException).code;
-    if (code === 'ENOENT') return undefined;
-    if (error instanceof SyntaxError) {
-      // The message names the file and stops. Echoing any of the bytes would
-      // put secrets into an error path, and a truncated tail of JSON is where
-      // a key or token is most likely to sit in one piece.
-      throw new Error(
-        `publish state at ${publishStatePath()} is not valid JSON. It cannot ` +
-          'be read, so relics recorded in it cannot be republished from this ' +
-          'machine until it is fixed or removed.'
-      );
-    }
+  const parsed = await readWholeFile(publishStatePath());
+  return validatePublishStateEntry(parsed?.relics?.[relicId], relicId);
+}
+
+function isSourceIdentity(value: unknown): value is SourceIdentity {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+    return false;
+  }
+  const source = value as Record<string, unknown>;
+  return (
+    typeof source['identity'] === 'string' &&
+    (source['kind'] === 'git_remote' ||
+      source['kind'] === 'git_common_dir' ||
+      source['kind'] === 'realpath') &&
+    typeof source['path'] === 'string' &&
+    (source['repository'] === undefined ||
+      typeof source['repository'] === 'string') &&
+    typeof source['description'] === 'string'
+  );
+}
+
+function validatePublishStateEntry(
+  entry: unknown,
+  relicId: string
+): PublishState | undefined {
+  if (entry === undefined) return undefined;
+  if (entry === null || typeof entry !== 'object' || Array.isArray(entry)) {
     throw new Error(
-      `could not read publish state at ${publishStatePath()}: ${code}`
+      `publish state at ${publishStatePath()} holds a malformed entry for ` +
+        `relic ${relicId}.`
     );
   }
-
-  const entry = (parsed as StateFile | null)?.relics?.[relicId];
-  if (entry === undefined) return undefined;
+  const candidate = entry as Record<string, unknown>;
   if (
-    typeof entry !== 'object' ||
-    typeof entry.key !== 'string' ||
-    typeof entry.publish_token !== 'string' ||
-    typeof entry.version !== 'number' ||
-    !Number.isSafeInteger(entry.version) ||
-    entry.version < 1
+    typeof candidate['key'] !== 'string' ||
+    typeof candidate['publish_token'] !== 'string' ||
+    typeof candidate['version'] !== 'number' ||
+    !Number.isSafeInteger(candidate['version']) ||
+    candidate['version'] < 1 ||
+    (candidate['source'] !== undefined &&
+      !isSourceIdentity(candidate['source']))
   ) {
     throw new Error(
       `publish state at ${publishStatePath()} holds a malformed entry for ` +
-        'this relic id.'
+        `relic ${relicId}.`
     );
   }
-  return entry;
+  return candidate as unknown as PublishState;
+}
+
+/** Resolve a source through the reverse index without exposing its secrets. */
+export async function loadPublishedSource(
+  source: SourceIdentity
+): Promise<PublishedSource | undefined> {
+  const parsed = await readWholeFile(publishStatePath());
+  const sources = parsed?.sources;
+  if (sources === undefined) return undefined;
+  if (
+    sources === null ||
+    typeof sources !== 'object' ||
+    Array.isArray(sources)
+  ) {
+    throw new Error(
+      `publish state at ${publishStatePath()} holds a malformed source index.`
+    );
+  }
+
+  const relicId = (sources as Record<string, unknown>)[source.identity];
+  if (relicId === undefined) return undefined;
+  if (typeof relicId !== 'string' || relicId.length === 0) {
+    throw new Error(
+      `publish state at ${publishStatePath()} holds a malformed source match.`
+    );
+  }
+
+  const state = validatePublishStateEntry(parsed?.relics?.[relicId], relicId);
+  if (state?.source?.identity !== source.identity) {
+    throw new Error(
+      `publish state at ${publishStatePath()} holds a source match without ` +
+        'its relic entry.'
+    );
+  }
+  return { relic_id: relicId, state, source: state.source };
 }
 
 /**
@@ -134,13 +366,56 @@ async function writeEntry(relicId: string, state: PublishState): Promise<void> {
   await mkdir(dir, { mode: 0o700, recursive: true });
 
   const existing = await readWholeFile(path);
-  const relics = { ...existing?.relics, [relicId]: state };
+  const storedRelics = existing?.['relics'];
+  if (
+    storedRelics !== undefined &&
+    (storedRelics === null ||
+      typeof storedRelics !== 'object' ||
+      Array.isArray(storedRelics))
+  ) {
+    throw new Error(`publish state at ${path} holds malformed relic entries.`);
+  }
+  const oldEntry = (storedRelics as Record<string, unknown> | undefined)?.[
+    relicId
+  ];
+  const relics = {
+    ...(storedRelics as Record<string, unknown> | undefined),
+    [relicId]: {
+      ...(oldEntry !== null &&
+      typeof oldEntry === 'object' &&
+      !Array.isArray(oldEntry)
+        ? oldEntry
+        : {}),
+      ...state,
+    },
+  };
+
+  const storedSources = existing?.['sources'];
+  if (
+    storedSources !== undefined &&
+    (storedSources === null ||
+      typeof storedSources !== 'object' ||
+      Array.isArray(storedSources))
+  ) {
+    throw new Error(`publish state at ${path} holds a malformed source index.`);
+  }
+  const sources = {
+    ...(storedSources as Record<string, unknown> | undefined),
+    ...(state.source === undefined ? {} : { [state.source.identity]: relicId }),
+  };
+  const next = {
+    ...existing,
+    relics,
+    ...(storedSources === undefined && state.source === undefined
+      ? {}
+      : { sources }),
+  };
 
   // Written to a sibling then renamed over, so a crash mid-write leaves the
   // previous intact file rather than half of the new one. A torn file would
   // take every relic's republish rights with it, not just the one in flight.
   const temp = `${path}.tmp`;
-  await writeFile(temp, `${JSON.stringify({ relics }, null, 2)}\n`, {
+  await writeFile(temp, `${JSON.stringify(next, null, 2)}\n`, {
     mode: 0o600,
   });
   await rename(temp, path);
@@ -158,7 +433,11 @@ async function readWholeFile(path: string): Promise<StateFile | undefined> {
 
   try {
     const parsed = JSON.parse(raw) as StateFile | null;
-    if (parsed === null || typeof parsed !== 'object') {
+    if (
+      parsed === null ||
+      typeof parsed !== 'object' ||
+      Array.isArray(parsed)
+    ) {
       throw new Error('not an object');
     }
     return parsed;

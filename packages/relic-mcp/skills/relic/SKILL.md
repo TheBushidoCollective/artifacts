@@ -24,16 +24,34 @@ enters the conversation, so it is never in the transcript, never in a model
 context window, and never in whatever stores those. Do not read a file into
 context and pass its text; pass where it lives.
 
+When the task is to update the same source, call `relic_lookup_source` first:
+
+```
+relic_lookup_source(path: "/Users/me/Downloads/report.html")
+```
+
+It reads local machine state only. If the source was published before, it
+returns the relic id and the exact `relic_republish` call. This works across
+Git worktrees and clones of the same remote, so a fresh session does not need
+to retain the id from the first publish.
+
+Do not publish an update as a new relic. That costs a second URL that nobody
+holding the first one will ever see. `relic_publish` enforces this: when local
+state matches the source, it refuses and points to `relic_republish`.
+
 Optional arguments worth knowing:
 
 - `filename` overrides the display name shown to the recipient.
 - `ttl_days` gives the link a lifetime in days, 1 to 3650. A relic is kept
   until it is deleted unless you set one. Shorter is better for anything
   sensitive: when the content should stop being available, say when.
+- `force_new` deliberately creates a separate relic from a source this machine
+  already published. Use it only when two independent URLs are the goal, never
+  to get past the update refusal.
 
-The result reports the relic as version 1 and its id. Keep the id if a later
-version of the same content will replace this one; that is what
-`relic_republish` is for.
+The result reports the relic as version 1 and its id. The client records that
+id with the source locally, so a later session can recover it with
+`relic_lookup_source`.
 
 ## Republishing
 

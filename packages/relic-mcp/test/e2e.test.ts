@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import {
+  chmod,
   mkdir,
   mkdtemp,
   readFile as readStateFile,
@@ -147,6 +148,12 @@ beforeEach(async () => {
     files: fakeFiles(),
     fetch: shimFetch(),
     clientName: 'relic-mcp/0.1.0 (test)',
+    identifySource: async (path) => ({
+      identity: `realpath:${encodeURIComponent(path)}`,
+      kind: 'realpath',
+      path,
+      description: path,
+    }),
   };
 
   // Redirected per test, into a directory this run created, so no test
@@ -479,14 +486,15 @@ describe('publisher-chosen lifetimes', () => {
 });
 
 describe('the MCP surface', () => {
-  test('advertises publish, republish, and describe, all prefixed with the product name', async () => {
+  test('advertises publish, lookup, republish, and describe with product prefixes', async () => {
     const response = await handleMessage(
       { jsonrpc: '2.0', id: 1, method: 'tools/list' },
       deps
     );
     const tools = (response?.result as { tools: { name: string }[] }).tools;
-    expect(tools.map((t) => t.name)).toEqual([
+    expect(tools.map((tool) => tool.name)).toEqual([
       'relic_publish',
+      'relic_lookup_source',
       'relic_republish',
       'relic_describe_client',
     ]);
@@ -543,13 +551,18 @@ describe('the MCP surface', () => {
     expect(text).toContain('never sent anywhere in');
   });
 
-  test('accepts a path and refuses inline content by schema', () => {
+  test('accepts a path and a deliberate duplicate escape, never inline content', () => {
     const schema = TOOL_DEFINITION.inputSchema;
     expect(Object.keys(schema.properties)).toEqual([
       'path',
       'filename',
       'ttl_days',
+      'force_new',
     ]);
+    expect(schema.properties.force_new).toMatchObject({
+      type: 'boolean',
+      default: false,
+    });
     expect(schema.additionalProperties).toBe(false);
     // Inline content would put the plaintext in the transcript too,
     // compounding the leak from "the key leaks" to "the key and the file leak".
@@ -1041,15 +1054,17 @@ describe('local publish state', () => {
 
   test('a publish that cannot record state fails with the URL intact', async () => {
     writeFile('/work/notes.md', 'hello');
-    // A directory where the file should be stands in for a full or
-    // read-only disk: every state write fails, nothing else does.
-    await mkdir(publishStatePath(), { recursive: true });
+    const stateDirectory = join(stateScratch, 'relic-mcp');
+    await mkdir(stateDirectory, { recursive: true });
+    await chmod(stateDirectory, 0o500);
 
     let refusal: PublishError | undefined;
     try {
       await publish({ path: 'notes.md' }, deps);
     } catch (error) {
       refusal = error as PublishError;
+    } finally {
+      await chmod(stateDirectory, 0o700);
     }
 
     expect(refusal?.code).toBe('local_state_write_failed');
@@ -1070,8 +1085,10 @@ describe('republish refusals', () => {
     // The only honest road to the 403 is presenting a token the service
     // did not hash, so tamper with the stored one.
     const stored = await readStoredState();
-    stored.relics[first.relic_id]!.publish_token =
-      'a-token-the-service-never-hashed';
+    const entry = stored.relics[first.relic_id];
+    expect(entry).toBeDefined();
+    if (entry === undefined) throw new Error('publish state entry is missing');
+    entry.publish_token = 'a-token-the-service-never-hashed';
     await writeStateFile(publishStatePath(), JSON.stringify(stored), 'utf8');
 
     writeFile('/work/notes.md', 'second');
@@ -1166,7 +1183,9 @@ describe('republish refusals', () => {
       published?.result as { structuredContent: { relic_id: string } }
     ).structuredContent.relic_id;
     const stored = await readStoredState();
-    const entry = stored.relics[relicId]!;
+    const entry = stored.relics[relicId];
+    expect(entry).toBeDefined();
+    if (entry === undefined) throw new Error('publish state entry is missing');
 
     // The publish result prints the URL, key in its fragment, by product
     // design and with its disclosure. The token has no such license.

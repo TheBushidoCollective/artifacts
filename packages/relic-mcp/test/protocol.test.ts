@@ -208,6 +208,9 @@ describe('the handshake carries instructions', () => {
     /credential/i,
     // The key reaches the transcript on every publish.
     /transcript/i,
+    // A fresh publish costs a second URL, and local lookup recovers the id.
+    /second URL/i,
+    /relic_lookup_source/,
     // Republish is bound to the publishing machine.
     /republished only from the machine/i,
     // The frame cannot reach the network, which has to be known before a page
@@ -246,6 +249,8 @@ describe('the handshake carries instructions', () => {
     ).text();
 
     expect(skill).toMatch(/transcript/i);
+    expect(skill).toMatch(/second URL/i);
+    expect(skill).toMatch(/relic_lookup_source/);
     expect(skill).toMatch(/no network access/i);
     expect(skill).toMatch(/machine that published/i);
   });

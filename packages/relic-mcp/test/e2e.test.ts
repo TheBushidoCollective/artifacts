@@ -37,6 +37,9 @@ import {
 import { publishStateModes, publishStatePath } from '../src/state.ts';
 
 const SERVICE = 'https://relic.example';
+const VERSION_HISTORY_DISCLOSURE =
+  "Anyone holding a relic's link can fetch every version it has ever held, " +
+  'so republishing does not withdraw earlier content.';
 
 let now = Date.parse('2026-08-02T12:00:00.000Z');
 let storage: MemoryStorage;
@@ -505,6 +508,13 @@ describe('the MCP surface', () => {
     expect(TOOL_NAME.startsWith('relic')).toBe(true);
   });
 
+  test('publish and republish descriptions disclose retained history', () => {
+    expect(TOOL_DEFINITION.description).toContain(VERSION_HISTORY_DISCLOSURE);
+    expect(REPUBLISH_TOOL_DEFINITION.description).toContain(
+      VERSION_HISTORY_DISCLOSURE
+    );
+  });
+
   test('describe_client reads nothing and sends nothing', async () => {
     // The inspection tool exists so a local client is not opaque to the agent
     // driving it. It must not be a second way to touch the disk or network.
@@ -736,6 +746,9 @@ describe('the MCP surface', () => {
     expect(result.structuredContent.url).toContain('#r1');
     // The transcript consequence is disclosed in the same breath.
     expect(result.content[0]?.text).toContain('transcript');
+    expect(
+      result.content.some(({ text }) => text === VERSION_HISTORY_DISCLOSURE)
+    ).toBe(true);
   });
 
   test('returns all nine result members', async () => {
@@ -850,6 +863,45 @@ describe('republish', () => {
       deps
     );
     expect(response?.error?.code).toBe(-32602);
+  });
+
+  test('the result discloses retained history without changing its structured shape', async () => {
+    writeFile('/work/report.md', '# v1\n');
+    const first = await publish({ path: 'report.md' }, deps);
+    writeFile('/work/report.md', '# v2\n');
+
+    const response = await handleMessage(
+      {
+        jsonrpc: '2.0',
+        id: 41,
+        method: 'tools/call',
+        params: {
+          name: REPUBLISH_TOOL_NAME,
+          arguments: { relic_id: first.relic_id, path: 'report.md' },
+        },
+      },
+      deps
+    );
+    const result = response?.result as {
+      content: { text: string }[];
+      isError: boolean;
+      structuredContent: Record<string, unknown>;
+    };
+
+    expect(result.isError).toBe(false);
+    expect(
+      result.content.some(({ text }) => text === VERSION_HISTORY_DISCLOSURE)
+    ).toBe(true);
+    expect(Object.keys(result.structuredContent).sort()).toEqual([
+      'disclosure_url',
+      'filename',
+      'relic_expires_at',
+      'relic_id',
+      'renderer_class',
+      'report_url',
+      'resolved_path',
+      'version',
+    ]);
   });
 
   test('a second publish to the same id is readable at the original URL', async () => {

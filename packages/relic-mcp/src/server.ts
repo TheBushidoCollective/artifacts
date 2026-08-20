@@ -105,6 +105,10 @@ export const LOOKUP_TOOL_NAME = 'relic_lookup_source';
  */
 const MAX_TTL_DAYS = 3650;
 
+const VERSION_HISTORY_DISCLOSURE =
+  "Anyone holding a relic's link can fetch every version it has ever held, " +
+  'so republishing does not withdraw earlier content.';
+
 export const TOOL_DEFINITION = {
   name: TOOL_NAME,
   title: 'Publish a relic',
@@ -112,8 +116,10 @@ export const TOOL_DEFINITION = {
     'Encrypt a file on this machine and publish it as a new relic, returning ' +
     'a shareable URL. Publishing an update this way costs a second URL that ' +
     'nobody holding the first one will ever see; use relic_republish instead ' +
-    'so the existing URL keeps working. The encryption key is generated ' +
-    'locally and never sent to the service. Takes a filesystem path, never ' +
+    'so the existing URL keeps working. ' +
+    VERSION_HISTORY_DISCLOSURE +
+    ' The encryption key is generated locally and never sent to the service. ' +
+    'Takes a filesystem path, never ' +
     'inline content.',
   inputSchema: {
     type: 'object',
@@ -187,7 +193,8 @@ export const REPUBLISH_TOOL_DEFINITION = {
   description:
     'Publish a new version of a relic this machine originally published, ' +
     'encrypting under the same key so the existing share URL keeps working. ' +
-    "Only possible from the machine that holds the relic's key and publish " +
+    VERSION_HISTORY_DISCLOSURE +
+    " Only possible from the machine that holds the relic's key and publish " +
     'token; a relic that was taken down can never be revived.',
   inputSchema: {
     type: 'object',
@@ -369,10 +376,9 @@ Five things that change how you should act:
 the file. Do not paste it into a tracker, a log, or a public channel.
 2. Publishing puts the key in this transcript. That is structural rather than \
 a defect, and worth saying plainly when you hand the link over.
-3. If a source was published before, use relic_republish so its URL keeps \
-working. Publishing it as new costs a second URL that nobody holding the first \
-one will ever see. relic_publish refuses by default, relic_lookup_source \
-recovers the id, and force_new is only for a deliberate second link.
+3. Check existing sources with relic_lookup_source. Use relic_republish when \
+found; relic_publish otherwise costs a second URL. \
+${VERSION_HISTORY_DISCLOSURE}
 4. A relic can be republished only from the machine that published it, which \
 is where its key and publish token are stored. Anywhere else it refuses, and \
 no retry changes that.
@@ -601,6 +607,7 @@ async function callTool(
               isolationNote(result.renderer_class) +
               `What Relic knows: ${result.disclosure_url}`,
           },
+          { type: 'text', text: VERSION_HISTORY_DISCLOSURE },
         ],
         structuredContent: result,
         isError: false,
@@ -732,6 +739,7 @@ async function callRepublish(
               '\n' +
               `What Relic knows: ${result.disclosure_url}`,
           },
+          { type: 'text', text: VERSION_HISTORY_DISCLOSURE },
         ],
         structuredContent: result,
         isError: false,

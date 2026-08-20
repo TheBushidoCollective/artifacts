@@ -13,6 +13,7 @@ worktree. Success ends with:
 
 ```text
 PUBLISHED relic_id=<id>
+PUBLISH_DISCLOSURE Anyone holding a relic's link can fetch every version it has ever held, so republishing does not withdraw earlier content.
 FRESH_LOOKUP relic_id=<same-id>
 REFUSED code=source_already_published relic_id=<same-id>
 SOURCE_VERSIONING_PATH_OK

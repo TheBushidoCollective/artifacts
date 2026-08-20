@@ -14,6 +14,29 @@
  *    key.
  */
 
+import { deriveCommentKey, parseFragment } from '@relic/format';
+import {
+  type CommentCipher,
+  type CommentEntry,
+  commentCipher,
+  commentTime,
+  DELIVERY_DISCLOSURE,
+  IDENTITY_DISCLOSURE,
+  KEY_AT_RISK_NOTE,
+  keySurvivesNavigation,
+  loadThread,
+  MAX_BODY_BYTES,
+  MAX_DISPLAY_NAME_BYTES,
+  PUBLISHER_AUTHOR,
+  plainLabel,
+  postComment,
+  type Refusal,
+  readSession,
+  requestMagicLink,
+  type SessionState,
+  threadCountLabel,
+  utf8Bytes,
+} from './comments.ts';
 import {
   bytesEqual,
   comparisonAvailability,
@@ -78,6 +101,9 @@ const ICONS = {
   chevron: 'M3.4 5.7 8 10.3l4.6-4.6-.7-.7L8 8.9 4.1 5l-.7.7z',
   swipe: 'M7.5 1h1v14h-1V1zM2 7.5h3.5v1H2v-1zm8.5 0H14v1h-3.5v-1z',
   columns: 'M2 2h5v12H2V2zm1 1v10h3V3H3zm6-1h5v12H9V2zm1 1v10h3V3h-3z',
+  // A speech rectangle with a tail, drawn on the same 16-unit grid and with
+  // the same single-path construction as the rest of the set.
+  comment: 'M2 2h12v9H7.5L4 14v-3H2V2zm1 1v7h2v2.1L7.1 10H13V3H3z',
 } as const;
 
 function icon(path: string): SVGSVGElement {
@@ -200,6 +226,17 @@ export interface BarOptions {
    * being compared rather than the one behind it.
    */
   readonly selectedVersion?: number;
+  /**
+   * Takes the reader to the thread. Present on every renderable relic, and
+   * absent while a comparison is open, where the thread is not on the page.
+   */
+  readonly onComments?: () => void;
+  /**
+   * How many comments the thread is showing, once it knows. `undefined` is
+   * the loading state rather than zero: a badge reading `0` before the fetch
+   * lands is a claim, and it is wrong about a third of the time.
+   */
+  readonly commentCount?: number;
   /** Offered only when there is more than one historical version to pick. */
   readonly onSelectVersion?: (version: number) => void;
 }
@@ -441,6 +478,36 @@ export function buildBar(
   markerText.textContent = MARKER_LABEL;
   marker.appendChild(markerText);
   actions.appendChild(marker);
+
+  // Comments is the eleventh element on the row and the sixth action, and it
+  // is the first addition whose absence costs nothing, which is why it is the
+  // one that leaves at the floor. The thread is in the document flow rather
+  // than behind this control, so a reader who loses the button reaches the
+  // same thread by scrolling. `viewer.md` 6.5 carries the arithmetic.
+  //
+  // A button rather than a link to a document fragment. A `#thread` href
+  // would write a fragment into the address bar of the one page in this
+  // product whose entire security model is about what lives there, and the
+  // key had already been stripped out of it.
+  if (options.onComments !== undefined) {
+    const comments = button('Comments', ICONS.comment, options.onComments);
+    // Named so the stylesheet can drop this one control at the 320px floor
+    // without reaching for a positional selector that the next addition to
+    // the row would silently repoint.
+    comments.classList.add('action-comments');
+    if (options.commentCount !== undefined) {
+      const count = document.createElement('span');
+      // Survives the narrow collapse that hides the label beside it, because
+      // the number is the part a reader cannot get anywhere else on the row.
+      count.className = 'action-count';
+      count.textContent = String(options.commentCount);
+      comments.appendChild(count);
+      comments.title = threadCountLabel(options.commentCount);
+    } else {
+      comments.title = 'Comments on this relic';
+    }
+    actions.appendChild(comments);
+  }
 
   const availability = comparisonAvailability(view);
   if (availability.kind === 'available' && options.onCompare !== undefined) {
@@ -1424,22 +1491,550 @@ function renderComparison(
   show(initialVersion ?? current.currentVersion - 1);
 }
 
+/* ---------- the comment thread ---------- */
+
+/**
+ * A paragraph, because the thread builds a dozen of them and they have to
+ * agree on getting their text through `textContent`.
+ */
+function line(className: string, text: string): HTMLElement {
+  const element = document.createElement('p');
+  element.className = className;
+  element.textContent = text;
+  return element;
+}
+
+/** A labelled control, since the composer builds three. */
+function field(
+  labelText: string,
+  control: HTMLInputElement | HTMLTextAreaElement
+): HTMLElement {
+  const label = document.createElement('label');
+  label.className = 'compose-field';
+  const text = document.createElement('span');
+  text.textContent = labelText;
+  label.append(text, control);
+  return label;
+}
+
+/**
+ * One comment.
+ *
+ * The address is the identity, so it is always present and never replaced. A
+ * display name sits in front of it as an alias, which is what `frame.md`
+ * settled when it reversed the no-accounts non-goal: names are decoration and
+ * the address is the record.
+ *
+ * Both are untrusted display text on the origin that holds the fragment. The
+ * name is chosen by any link holder, and the address only proves a mailbox
+ * answered, so both go in through `textContent` with the bidirectional
+ * controls stripped.
+ */
+export function commentRow(entry: CommentEntry): HTMLElement {
+  const row = document.createElement('li');
+  row.className =
+    entry.kind === 'open' ? 'comment' : 'comment comment-undecryptable';
+
+  const head = document.createElement('div');
+  head.className = 'comment-head';
+
+  if (entry.kind === 'open' && entry.displayName !== null) {
+    const name = document.createElement('span');
+    name.className = 'comment-name';
+    name.textContent = plainLabel(entry.displayName);
+    head.appendChild(name);
+  }
+
+  // A row this page could not read at all may carry no author, so the slot is
+  // left empty rather than filled with a stand in. Inventing a sender for a
+  // row that named none would be the only fabrication on the page.
+  if (entry.author !== null) {
+    const author = document.createElement('span');
+    author.className = 'comment-author';
+    author.textContent = plainLabel(entry.author);
+    head.appendChild(author);
+  }
+
+  if (entry.author === PUBLISHER_AUTHOR) {
+    // True by construction rather than by claim: this comment was authorized
+    // by the publish token, and only the machine that published the relic
+    // holds one.
+    const badge = document.createElement('span');
+    badge.className = 'comment-badge';
+    badge.textContent = 'Published this relic';
+    head.appendChild(badge);
+  }
+
+  if (entry.createdAt !== null) {
+    const time = document.createElement('time');
+    time.className = 'comment-time';
+    time.setAttribute('datetime', entry.createdAt);
+    time.textContent = commentTime(entry.createdAt);
+    head.appendChild(time);
+  }
+
+  row.appendChild(head);
+
+  if (entry.kind === 'open') {
+    row.appendChild(line('comment-body', entry.body));
+  } else if (entry.kind === 'sealed') {
+    row.appendChild(
+      line(
+        'comment-body comment-sealed',
+        'This comment did not decrypt. It was either written under a ' +
+          'different key for this relic or altered in storage, and there is ' +
+          'no way to tell which from here. It is shown rather than dropped, ' +
+          'because a thread that quietly hides what it cannot read is one ' +
+          'you cannot trust the length of.'
+      )
+    );
+  } else {
+    row.appendChild(
+      line(
+        'comment-body comment-sealed',
+        'This comment did not arrive in a form this page can read, so there ' +
+          'may never have been a body to open. It is counted here rather ' +
+          'than hidden, because a thread that is shorter than it looks is ' +
+          'one you cannot trust the length of.'
+      )
+    );
+  }
+  return row;
+}
+
+/** A refusal, with its cause named and a retry only where one could work. */
+export function threadRefusal(
+  refusal: Refusal,
+  onRetry: () => void
+): HTMLElement {
+  const card = document.createElement('div');
+  card.className = 'thread-refusal';
+  const headline = document.createElement('p');
+  headline.className = 'thread-refusal-title';
+  headline.textContent = refusal.headline;
+  card.append(headline, line('thread-note', refusal.detail));
+  if (refusal.retryable) {
+    const again = button('Try again', ICONS.rendered, onRetry);
+    again.classList.add('primary');
+    card.appendChild(again);
+  }
+  const code = document.createElement('div');
+  code.className = 'accession';
+  code.textContent = refusal.code;
+  card.appendChild(code);
+  return card;
+}
+
+/** Copy for a thread with nothing in it yet, which is not an error. */
+export const THREAD_EMPTY_NOTE =
+  'No comments yet. Anyone holding this link can leave one, and the text is ' +
+  'encrypted the same way the file is, so Relic stores it without being ' +
+  'able to read it.';
+
+/**
+ * Copy for the wait, with its reason attached.
+ *
+ * A bare spinner here would be hiding the interesting part: the bodies arrive
+ * as ciphertext and are opened in this browser, so the list can exist before
+ * the words in it do.
+ */
+export const THREAD_LOADING_NOTE =
+  'Reading the thread. Comment text arrives encrypted and is decrypted here ' +
+  'with the key from your link.';
+
+interface ThreadHandle {
+  readonly element: HTMLElement;
+  /** Takes the reader to the thread, for the taskbar action. */
+  readonly reveal: () => void;
+}
+
+/** Compares two session states without comparing objects. */
+function sessionSignature(state: SessionState): string {
+  return state.kind === 'verified' ? `verified:${state.email}` : state.kind;
+}
+
+/**
+ * The thread, in the service-origin chrome.
+ *
+ * It cannot live in the render frame and this is not a preference: the frame
+ * is network denied, `default-src 'none'` with sandbox exactly
+ * `allow-scripts`, so it could not fetch a comment if it tried. The chrome
+ * around it can, and it is also the only side of the boundary that holds the
+ * key the bodies are sealed under.
+ */
+function buildThread(
+  view: ReadyView,
+  relicId: string,
+  deps: ViewerDeps,
+  onCount: (count: number) => void
+): ThreadHandle {
+  const section = document.createElement('section');
+  section.className = 'thread';
+  section.setAttribute('aria-labelledby', 'thread-title');
+
+  const title = document.createElement('h2');
+  title.className = 'thread-title';
+  title.id = 'thread-title';
+  // Focusable without being in the tab order, so the taskbar action can land
+  // a screen reader on the thread instead of scrolling silently past it.
+  title.tabIndex = -1;
+  title.textContent = 'Comments';
+
+  const status = document.createElement('div');
+  status.className = 'thread-status';
+  // Polite: a comment arriving is worth announcing and never worth
+  // interrupting what is being read.
+  status.setAttribute('aria-live', 'polite');
+
+  const list = document.createElement('ol');
+  list.className = 'thread-list';
+
+  const composer = document.createElement('div');
+  composer.className = 'compose-slot';
+
+  // Outcomes live outside the composer, so repainting the composer after a
+  // lapsed session does not throw away the sentence explaining why.
+  const outcome = document.createElement('div');
+  outcome.className = 'thread-outcome';
+  outcome.setAttribute('aria-live', 'polite');
+
+  section.append(title, status, list, composer, outcome);
+
+  // The one place the in-memory fragment is already carried on a ready view.
+  // Reading it back from here rather than adding a second copy to `ReadyView`
+  // keeps the number of places holding key material at one.
+  const fragment = new URL(view.shareUrl).hash;
+
+  let cipher: CommentCipher | undefined;
+  let session: SessionState = { kind: 'unknown' };
+
+  const policyLink = (): HTMLElement => {
+    const link = document.createElement('a');
+    link.className = 'thread-policy';
+    link.href = `${SERVICE_ORIGIN}/policy`;
+    link.rel = 'noopener noreferrer';
+    link.textContent = 'What Relic knows';
+    return link;
+  };
+
+  const refresh = async (): Promise<void> => {
+    const opener = cipher;
+    if (opener === undefined) return;
+    status.replaceChildren(line('thread-note', THREAD_LOADING_NOTE));
+    const state = await loadThread(relicId, deps, opener);
+    if (state.kind === 'refused') {
+      list.replaceChildren();
+      status.replaceChildren(
+        threadRefusal(state.refusal, () => {
+          void refresh();
+        })
+      );
+      return;
+    }
+    list.replaceChildren(...state.entries.map(commentRow));
+    title.textContent = threadCountLabel(state.entries.length);
+    status.replaceChildren(
+      ...(state.entries.length === 0
+        ? [line('thread-note', THREAD_EMPTY_NOTE)]
+        : [])
+    );
+    onCount(state.entries.length);
+  };
+
+  /** The address form, for a reader this browser has not verified. */
+  const composeIdentity = (): HTMLElement => {
+    const form = document.createElement('form');
+    form.className = 'compose';
+
+    const heading = document.createElement('h3');
+    heading.className = 'compose-title';
+    heading.textContent = 'Leave a comment';
+    form.appendChild(heading);
+
+    if (session.kind === 'unknown') {
+      form.appendChild(
+        line(
+          'thread-note',
+          'Relic could not tell whether this browser is already verified, so ' +
+            'it is asking. Entering an address you have used before costs ' +
+            'nothing but the email.'
+        )
+      );
+    }
+
+    form.append(line('compose-note', IDENTITY_DISCLOSURE), policyLink());
+
+    const email = document.createElement('input');
+    email.type = 'email';
+    email.required = true;
+    email.autocomplete = 'email';
+    email.className = 'compose-input';
+    email.placeholder = 'you@example.com';
+    form.appendChild(field('Email address', email));
+
+    form.appendChild(line('compose-fine', DELIVERY_DISCLOSURE));
+
+    const send = document.createElement('button');
+    send.type = 'submit';
+    send.className = 'action primary';
+    send.textContent = 'Send me a link';
+    form.appendChild(send);
+
+    form.addEventListener('submit', (event) => {
+      // The control. `form-action 'none'` in the shell's CSP is the backstop,
+      // and both are wanted: a submission that got past this would put the
+      // address in a query string on the one page whose URL must stay clean.
+      event.preventDefault();
+      const address = email.value.trim();
+      if (address.length === 0) return;
+      send.disabled = true;
+      outcome.replaceChildren(line('thread-note', 'Sending.'));
+      void requestMagicLink(relicId, address, deps).then((result) => {
+        send.disabled = false;
+        if (result.kind === 'refused') {
+          outcome.replaceChildren(threadRefusal(result.refusal, () => {}));
+          return;
+        }
+        // Deliberately does not confirm the address exists. The endpoint
+        // answers 202 either way so it cannot be used to find out who has
+        // commented before, and copy reading "we sent it" would hand back
+        // exactly what that 202 withholds.
+        const said = [
+          line(
+            'thread-note',
+            `If ${plainLabel(address)} can receive mail, a link is on its ` +
+              'way. Following it verifies the address and brings you back ' +
+              'here.'
+          ),
+        ];
+        if (!keySurvivesNavigation(relicId, fragment, deps)) {
+          said.push(line('compose-warning', KEY_AT_RISK_NOTE));
+        }
+        outcome.replaceChildren(...said);
+      });
+    });
+
+    return form;
+  };
+
+  /** The comment form, for a verified reader. */
+  const composeComment = (email: string): HTMLElement => {
+    const form = document.createElement('form');
+    form.className = 'compose';
+
+    const heading = document.createElement('h3');
+    heading.className = 'compose-title';
+    heading.textContent = 'Leave a comment';
+
+    const identity = document.createElement('p');
+    identity.className = 'compose-identity';
+    const address = document.createElement('strong');
+    address.textContent = plainLabel(email);
+    identity.append(document.createTextNode('Commenting as '), address);
+
+    form.append(
+      heading,
+      identity,
+      line('compose-note', IDENTITY_DISCLOSURE),
+      policyLink()
+    );
+
+    const name = document.createElement('input');
+    name.type = 'text';
+    name.className = 'compose-input';
+    // A coarse guard only: `maxLength` counts UTF-16 units and the cap is on
+    // UTF-8 bytes, so the byte check before encryption is the authority.
+    name.maxLength = MAX_DISPLAY_NAME_BYTES;
+    name.placeholder = 'Optional, shown beside your address';
+    form.appendChild(field('Display name', name));
+
+    const body = document.createElement('textarea');
+    body.className = 'compose-textarea';
+    body.rows = 4;
+    body.required = true;
+    form.appendChild(field('Comment', body));
+
+    const foot = document.createElement('div');
+    foot.className = 'compose-foot';
+
+    const count = document.createElement('span');
+    count.className = 'compose-count';
+    const paintCount = (): void => {
+      const used = utf8Bytes(body.value);
+      // Bytes rather than characters, because the cap is on bytes and an
+      // emoji costing four of them would otherwise be a surprise at submit.
+      count.textContent = `${used} of ${MAX_BODY_BYTES} bytes`;
+      count.classList.toggle('over', used > MAX_BODY_BYTES);
+    };
+    paintCount();
+    body.addEventListener('input', paintCount);
+
+    const post = document.createElement('button');
+    post.type = 'submit';
+    post.className = 'action primary';
+    post.textContent = 'Post comment';
+
+    foot.append(count, post);
+    form.appendChild(foot);
+
+    form.addEventListener('submit', (event) => {
+      event.preventDefault();
+      const sealer = cipher;
+      if (sealer === undefined) return;
+      const draft = {
+        body: body.value,
+        display_name: name.value.trim().length > 0 ? name.value.trim() : null,
+      };
+      post.disabled = true;
+      outcome.replaceChildren(line('thread-note', 'Encrypting and posting.'));
+      void postComment(relicId, draft, deps, sealer).then(async (result) => {
+        post.disabled = false;
+        if (result.kind === 'refused') {
+          outcome.replaceChildren(threadRefusal(result.refusal, () => {}));
+          if (result.refusal.code === 'invalid_session') {
+            session = { kind: 'anonymous' };
+            composer.replaceChildren(composeIdentity());
+          }
+          return;
+        }
+        body.value = '';
+        name.value = '';
+        paintCount();
+        outcome.replaceChildren(
+          line(
+            'thread-note',
+            `Posted as ${plainLabel(result.author)}, which is what everybody ` +
+              'holding this link now sees.'
+          )
+        );
+        await refresh();
+      });
+    });
+
+    return form;
+  };
+
+  const paintComposer = (): void => {
+    composer.replaceChildren(
+      session.kind === 'verified'
+        ? composeComment(session.email)
+        : composeIdentity()
+    );
+  };
+
+  /**
+   * A magic link opened in another tab verifies this browser, not this tab.
+   *
+   * That is the common case rather than the edge: a mail client opens links
+   * in its own tab, so the relic page that asked for the link is still
+   * sitting there with its key in memory and no idea anything happened. Both
+   * signals below are cheap and neither carries an address or a key.
+   */
+  const recheck = async (): Promise<void> => {
+    if (cipher === undefined) return;
+    const discovered = await readSession(deps);
+    if (sessionSignature(discovered) === sessionSignature(session)) return;
+    session = discovered;
+    paintComposer();
+  };
+
+  const initialise = async (): Promise<void> => {
+    status.replaceChildren(line('thread-note', THREAD_LOADING_NOTE));
+    let key: Uint8Array;
+    try {
+      key = parseFragment(fragment).key;
+    } catch {
+      // Unreachable from a ready view, which exists only because the fragment
+      // parsed. Caught rather than thrown because an error escaping here
+      // would be an error object holding the fragment, and section 1.8 rules
+      // that out.
+      status.replaceChildren(
+        threadRefusal(
+          {
+            code: 'no_comment_key',
+            headline: 'Comments need the key from your link',
+            detail:
+              'Comment text is sealed under a key derived from the one in ' +
+              'this link, and this page does not have it.',
+            retryable: false,
+          },
+          () => {}
+        )
+      );
+      return;
+    }
+    cipher = commentCipher(await deriveCommentKey(key));
+    const [, discovered] = await Promise.all([refresh(), readSession(deps)]);
+    session = discovered;
+    paintComposer();
+    if (
+      discovered.kind === 'verified' &&
+      typeof BroadcastChannel === 'function'
+    ) {
+      // Tells whichever tab asked for the link that it can stop waiting. The
+      // message is a bare marker: no address, and certainly no key.
+      const channel = new BroadcastChannel('relic:auth');
+      channel.postMessage('verified');
+      channel.close();
+    }
+  };
+
+  if (typeof BroadcastChannel === 'function') {
+    new BroadcastChannel('relic:auth').addEventListener('message', () => {
+      void recheck();
+    });
+  }
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') void recheck();
+  });
+
+  void initialise();
+
+  return {
+    element: section,
+    reveal: () => {
+      section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      title.focus({ preventScroll: true });
+    },
+  };
+}
+
 function renderReady(
   view: ReadyView,
   relicId: string,
   usercontentOrigin: string,
   deps: ViewerDeps
 ): void {
+  /** The attached taskbar, so a count arriving can replace just that row. */
+  let bar: HTMLElement | undefined;
+  let commentCount: number | undefined;
+  let thread: ThreadHandle | undefined;
+
+  function barFor(): HTMLElement {
+    return buildBar(view, relicId, {
+      onCompare: () => showComparison(),
+      // Picking a version from the taskbar while the current version is
+      // open opens the comparison on that version directly, so the reader
+      // does not have to press Compare and then choose again.
+      onSelectVersion: showComparison,
+      ...(thread === undefined
+        ? {}
+        : {
+            onComments: thread.reveal,
+            ...(commentCount === undefined ? {} : { commentCount }),
+          }),
+    });
+  }
+
   const showCurrent = (): void => {
+    bar = barFor();
+    // The thread node is reused rather than rebuilt. It holds fetched
+    // comments and possibly a half-typed one, and returning from a
+    // comparison should not cost either.
     document.body.replaceChildren(
-      buildBar(view, relicId, {
-        onCompare: () => showComparison(),
-        // Picking a version from the taskbar while the current version is
-        // open opens the comparison on that version directly, so the reader
-        // does not have to press Compare and then choose again.
-        onSelectVersion: showComparison,
-      }),
-      buildCurrentStage(view, usercontentOrigin)
+      bar,
+      buildCurrentStage(view, usercontentOrigin),
+      ...(thread === undefined ? [] : [thread.element])
     );
   };
   const showComparison = (selectedVersion?: number): void => {
@@ -1452,6 +2047,20 @@ function renderReady(
       selectedVersion
     );
   };
+
+  // A download-only relic gets no thread, for the same reason section 6.1
+  // item 13 gives it no comparison control: nothing rendered, so there is
+  // nothing on the page to comment about.
+  if (view.route !== 'download') {
+    thread = buildThread(view, relicId, deps, (count) => {
+      commentCount = count;
+      if (bar === undefined) return;
+      const replacement = barFor();
+      bar.replaceWith(replacement);
+      bar = replacement;
+    });
+  }
+
   showCurrent();
 }
 

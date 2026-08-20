@@ -23,10 +23,13 @@ import type { RendererClass } from '@relic/format';
 
 import type {
   AbuseReport,
+  AuthLinkRow,
+  CommentRow,
   DedupEntry,
   MintLogEntry,
   RelicRow,
   RelicStore,
+  SessionRow,
   Tombstone,
 } from './store.ts';
 
@@ -325,6 +328,72 @@ export function gcsStore(options: GcsStoreOptions): RelicStore {
     async readAbuseReports(): Promise<readonly AbuseReport[]> {
       const reports = await list<AbuseReport>(`${prefix}/abuse/`);
       return [...reports].sort((a, b) => a.receivedAt - b.receivedAt);
+    },
+
+    // Comments live one object per comment under the relic's own folder, so
+    // a thread is a prefix listing and a relic's whole thread is one delete
+    // sweep. A single document holding the array would need a
+    // compare-and-swap per comment, and two readers commenting at once would
+    // make one of them lose their words rather than merely retry.
+    async putComment(row: CommentRow): Promise<void> {
+      await put(key('comment', row.relicId, `${row.id}.json`), row);
+    },
+
+    async getComment(
+      relicId: string,
+      commentId: string
+    ): Promise<CommentRow | undefined> {
+      return (
+        await get<CommentRow>(key('comment', relicId, `${commentId}.json`))
+      )?.value;
+    },
+
+    async listComments(relicId: string): Promise<readonly CommentRow[]> {
+      const rows = await list<CommentRow>(`${prefix}/comment/${relicId}/`);
+      // Oldest first, ties broken on id so the order is total. A listing
+      // comes back in whatever order the bucket likes, which is lexical by
+      // object name, and a random comment id is not chronological.
+      return [...rows].sort(
+        (a, b) => a.createdAt - b.createdAt || (a.id < b.id ? -1 : 1)
+      );
+    },
+
+    async deleteComment(relicId: string, commentId: string): Promise<void> {
+      await remove(key('comment', relicId, `${commentId}.json`));
+    },
+
+    async deleteCommentsForRelic(relicId: string): Promise<number> {
+      const rows = await list<CommentRow>(`${prefix}/comment/${relicId}/`);
+      for (const row of rows) {
+        await remove(key('comment', relicId, `${row.id}.json`));
+      }
+      return rows.length;
+    },
+
+    // A link and a session are both keyed by the hash of the secret, never
+    // by the secret, so the bucket cannot hand anybody a usable credential
+    // even to somebody who can list it.
+    async putAuthLink(row: AuthLinkRow): Promise<void> {
+      await put(key('authlink', `${row.tokenHash}.json`), row);
+    },
+
+    async consumeAuthLink(tokenHash: string): Promise<AuthLinkRow | undefined> {
+      const name = key('authlink', `${tokenHash}.json`);
+      const current = await get<AuthLinkRow>(name);
+      if (current === undefined) return undefined;
+      // Spend it whether or not it was still valid, so a replay finds
+      // nothing rather than an expired row somebody might forgive later.
+      await remove(name);
+      return current.value;
+    },
+
+    async putSession(row: SessionRow): Promise<void> {
+      await put(key('session', `${row.tokenHash}.json`), row);
+    },
+
+    async getSession(tokenHash: string): Promise<SessionRow | undefined> {
+      return (await get<SessionRow>(key('session', `${tokenHash}.json`)))
+        ?.value;
     },
   };
 

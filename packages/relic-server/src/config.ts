@@ -50,6 +50,26 @@ export interface RelicConfig {
 
   readonly publishRateLimit: RateLimitConfig;
   readonly mintRateLimit: RateLimitConfig;
+  /**
+   * Comment writes per IP. Lower than publishing, because a comment costs
+   * the writer nothing to produce and the thread is the one surface a
+   * link-holder can add to.
+   */
+  readonly commentRateLimit: RateLimitConfig;
+  /** Sign-in requests per IP. Each one can send mail, so it is the tightest. */
+  readonly authRateLimit: RateLimitConfig;
+  /**
+   * The longest comment ciphertext the server will store, in base64url
+   * characters. It is a transport bound, not a plaintext one: the real caps
+   * are 4096 and 64 bytes, enforced in `@relic/format` before encryption
+   * (`format.md` 3.13), and cannot be recomputed from ciphertext. This
+   * number only stops an unbounded body from reaching the store.
+   */
+  readonly commentCiphertextCapChars: number;
+  /** How long a magic link stays followable. Short: it arrives by mail. */
+  readonly authLinkTtlSeconds: number;
+  /** How long a verified session lasts before the reader signs in again. */
+  readonly sessionTtlSeconds: number;
 
   /** Engaged when egress spend crosses the ceiling. Refuses every mint. */
   readonly killSwitchEngaged: boolean;
@@ -81,6 +101,14 @@ export const DEFAULT_CONFIG: RelicConfig = {
 
   publishRateLimit: { limit: 60, windowSeconds: 3600 },
   mintRateLimit: { limit: 240, windowSeconds: 3600 },
+  commentRateLimit: { limit: 30, windowSeconds: 3600 },
+  authRateLimit: { limit: 10, windowSeconds: 3600 },
+  // 4096 plaintext bytes plus a 64-byte name, a 12-byte nonce and a 16-byte
+  // tag, JSON framing, then base64url's 4-for-3 expansion, rounded up with
+  // room to spare rather than computed to the byte.
+  commentCiphertextCapChars: 8192,
+  authLinkTtlSeconds: 15 * 60,
+  sessionTtlSeconds: 30 * 24 * 3600,
 
   killSwitchEngaged: false,
 };

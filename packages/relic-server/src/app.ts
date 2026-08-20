@@ -41,6 +41,28 @@ import {
 
 const RESERVED = new Set(RESERVED_SEGMENTS);
 
+/**
+ * Outbound mail, as one method behind an interface.
+ *
+ * The service had no mail dependency before identity arrived, and this is
+ * the whole of the new surface. Narrow on purpose: a magic link is the only
+ * thing this product ever sends, tests run against a recorder rather than a
+ * network, and a production deployment supplies one implementation without
+ * any route knowing which.
+ */
+export interface Mailer {
+  send(email: string, link: string): Promise<void>;
+}
+
+/**
+ * The default. It records nothing and sends nothing, so a deployment that
+ * forgets to configure mail cannot silently leak addresses to a half-built
+ * integration; sign-in simply never completes, which is loud.
+ */
+export const NULL_MAILER: Mailer = {
+  async send(): Promise<void> {},
+};
+
 export interface AppOptions {
   readonly config?: Partial<RelicConfig>;
   readonly store?: RelicStore;
@@ -51,6 +73,8 @@ export interface AppOptions {
   readonly operatorTokens?: ReadonlyMap<string, string>;
   /** Where the viewer shell's static files come from. */
   readonly assets?: AssetSource;
+  /** Where a magic link goes. Defaults to sending nothing at all. */
+  readonly mailer?: Mailer;
 }
 
 export interface RelicApp {
@@ -69,6 +93,7 @@ export function createApp(options: AppOptions = {}): RelicApp {
   const clock = options.now ?? (() => Date.now());
   const operators = options.operatorTokens ?? new Map<string, string>();
   const assets = options.assets ?? memoryAssets({});
+  const mailer = options.mailer ?? NULL_MAILER;
   const limiter = new RateLimiter();
 
   async function handle(request: Request): Promise<Response> {
@@ -270,7 +295,7 @@ export function createApp(options: AppOptions = {}): RelicApp {
     ip: string,
     now: number
   ): Promise<Response> {
-    const [first, second, third] = rest;
+    const [first, second, third, fourth] = rest;
 
     if (first === 'challenge' && request.method === 'POST') {
       return challenge(ip, now);
@@ -309,6 +334,35 @@ export function createApp(options: AppOptions = {}): RelicApp {
       request.method === 'DELETE'
     ) {
       return operatorDelete(second, request, url, now);
+    }
+
+    // Comments. The read is deliberately unauthenticated: anybody holding
+    // the link can already fetch and decrypt the content, and every body
+    // here is ciphertext this server cannot open, so a gate would cost
+    // reach without buying secrecy.
+    if (first === 'relics' && second !== undefined && third === 'comments') {
+      if (fourth === undefined && request.method === 'GET') {
+        return listComments(second);
+      }
+      if (fourth === undefined && request.method === 'POST') {
+        return postComment(second, request, ip, now);
+      }
+      if (fourth !== undefined && request.method === 'DELETE') {
+        return deleteComment(second, fourth, request, now);
+      }
+      return new Response('Method not allowed', { status: 405 });
+    }
+
+    // Magic-link sign-in. The only identity in the product, and it exists
+    // so a comment can be attributed to somebody reachable.
+    if (first === 'auth' && second === 'request' && request.method === 'POST') {
+      return authRequest(request, ip, now);
+    }
+    if (first === 'auth' && second === 'callback' && request.method === 'GET') {
+      return authCallback(url, now);
+    }
+    if (first === 'auth' && second === 'session' && request.method === 'GET') {
+      return authSession(request, now);
     }
 
     return new Response('Not found', { status: 404 });
@@ -1018,6 +1072,13 @@ export function createApp(options: AppOptions = {}): RelicApp {
       reportReference: reference,
     });
 
+    // The thread goes with the relic. Comments discuss content the operator
+    // was just obliged to remove, and a readable discussion of a removed
+    // payload is the same disclosure by a longer route. Counted so the
+    // response can say what it took, because a silent cascade is the kind
+    // of deletion nobody can audit later.
+    const commentsRemoved = await store.deleteCommentsForRelic(relicId);
+
     // Blocklist in the same call, because a second call gets forgotten at 3am.
     const override = url.searchParams.get('blocklist');
     const automatic =
@@ -1033,6 +1094,7 @@ export function createApp(options: AppOptions = {}): RelicApp {
       deleted: true,
       blocklisted: shouldBlocklist,
       ciphertext_hash: hash,
+      comments_deleted: commentsRemoved,
     });
   }
 
@@ -1095,7 +1157,317 @@ export function createApp(options: AppOptions = {}): RelicApp {
     );
   }
 
+  // --- comments -----------------------------------------------------------
+
+  /**
+   * The thread, oldest first, to anybody who asks.
+   *
+   * Unauthenticated on purpose. A reader holding the link already holds the
+   * key to the content; every body here is ciphertext derived from that same
+   * key (`format.md` 3.13), so an authenticated read would narrow who can
+   * fetch bytes the server cannot read either way. What it would buy is
+   * nothing; what it would cost is the no-accounts reading path.
+   */
+  async function listComments(rawId: string): Promise<Response> {
+    let relicId: string;
+    try {
+      relicId = parseRelicId(rawId);
+    } catch {
+      return refuse('invalid_relic_id');
+    }
+
+    // A tombstoned relic has no thread. Serving comments for content that
+    // has been taken down would leave a readable discussion of a payload
+    // the operator was obliged to remove.
+    if ((await store.getTombstone(relicId)) !== undefined) {
+      return refuse('relic_removed', {
+        relic_id: relicId,
+        report_url: `${config.serviceOrigin}/abuse`,
+      });
+    }
+    if ((await store.getRelic(relicId)) === undefined) {
+      return refuse('relic_not_found', { relic_id: relicId });
+    }
+
+    const rows = await store.listComments(relicId);
+    return json(
+      rows.map((row) => ({
+        comment_id: row.id,
+        author: row.author,
+        created_at: new Date(row.createdAt).toISOString(),
+        ciphertext: row.ciphertext,
+      }))
+    );
+  }
+
+  /**
+   * Leave a comment, authorized either by a verified-email session or by the
+   * relic's publish token.
+   *
+   * Two paths because an agent has no mailbox and cannot verify one, and the
+   * feature is worth little if the publishing side cannot answer back. Both
+   * are attribution rather than authorization: anybody holding the link plus
+   * any real mailbox can comment, which `frame.md`'s identity entry states
+   * outright so nobody reads a verified address as an access control.
+   */
+  async function postComment(
+    rawId: string,
+    request: Request,
+    ip: string,
+    now: number
+  ): Promise<Response> {
+    if (config.killSwitchEngaged) {
+      return refuse('service_paused', { retry_after_seconds: 300 });
+    }
+
+    let relicId: string;
+    try {
+      relicId = parseRelicId(rawId);
+    } catch {
+      return refuse('invalid_relic_id');
+    }
+
+    const verdict = limiter.check(
+      `comment ${ip}`,
+      config.commentRateLimit,
+      now
+    );
+    if (!verdict.allowed) {
+      return refuse('comment_rate_limited', {
+        retry_after_seconds: verdict.retryAfterSeconds,
+      });
+    }
+
+    if ((await store.getTombstone(relicId)) !== undefined) {
+      return refuse('relic_removed', {
+        relic_id: relicId,
+        report_url: `${config.serviceOrigin}/abuse`,
+      });
+    }
+    const row = await store.getRelic(relicId);
+    if (row === undefined) {
+      return refuse('relic_not_found', { relic_id: relicId });
+    }
+
+    const body = (await readJson(request)) as Record<string, unknown>;
+
+    // The one thing this server can check about a comment. The plaintext
+    // caps live in `@relic/format` ahead of encryption and cannot be
+    // re-derived from here, so validating the encoding is the whole of the
+    // server's business with this field.
+    const ciphertext = body['ciphertext'];
+    if (typeof ciphertext !== 'string' || !isBase64Url(ciphertext)) {
+      return refuse('invalid_comment', { relic_id: relicId });
+    }
+    if (ciphertext.length > config.commentCiphertextCapChars) {
+      return refuse('invalid_comment', { relic_id: relicId });
+    }
+
+    const author = await resolveAuthor(body, request, row.publishTokenHash);
+    if (author === undefined) {
+      return refuse('invalid_session', { relic_id: relicId });
+    }
+
+    const commentId = newCommentId();
+    await store.putComment({
+      id: commentId,
+      relicId,
+      author,
+      createdAt: now,
+      ciphertext,
+    });
+
+    return json(
+      {
+        comment_id: commentId,
+        author,
+        created_at: new Date(now).toISOString(),
+      },
+      201
+    );
+  }
+
+  /**
+   * Delete your own comment, and nobody else's.
+   *
+   * The operator's route to removing a comment is deleting the relic, which
+   * takes the whole thread with it. There is deliberately no per-comment
+   * operator surface: it would be a moderation capability, and moderation
+   * needs permissions, which is still a locked non-goal.
+   */
+  async function deleteComment(
+    rawId: string,
+    commentId: string,
+    request: Request,
+    now: number
+  ): Promise<Response> {
+    let relicId: string;
+    try {
+      relicId = parseRelicId(rawId);
+    } catch {
+      return refuse('invalid_relic_id');
+    }
+
+    const existing = await store.getComment(relicId, commentId);
+    if (existing === undefined) {
+      return refuse('comment_not_found', {
+        relic_id: relicId,
+        comment_id: commentId,
+      });
+    }
+
+    const row = await store.getRelic(relicId);
+    const author = await resolveAuthor(
+      (await readJson(request)) as Record<string, unknown>,
+      request,
+      row?.publishTokenHash ?? ''
+    );
+    if (author === undefined || author !== existing.author) {
+      return refuse('comment_forbidden', {
+        relic_id: relicId,
+        comment_id: commentId,
+      });
+    }
+
+    await store.deleteComment(relicId, commentId);
+    return new Response(null, { status: 204 });
+  }
+
+  /**
+   * Which identity is making this write, or undefined for none.
+   *
+   * Checked in the order the two paths cost: a publish token is a hash
+   * comparison against a row already loaded, a session is a store read.
+   */
+  async function resolveAuthor(
+    body: Record<string, unknown>,
+    request: Request,
+    publishTokenHash: string
+  ): Promise<string | undefined> {
+    const presented = body['publish_token'];
+    if (typeof presented === 'string' && publishTokenHash !== '') {
+      const hash = await sha256Hex(presented);
+      if (timingSafeEqual(hash, publishTokenHash)) return 'publisher';
+      return undefined;
+    }
+
+    const token = sessionCookie(request);
+    if (token === undefined) return undefined;
+    const session = await store.getSession(await sha256Hex(token));
+    if (session === undefined) return undefined;
+    if (session.expiresAt <= clock()) return undefined;
+    return session.email;
+  }
+
+  // --- magic-link sign-in -------------------------------------------------
+
+  /**
+   * Ask for a sign-in link.
+   *
+   * Always 202, whatever happened. A different answer for a known and an
+   * unknown address turns this endpoint into an address oracle, and there is
+   * no version of that which is worth the marginally better error message.
+   */
+  async function authRequest(
+    request: Request,
+    ip: string,
+    now: number
+  ): Promise<Response> {
+    const verdict = limiter.check(`auth ${ip}`, config.authRateLimit, now);
+    if (!verdict.allowed) {
+      return refuse('auth_rate_limited', {
+        retry_after_seconds: verdict.retryAfterSeconds,
+      });
+    }
+
+    const body = (await readJson(request)) as Record<string, unknown>;
+    const email = body['email'];
+
+    if (typeof email === 'string' && looksLikeEmail(email)) {
+      const token = newAuthToken();
+      await store.putAuthLink({
+        tokenHash: await sha256Hex(token),
+        email,
+        expiresAt: now + config.authLinkTtlSeconds * 1000,
+        returnTo: authReturnTo(body),
+      });
+      // The plaintext address reaches the mailer here, and that is not
+      // avoidable: mail cannot be sent to a hash. `frame.md` names this as
+      // one of identity's prices rather than pretending a stored hash undoes
+      // it.
+      await mailer.send(
+        email,
+        `${config.serviceOrigin}/api/auth/callback?token=${token}`
+      );
+    }
+
+    return new Response(null, { status: 202 });
+  }
+
+  /**
+   * Follow the link: spend the token, mint a session, land back on the relic.
+   *
+   * The redirect target keeps whatever fragment the caller asked to return
+   * to. The key lives in that fragment, so dropping it would leave a
+   * verified reader unable to decrypt the thing they just signed in to
+   * discuss.
+   */
+  async function authCallback(url: URL, now: number): Promise<Response> {
+    const token = url.searchParams.get('token');
+    if (token === null) return refuse('invalid_session');
+
+    const link = await store.consumeAuthLink(await sha256Hex(token));
+    if (link === undefined || link.expiresAt <= now) {
+      return refuse('invalid_session');
+    }
+
+    const session = newAuthToken();
+    await store.putSession({
+      tokenHash: await sha256Hex(session),
+      email: link.email,
+      createdAt: now,
+      expiresAt: now + config.sessionTtlSeconds * 1000,
+    });
+
+    return new Response(null, {
+      status: 303,
+      headers: {
+        location: link.returnTo,
+        'set-cookie': [
+          `relic_session=${session}`,
+          'Path=/',
+          'HttpOnly',
+          'Secure',
+          'SameSite=Lax',
+          `Max-Age=${config.sessionTtlSeconds}`,
+        ].join('; '),
+      },
+    });
+  }
+
+  /**
+   * First-paint identity. 200 with `email: null` when nobody is signed in,
+   * never 401, because every anonymous load would otherwise hit a status
+   * the public surface is not allowed to emit except on a write.
+   */
+  async function authSession(request: Request, now: number): Promise<Response> {
+    const token = sessionCookie(request);
+    if (token === undefined) return json({ email: null });
+    const session = await store.getSession(await sha256Hex(token));
+    if (session === undefined || session.expiresAt <= now) {
+      return json({ email: null });
+    }
+    return json({ email: session.email });
+  }
+
   // --- helpers ------------------------------------------------------------
+
+  function json(payload: unknown, status = 200): Response {
+    return new Response(JSON.stringify(payload), {
+      status,
+      headers: { 'content-type': 'application/json' },
+    });
+  }
 
   function refuse(
     code: ProblemError['code'],
@@ -1658,4 +2030,73 @@ ${config.serviceOrigin}/abuse. We respond within ${config.abuseSlaHours} hours
 of arrival. That measures our responsiveness on reports we receive. It is not
 coverage: we cannot inspect content, so unreported abuse is invisible to us.
 `;
+}
+
+/** Base64url and nothing else: the one property the server can check. */
+function isBase64Url(value: string): boolean {
+  return value.length > 0 && /^[A-Za-z0-9_-]+$/.test(value);
+}
+
+/**
+ * A comment id. Random rather than sequential, so a thread's size and the
+ * order two relics were commented on are not readable off the ids.
+ */
+function newCommentId(): string {
+  const bytes = new Uint8Array(16);
+  crypto.getRandomValues(bytes);
+  return Buffer.from(bytes).toString('base64url');
+}
+
+/** A magic-link or session secret: 32 random bytes, like the publish token. */
+function newAuthToken(): string {
+  const bytes = new Uint8Array(32);
+  crypto.getRandomValues(bytes);
+  return Buffer.from(bytes).toString('base64url');
+}
+
+/**
+ * Enough of a check to avoid mailing obvious nonsense, and no more. Address
+ * validity is decided by whether the link is followed, which is the only
+ * test that actually proves a mailbox is reachable.
+ */
+function looksLikeEmail(value: string): boolean {
+  return value.length <= 320 && /^[^\s@]+@[^\s@.]+\.[^\s@]+$/.test(value);
+}
+
+/**
+ * Where the magic link lands. `return_to` if it is a same-origin path,
+ * otherwise `/{relic_id}` when the viewer sent the id instead, otherwise
+ * `/`. Absolute URLs and protocol-relative ones are dropped, because a
+ * sign-in link that leaves the service would take the session cookie with
+ * it or, worse, the fragment if a later redirect inherited one.
+ */
+function authReturnTo(body: Record<string, unknown>): string {
+  const returnTo = body['return_to'];
+  if (
+    typeof returnTo === 'string' &&
+    returnTo.startsWith('/') &&
+    !returnTo.startsWith('//')
+  ) {
+    return returnTo;
+  }
+  const relicId = body['relic_id'];
+  if (typeof relicId === 'string') {
+    try {
+      return `/${parseRelicId(relicId)}`;
+    } catch {
+      return '/';
+    }
+  }
+  return '/';
+}
+
+/** The session cookie, if the request carries one. */
+function sessionCookie(request: Request): string | undefined {
+  const header = request.headers.get('cookie');
+  if (header === null) return undefined;
+  for (const part of header.split(';')) {
+    const [name, ...rest] = part.trim().split('=');
+    if (name === 'relic_session' && rest.length > 0) return rest.join('=');
+  }
+  return undefined;
 }

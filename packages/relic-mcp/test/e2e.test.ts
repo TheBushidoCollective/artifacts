@@ -725,7 +725,7 @@ describe('the MCP surface', () => {
     ).toContain('2026-07-28');
   });
 
-  test('a call returns the full URL including the fragment', async () => {
+  test('publish result discloses retained history without changing its structured shape', async () => {
     writeFile('/work/notes.md', '# hello');
     const response = await handleMessage(
       {
@@ -738,7 +738,7 @@ describe('the MCP surface', () => {
     );
 
     const result = response?.result as {
-      structuredContent: { url: string };
+      structuredContent: Record<string, unknown> & { url: string };
       isError: boolean;
       content: { text: string }[];
     };
@@ -749,24 +749,7 @@ describe('the MCP surface', () => {
     expect(
       result.content.some(({ text }) => text === VERSION_HISTORY_DISCLOSURE)
     ).toBe(true);
-  });
-
-  test('returns all nine result members', async () => {
-    writeFile('/work/notes.md', '# hello');
-    const response = await handleMessage(
-      {
-        jsonrpc: '2.0',
-        id: 4,
-        method: 'tools/call',
-        params: { name: TOOL_NAME, arguments: { path: 'notes.md' } },
-      },
-      deps
-    );
-    const structured = (
-      response?.result as { structuredContent: Record<string, unknown> }
-    ).structuredContent;
-
-    expect(Object.keys(structured).sort()).toEqual([
+    expect(Object.keys(result.structuredContent).sort()).toEqual([
       'disclosure_url',
       'filename',
       'relic_expires_at',
@@ -777,7 +760,7 @@ describe('the MCP surface', () => {
       'url',
       'version',
     ]);
-    expect(structured['version']).toBe(1);
+    expect(result.structuredContent['version']).toBe(1);
   });
 
   test('a failed publish is a tool error, not a protocol error', async () => {

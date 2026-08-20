@@ -71,7 +71,7 @@ Standard members: `type` (URI reference, the normative identifier), `title` (sho
 
 Extension members, which are the fields a client extracts:
 
-- **`code`** the bare token from 1.1 and 1.6. `type` is `https://<relic-domain>/problems/` concatenated with `code`, generated from one table so the two can never disagree. `code` exists alongside `type` because a bare token survives a domain change and a URI tail invites clients to parse it. The `problems/` prefix these two members share needs no append to `format.md` 1.5's reserved table: an ID is exactly one path segment at the root, every one of these URIs carries a second segment, and nothing is ever served at `/problems` as a bare segment.
+- **`code`** the bare token from this section's refusal tables. `type` is `https://<relic-domain>/problems/` concatenated with `code`, generated from one table so the two can never disagree. `code` exists alongside `type` because a bare token survives a domain change and a URI tail invites clients to parse it. The `problems/` prefix these two members share needs no append to `format.md` 1.5's reserved table: an ID is exactly one path segment at the root, every one of these URIs carries a second segment, and nothing is ever served at `/problems` as a bare segment.
 - **`id_validation_failure`** on `invalid_relic_id`, one of `alphabet`, `length`, or `reserved`, naming which of `format.md` 1.3's three checks the submitted ID failed.
 - **`retry_after_seconds`** integer, on `429`, on `503`, and on `relic_not_yet_published` (1.6). It mirrors the `Retry-After` header, which stays authoritative. The `429` definition only says a response "MAY include a Retry-After header indicating how long to wait before making a new request" ([RFC 6585 §4](https://www.rfc-editor.org/rfc/rfc6585.html)); Relic always sends both.
 - **`size_limit_bytes`**, **`declared_size_bytes`**, **`size_basis`** on `size_over_cap`. `size_basis` is `plaintext` or `ciphertext`. `format.md` 3.11 requires the published number be a plaintext number a user can check with `ls`, and `shape` picks the enforced side, so without this field a client can't tell a user which number to compare.
@@ -79,7 +79,7 @@ Extension members, which are the fields a client extracts:
 - **`download_cap`** on `download_cap_exhausted`. The cap value is published policy, so echoing it leaks nothing.
 - **`report_url`** on `relic_removed`. This is the field that makes the appeal path in 1.4 real.
 
-Clients ignore members they don't recognize, per RFC 9457. `spec-publish-contract` defines its own codes, in this same shape, for the legs the app server is not in, and those codes never collide with the ones fixed in 1.1 and 1.6.
+Clients ignore members they don't recognize, per RFC 9457. `spec-publish-contract` defines its own codes, in this same shape, for the legs the app server is not in, and those codes never collide with the ones fixed in this section.
 
 **The status must be correct at the deployed edge, not only in the application.** Anything in front that sheds load carries its own default status and body, and that's what the client sees. Where the edge can't produce a problem document, the contract degrades rather than breaking: a bare `429` is read as `mint_rate_limited` or `publish_rate_limited` by endpoint, and a bare `503` as `service_paused`. Driving the deployed limiter and asserting the status and media type is a launch check, not a unit test.
 

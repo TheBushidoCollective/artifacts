@@ -58,11 +58,17 @@ export interface CommentRecord {
 }
 
 /**
- * A comment as the reader sees it: open, or held shut.
+ * A comment as the reader sees it. Three states, and only the first has a body.
  *
- * A comment that will not decrypt is never dropped. Dropping it would tell
- * the reader the thread is shorter than it is, which is a lie the server
- * could induce by storing one bad row.
+ * Nothing is ever dropped. A thread that is shorter than it looks is a lie the
+ * server could induce by storing one bad row, and the reader has no way to
+ * notice it.
+ *
+ * `sealed` and `unreadable` are separate because they are different facts.
+ * Sealed means there was a body and it would not open under this relic's
+ * comment key. Unreadable means the row did not arrive in a shape this page
+ * can read at all, so there may never have been a body, and calling that
+ * sealed would be a guess about what went missing.
  */
 export type CommentEntry =
   | {
@@ -78,6 +84,13 @@ export type CommentEntry =
       readonly id: string;
       readonly author: string;
       readonly createdAt: string;
+    }
+  | {
+      /** Whatever the row did carry. Any of it may be absent. */
+      readonly kind: 'unreadable';
+      readonly id: string | null;
+      readonly author: string | null;
+      readonly createdAt: string | null;
     };
 
 /** The literal author the contract uses for a publish-token comment. */
@@ -180,7 +193,6 @@ export type LinkRequestResult =
  */
 export function commentRefusal(code: string): Refusal {
   switch (code) {
-    case 'rate_limited':
     case 'comment_rate_limited':
       return {
         code,
@@ -191,14 +203,33 @@ export function commentRefusal(code: string): Refusal {
           'abuse surface. Nothing was lost. Wait a moment and post again.',
         retryable: true,
       };
-    case 'unauthenticated':
-    case 'session_expired':
+    case 'auth_rate_limited':
+      return {
+        code,
+        headline: 'Too many link requests from here just now',
+        detail:
+          'The same limit covers verification, for the same reason. Check ' +
+          'the mail already sent before asking again: an earlier link may ' +
+          'still be good.',
+        retryable: true,
+      };
+    case 'invalid_session':
       return {
         code,
         headline: 'This browser is not verified any more',
         detail:
           'Verification is a short-lived session rather than an account, so ' +
-          'it lapses. Enter your address again and follow the new link.',
+          'it lapses, and a verification link works once. Enter your ' +
+          'address again and follow the new one.',
+        retryable: false,
+      };
+    case 'invalid_comment':
+      return {
+        code,
+        headline: 'The server would not take that comment',
+        detail:
+          `A comment holds up to ${MAX_BODY_BYTES} bytes of text and has to ` +
+          'arrive as one sealed envelope. Nothing was posted.',
         retryable: false,
       };
     case 'body_too_large':
@@ -207,8 +238,34 @@ export function commentRefusal(code: string): Refusal {
         headline: 'That comment is too long',
         detail:
           `A comment holds up to ${MAX_BODY_BYTES} bytes of text. Yours was ` +
-          'longer. Shorten it and post again; nothing was sent.',
+          'longer. Shorten it and post again; nothing was sent, and nothing ' +
+          'was encrypted.',
         retryable: false,
+      };
+    case 'comment_forbidden':
+      return {
+        code,
+        headline: 'That comment is not yours to delete',
+        detail:
+          'A comment can be removed by whoever wrote it, and by the ' +
+          'operator through the abuse surface. Nothing else.',
+        retryable: false,
+      };
+    case 'comment_not_found':
+      return {
+        code,
+        headline: 'That comment is already gone',
+        detail: 'Somebody removed it, possibly in another tab.',
+        retryable: false,
+      };
+    case 'service_paused':
+      return {
+        code,
+        headline: 'Comments are paused',
+        detail:
+          'The operator has stopped writes for now. The relic above is ' +
+          'unaffected and still opens.',
+        retryable: true,
       };
     case 'relic_removed':
       return {
@@ -220,27 +277,11 @@ export function commentRefusal(code: string): Refusal {
         retryable: false,
       };
     case 'relic_not_found':
+    case 'invalid_relic_id':
       return {
         code,
         headline: 'This relic does not exist',
         detail: 'There is nothing here to comment on.',
-        retryable: false,
-      };
-    case 'invalid_token':
-    case 'token_expired':
-      return {
-        code,
-        headline: 'That link has already been used, or it expired',
-        detail:
-          'A verification link works once and not for long, which is what ' +
-          'keeps a forwarded email from being a way in. Ask for another.',
-        retryable: false,
-      };
-    case 'invalid_email':
-      return {
-        code,
-        headline: 'That does not look like an address',
-        detail: 'Check it and try again. Nothing was sent.',
         retryable: false,
       };
     case 'network':
@@ -291,6 +332,30 @@ async function refusalFrom(response: Response): Promise<Refusal> {
     if (typeof code === 'string') return commentRefusal(code);
   }
   return commentRefusal(`http_${response.status}`);
+}
+
+/** One field off a row that failed the guard, kept only if it is a string. */
+function stringField(value: unknown, name: string): string | null {
+  if (typeof value !== 'object' || value === null || !(name in value)) {
+    return null;
+  }
+  const held: unknown = Reflect.get(value, name);
+  return typeof held === 'string' && held.length > 0 ? held : null;
+}
+
+/**
+ * A row this page cannot read, reported with whatever it did carry.
+ *
+ * It counts in the total, which is the point: the reader is told the thread
+ * holds something they are not seeing rather than shown a shorter thread.
+ */
+function unreadableEntry(record: unknown): CommentEntry {
+  return {
+    kind: 'unreadable',
+    id: stringField(record, 'comment_id'),
+    author: stringField(record, 'author'),
+    createdAt: stringField(record, 'created_at'),
+  };
 }
 
 /**
@@ -361,9 +426,15 @@ export const KEY_AT_RISK_NOTE =
 export async function readSession(deps: ViewerDeps): Promise<SessionState> {
   try {
     const response = await deps.fetch(`${deps.serviceOrigin}/api/auth/session`);
-    if (response.status === 204) return { kind: 'anonymous' };
+    // Always 200 with an `email` that is either a string or null, never a
+    // 401: asking whether this browser is verified is not itself a
+    // privileged question, and a 401 here would be indistinguishable from a
+    // session that had just lapsed.
     if (!response.ok) return { kind: 'unknown' };
-    const body = (await response.json()) as { email?: unknown };
+    const body: unknown = await response.json();
+    if (typeof body !== 'object' || body === null || !('email' in body)) {
+      return { kind: 'unknown' };
+    }
     return typeof body.email === 'string' && body.email.length > 0
       ? { kind: 'verified', email: body.email }
       : { kind: 'anonymous' };
@@ -464,10 +535,17 @@ export async function loadThread(
   }
   const entries: CommentEntry[] = [];
   for (const record of records) {
-    // A row that is not shaped like a comment is skipped rather than shown as
-    // sealed. Sealed means "there was a body and it would not open", and
-    // saying that about a row with no ciphertext at all would be a guess.
-    if (isCommentRecord(record)) entries.push(await openEntry(record, cipher));
+    // A row that is not shaped like a comment is reported rather than
+    // dropped, and reported as its own state rather than as sealed. Sealed
+    // means there was a body and it would not open; a row with no ciphertext
+    // may never have had one, and guessing which is worse than saying so.
+    // Dropping it would be worst of all: the reader would see a thread that
+    // is shorter than it is and have no way to notice.
+    entries.push(
+      isCommentRecord(record)
+        ? await openEntry(record, cipher)
+        : unreadableEntry(record)
+    );
   }
   return { kind: 'ready', entries };
 }

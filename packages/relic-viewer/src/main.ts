@@ -1545,10 +1545,15 @@ export function commentRow(entry: CommentEntry): HTMLElement {
     head.appendChild(name);
   }
 
-  const author = document.createElement('span');
-  author.className = 'comment-author';
-  author.textContent = plainLabel(entry.author);
-  head.appendChild(author);
+  // A row this page could not read at all may carry no author, so the slot is
+  // left empty rather than filled with a stand in. Inventing a sender for a
+  // row that named none would be the only fabrication on the page.
+  if (entry.author !== null) {
+    const author = document.createElement('span');
+    author.className = 'comment-author';
+    author.textContent = plainLabel(entry.author);
+    head.appendChild(author);
+  }
 
   if (entry.author === PUBLISHER_AUTHOR) {
     // True by construction rather than by claim: this comment was authorized
@@ -1560,17 +1565,19 @@ export function commentRow(entry: CommentEntry): HTMLElement {
     head.appendChild(badge);
   }
 
-  const time = document.createElement('time');
-  time.className = 'comment-time';
-  time.setAttribute('datetime', entry.createdAt);
-  time.textContent = commentTime(entry.createdAt);
-  head.appendChild(time);
+  if (entry.createdAt !== null) {
+    const time = document.createElement('time');
+    time.className = 'comment-time';
+    time.setAttribute('datetime', entry.createdAt);
+    time.textContent = commentTime(entry.createdAt);
+    head.appendChild(time);
+  }
 
   row.appendChild(head);
 
   if (entry.kind === 'open') {
     row.appendChild(line('comment-body', entry.body));
-  } else {
+  } else if (entry.kind === 'sealed') {
     row.appendChild(
       line(
         'comment-body comment-sealed',
@@ -1579,6 +1586,16 @@ export function commentRow(entry: CommentEntry): HTMLElement {
           'no way to tell which from here. It is shown rather than dropped, ' +
           'because a thread that quietly hides what it cannot read is one ' +
           'you cannot trust the length of.'
+      )
+    );
+  } else {
+    row.appendChild(
+      line(
+        'comment-body comment-sealed',
+        'This comment did not arrive in a form this page can read, so there ' +
+          'may never have been a body to open. It is counted here rather ' +
+          'than hidden, because a thread that is shorter than it looks is ' +
+          'one you cannot trust the length of.'
       )
     );
   }
@@ -1874,10 +1891,7 @@ function buildThread(
         post.disabled = false;
         if (result.kind === 'refused') {
           outcome.replaceChildren(threadRefusal(result.refusal, () => {}));
-          if (
-            result.refusal.code === 'unauthenticated' ||
-            result.refusal.code === 'session_expired'
-          ) {
+          if (result.refusal.code === 'invalid_session') {
             session = { kind: 'anonymous' };
             composer.replaceChildren(composeIdentity());
           }

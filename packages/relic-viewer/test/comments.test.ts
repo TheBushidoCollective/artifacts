@@ -344,18 +344,6 @@ describe('the thread', () => {
     expect(textOf(row)).toContain('no way to tell which');
   });
 
-  test('a row missing its ciphertext is skipped rather than shown sealed', async () => {
-    const deps = stubDeps(() =>
-      json([{ comment_id: 'x', author: 'a@b.c', created_at: 'now' }])
-    );
-    const cipher = commentCipher(await deriveCommentKey(KEY_BYTES));
-    const state = await loadThread(RELIC_ID, deps, cipher);
-    if (state.kind !== 'ready') throw new Error('the thread was refused');
-    // Sealed means there was a body and it would not open. Saying that about
-    // a row with no body at all would be a guess.
-    expect(state.entries).toHaveLength(0);
-  });
-
   test('an empty thread says so, and it is not an error', async () => {
     const deps = stubDeps(() => json([]));
     const cipher = commentCipher(await deriveCommentKey(KEY_BYTES));
@@ -367,6 +355,43 @@ describe('the thread', () => {
     // The empty state explains what a comment is for rather than sitting
     // blank, and it does not overclaim about who can read one.
     expect(THREAD_EMPTY_NOTE).toContain('without being able to read it');
+  });
+  test('a row missing its ciphertext is reported, not dropped and not sealed', async () => {
+    const deps = stubDeps(() =>
+      json([
+        {
+          comment_id: 'x',
+          author: 'a@b.c',
+          created_at: '2026-08-20T09:00:00Z',
+        },
+        { nothing: true },
+      ])
+    );
+    const cipher = commentCipher(await deriveCommentKey(KEY_BYTES));
+    const state = await loadThread(RELIC_ID, deps, cipher);
+    if (state.kind !== 'ready') throw new Error('the thread was refused');
+
+    // Two entries, because a thread shorter than it is cannot be noticed.
+    expect(state.entries).toHaveLength(2);
+    expect(state.entries.map((entry) => entry.kind)).toEqual([
+      'unreadable',
+      'unreadable',
+    ]);
+    // Sealed would be a guess: there may never have been a body.
+    const first = state.entries[0];
+    if (first?.kind !== 'unreadable') throw new Error('wrong state');
+    expect(first.author).toBe('a@b.c');
+    const second = state.entries[1];
+    if (second?.kind !== 'unreadable') throw new Error('wrong state');
+    expect(second.author).toBeNull();
+
+    // A row that named no sender gets no sender invented for it.
+    const row = commentRow(second) as unknown as ElementStub;
+    expect(withClass(row, 'comment-author')).toHaveLength(0);
+    expect(textOf(row)).toContain(
+      'did not arrive in a form this page can read'
+    );
+    expect(threadCountLabel(state.entries.length)).toBe('2 comments');
   });
 
   test('reading the thread needs no session and sends no credential', async () => {
@@ -418,7 +443,7 @@ describe('refusal states', () => {
   afterEach(clearDom);
 
   test('a rate limit names itself and offers a retry', async () => {
-    const deps = stubDeps(() => problem('rate_limited', 429));
+    const deps = stubDeps(() => problem('comment_rate_limited', 429));
     const state = await loadThread(
       RELIC_ID,
       deps,
@@ -426,7 +451,7 @@ describe('refusal states', () => {
     );
     if (state.kind !== 'refused') throw new Error('expected a refusal');
 
-    expect(state.refusal.code).toBe('rate_limited');
+    expect(state.refusal.code).toBe('comment_rate_limited');
     expect(state.refusal.retryable).toBe(true);
     const card = threadRefusal(
       state.refusal,
@@ -435,7 +460,7 @@ describe('refusal states', () => {
     expect(textOf(card)).toContain('Too many comments');
     // The reader is told nothing was lost, which is the actionable part.
     expect(textOf(card)).toContain('Nothing was lost');
-    expect(textOf(card)).toContain('rate_limited');
+    expect(textOf(card)).toContain('comment_rate_limited');
     const buttons = descendants(card).filter(
       (element) => element.tagName === 'BUTTON'
     );
@@ -479,10 +504,10 @@ describe('refusal states', () => {
   });
 
   test('a lapsed session is distinguished from never having had one', () => {
-    expect(commentRefusal('unauthenticated').headline).toContain(
+    expect(commentRefusal('invalid_session').headline).toContain(
       'not verified any more'
     );
-    expect(commentRefusal('unauthenticated').retryable).toBe(false);
+    expect(commentRefusal('invalid_session').retryable).toBe(false);
   });
 
   test('an oversize body is refused before it is encrypted or sent', async () => {

@@ -93,3 +93,44 @@ export class ContentTooLargeError extends RelicFormatError {
     super(`content is ${declaredBytes} bytes, over the ${limitBytes} cap`);
   }
 }
+
+/**
+ * A comment's plaintext did not parse exactly.
+ *
+ * Same discipline as `StrictParseError` one layer down: `spec/format.md`
+ * refuses unknown fields rather than ignoring them, so an extension to the
+ * comment envelope arrives as a deliberate change instead of being swallowed
+ * by a parser that shrugged.
+ */
+export class MalformedCommentError extends RelicFormatError {
+  override readonly name = 'MalformedCommentError';
+}
+
+/**
+ * A comment's AEAD tag did not verify.
+ *
+ * Carries no cause, for the reason `DecryptFailedError` carries none: a wrong
+ * key, a truncated value, and a tampered nonce are indistinguishable from
+ * this side, and a caller must not claim otherwise to a reader.
+ */
+export class CommentDecryptFailedError extends RelicFormatError {
+  override readonly name = 'CommentDecryptFailedError';
+  constructor() {
+    super('the comment failed authentication');
+  }
+}
+
+/** A comment field exceeds its cap. */
+export class CommentTooLargeError extends RelicFormatError {
+  override readonly name = 'CommentTooLargeError';
+  constructor(
+    readonly field: 'body' | 'display_name',
+    readonly declaredBytes: number,
+    readonly limitBytes: number
+  ) {
+    super(
+      `comment ${field} is ${declaredBytes} bytes of UTF-8, over the ` +
+        `${limitBytes} cap`
+    );
+  }
+}

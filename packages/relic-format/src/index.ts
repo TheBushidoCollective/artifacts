@@ -7,6 +7,7 @@
  * a version bump has to touch.
  */
 
+export * from './comments.ts';
 export * from './container.ts';
 export * from './envelope.ts';
 export * from './errors.ts';

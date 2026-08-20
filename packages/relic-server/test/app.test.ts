@@ -1909,4 +1909,72 @@ describe('magic-link identity', () => {
     expect(missing.status).toBe(401);
     expect((await missing.json()).code).toBe('invalid_session');
   });
+
+  test('GET /api/auth/session is 200 with null when nobody is signed in, never 401', async () => {
+    const response = await app.fetch(req('/api/auth/session'));
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ email: null });
+  });
+
+  test('after a followed link, GET /api/auth/session returns the verified address', async () => {
+    const sent: Array<{ email: string; link: string }> = [];
+    app = build({
+      mailer: {
+        async send(email, link) {
+          sent.push({ email, link });
+        },
+      },
+    });
+    const { id } = await publish();
+
+    await app.fetch(
+      req('/api/auth/request', {
+        method: 'POST',
+        body: JSON.stringify({
+          email: 'reader@example.com',
+          relic_id: id,
+        }),
+      })
+    );
+    const followed = await app.fetch(
+      req(new URL(sent[0]!.link).pathname + new URL(sent[0]!.link).search, {
+        redirect: 'manual',
+      })
+    );
+    expect(followed.headers.get('location')).toBe(`/${id}`);
+    const session = (followed.headers.get('set-cookie') ?? '').split(';')[0];
+
+    const probe = await app.fetch(
+      req('/api/auth/session', { headers: { cookie: session ?? '' } })
+    );
+    expect(probe.status).toBe(200);
+    expect(await probe.json()).toEqual({ email: 'reader@example.com' });
+  });
+
+  test('an absolute return_to is dropped so a sign-in cannot leave the service', async () => {
+    const sent: Array<{ email: string; link: string }> = [];
+    app = build({
+      mailer: {
+        async send(email, link) {
+          sent.push({ email, link });
+        },
+      },
+    });
+
+    await app.fetch(
+      req('/api/auth/request', {
+        method: 'POST',
+        body: JSON.stringify({
+          email: 'reader@example.com',
+          return_to: 'https://evil.example/steal',
+        }),
+      })
+    );
+    const followed = await app.fetch(
+      req(new URL(sent[0]!.link).pathname + new URL(sent[0]!.link).search, {
+        redirect: 'manual',
+      })
+    );
+    expect(followed.headers.get('location')).toBe('/');
+  });
 });

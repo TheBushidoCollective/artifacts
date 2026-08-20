@@ -361,6 +361,9 @@ export function createApp(options: AppOptions = {}): RelicApp {
     if (first === 'auth' && second === 'callback' && request.method === 'GET') {
       return authCallback(url, now);
     }
+    if (first === 'auth' && second === 'session' && request.method === 'GET') {
+      return authSession(request, now);
+    }
 
     return new Response('Not found', { status: 404 });
   }
@@ -1379,7 +1382,6 @@ export function createApp(options: AppOptions = {}): RelicApp {
 
     const body = (await readJson(request)) as Record<string, unknown>;
     const email = body['email'];
-    const returnTo = body['return_to'];
 
     if (typeof email === 'string' && looksLikeEmail(email)) {
       const token = newAuthToken();
@@ -1387,7 +1389,7 @@ export function createApp(options: AppOptions = {}): RelicApp {
         tokenHash: await sha256Hex(token),
         email,
         expiresAt: now + config.authLinkTtlSeconds * 1000,
-        returnTo: typeof returnTo === 'string' ? returnTo : '/',
+        returnTo: authReturnTo(body),
       });
       // The plaintext address reaches the mailer here, and that is not
       // avoidable: mail cannot be sent to a hash. `frame.md` names this as
@@ -1441,6 +1443,21 @@ export function createApp(options: AppOptions = {}): RelicApp {
         ].join('; '),
       },
     });
+  }
+
+  /**
+   * First-paint identity. 200 with `email: null` when nobody is signed in,
+   * never 401, because every anonymous load would otherwise hit a status
+   * the public surface is not allowed to emit except on a write.
+   */
+  async function authSession(request: Request, now: number): Promise<Response> {
+    const token = sessionCookie(request);
+    if (token === undefined) return json({ email: null });
+    const session = await store.getSession(await sha256Hex(token));
+    if (session === undefined || session.expiresAt <= now) {
+      return json({ email: null });
+    }
+    return json({ email: session.email });
   }
 
   // --- helpers ------------------------------------------------------------
@@ -2044,6 +2061,33 @@ function newAuthToken(): string {
  */
 function looksLikeEmail(value: string): boolean {
   return value.length <= 320 && /^[^\s@]+@[^\s@.]+\.[^\s@]+$/.test(value);
+}
+
+/**
+ * Where the magic link lands. `return_to` if it is a same-origin path,
+ * otherwise `/{relic_id}` when the viewer sent the id instead, otherwise
+ * `/`. Absolute URLs and protocol-relative ones are dropped, because a
+ * sign-in link that leaves the service would take the session cookie with
+ * it or, worse, the fragment if a later redirect inherited one.
+ */
+function authReturnTo(body: Record<string, unknown>): string {
+  const returnTo = body['return_to'];
+  if (
+    typeof returnTo === 'string' &&
+    returnTo.startsWith('/') &&
+    !returnTo.startsWith('//')
+  ) {
+    return returnTo;
+  }
+  const relicId = body['relic_id'];
+  if (typeof relicId === 'string') {
+    try {
+      return `/${parseRelicId(relicId)}`;
+    } catch {
+      return '/';
+    }
+  }
+  return '/';
 }
 
 /** The session cookie, if the request carries one. */

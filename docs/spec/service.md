@@ -306,7 +306,9 @@ Seven items, and only these seven.
 
 **Delete own: `DELETE /api/relics/{id}/comments/{comment_id}`.** Same attribution as write. The author of the existing row must match. Success is `204`. A mismatch is `403 comment_forbidden`.
 
-**Sign-in: `POST /api/auth/request` then `GET /api/auth/callback`.** The request always answers `202`. A well-formed address mints a single-use link, hashed at rest, valid for a short TTL. Following it spends the link, sets an HttpOnly Secure SameSite=Lax cookie, and redirects to the `return_to` the caller asked for, fragment included, because dropping the fragment would leave a verified reader unable to decrypt the thing they just signed in to discuss. A spent or missing token is `401 invalid_session`.
+**Sign-in: `POST /api/auth/request` then `GET /api/auth/callback`.** The request always answers `202`. A well-formed address mints a single-use link, hashed at rest, valid for a short TTL. The body is `{email, relic_id}` or `{email, return_to}`; `relic_id` becomes `/{id}` when `return_to` is absent. `return_to` must be a same-origin path (starts with `/`, not `//`); an absolute URL is dropped and the callback lands on `/`, because a sign-in link that leaves the service would take the session cookie with it. Following the link spends it, sets an HttpOnly Secure SameSite=Lax cookie, and redirects to that path. The fragment is the caller's to keep: the server never sees it and never needs to. A spent or missing token is `401 invalid_session`.
+
+**First paint: `GET /api/auth/session`.** `200` with `{email}` when the cookie is live, `{email: null}` when it is not. Never `401`. Every anonymous load would otherwise hit a status the public surface is not allowed to emit except on a write, and a missing session is the ordinary state of a reader, not a failure.
 
 **The cookie is the session.** It is never the comment key. The key stays in the fragment. A session that outlives the cookie's Max-Age is dead even if the row is still in the store, because expiry is checked at the point of use.
 

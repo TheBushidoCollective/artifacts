@@ -1,6 +1,0 @@
-{
-  "command": "darkrun statusline",
-  "padding": 0,
-  "refreshInterval": 1,
-  "type": "command"
-}

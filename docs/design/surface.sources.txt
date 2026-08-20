@@ -1,0 +1,14 @@
+https://research.google/pubs/improving-ssl-warnings-comprehension-and-adherence/
+https://static.googleusercontent.com/media/research.google.com/en//pubs/archive/43265.pdf
+https://gitlab.com/timvisee/send/-/raw/send-v3/public/locales/en-US/send.ftl
+https://gitlab.com/timvisee/send/-/raw/send-v4/public/locales/en-US/send.ftl
+https://github.com/wooorm/lowlight
+https://github.com/syntax-tree/hast-util-to-dom
+https://highlightjs.readthedocs.io/en/latest/api.html
+https://prismjs.com/docs/Prism.html
+https://developer.mozilla.org/en-US/docs/Web/Security/Secure_Contexts
+https://modelcontextprotocol.io/specification/2026-07-28/server/tools
+https://modelcontextprotocol.io/specification/2026-07-28/basic/index
+https://ogp.me/
+https://api.slack.com/robots
+https://github.com/IBM/plex

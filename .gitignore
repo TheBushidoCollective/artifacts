@@ -14,6 +14,5 @@ dist/
 *.tfstate.*
 
 # Agent scratch space: worktrees and per-machine settings.
-.darkrun/worktrees/
 .claude/worktrees/
 .claude/settings.local.json

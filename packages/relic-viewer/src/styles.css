@@ -1498,7 +1498,11 @@ body {
   font-weight: 700;
 }
 
+/* The composer is a grid, so a button in it stretches to the column unless
+   told otherwise, and a full-bleed primary in a 46rem card reads as a phone
+   layout that wandered onto a desktop. */
 .compose .action.primary {
+  justify-self: start;
   align-self: center;
 }
 

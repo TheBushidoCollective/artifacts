@@ -14,14 +14,11 @@
  *    key.
  */
 
-import { parseFragment } from '@relic/format';
+import { deriveCommentKey, parseFragment } from '@relic/format';
 import {
   type CommentCipher,
-  commentCipher,
-  deriveCommentKey,
-} from './comment-crypto.ts';
-import {
   type CommentEntry,
+  commentCipher,
   commentTime,
   DELIVERY_DISCLOSURE,
   IDENTITY_DISCLOSURE,

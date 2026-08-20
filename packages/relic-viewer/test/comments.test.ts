@@ -1,13 +1,14 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
-import { encodeKey, parseFragment } from '@relic/format';
 import {
-  CommentSealedError,
-  commentCipher,
+  CommentDecryptFailedError,
   deriveCommentKey,
-} from '../src/comment-crypto.ts';
+  encodeKey,
+  parseFragment,
+} from '@relic/format';
 import {
   authRequestBody,
   type CommentRecord,
+  commentCipher,
   commentRefusal,
   keySurvivesNavigation,
   loadThread,
@@ -232,17 +233,14 @@ async function record(
 }
 
 describe('the comment key', () => {
-  test('is not the content key, from the same fragment bytes', async () => {
-    // Both are HKDF expansions of the same 16 bytes under different info
-    // strings. If they ever collided, a comment would be decryptable with the
-    // container key and the separation would be decorative.
+  test('cannot be read back out by a script on this origin', async () => {
+    // Independence from the container key is proven where it is derived, in
+    // `relic-format`'s own tests. What matters on this side of the boundary is
+    // that the viewer holds a key object and not key bytes: a sanitizer
+    // bypass or a stray same-origin script finds nothing to export.
     const commentKey = await deriveCommentKey(KEY_BYTES);
-    const raw = await crypto.subtle.exportKey('raw', commentKey).catch(() => {
-      return undefined;
-    });
-    // The key is created non-extractable on purpose, so the assertion is on
-    // that rather than on the bytes.
-    expect(raw).toBeUndefined();
+    expect(commentKey.extractable).toBe(false);
+    await expect(crypto.subtle.exportKey('raw', commentKey)).rejects.toThrow();
   });
 
   test('is deterministic for one fragment and differs across fragments', async () => {
@@ -254,7 +252,9 @@ describe('the comment key', () => {
 
     const ciphertext = await one.seal({ body: 'hi', display_name: null });
     expect((await again.open(ciphertext)).body).toBe('hi');
-    await expect(other.open(ciphertext)).rejects.toThrow(CommentSealedError);
+    await expect(other.open(ciphertext)).rejects.toThrow(
+      CommentDecryptFailedError
+    );
   });
 
   test('comes out of the fragment the viewer already parsed', async () => {

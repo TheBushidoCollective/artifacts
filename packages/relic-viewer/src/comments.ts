@@ -19,9 +19,35 @@
  *    round trip needs is the relic id, which the server already has.
  */
 
-import type { CommentCipher, CommentPlaintext } from './comment-crypto.ts';
-import { CommentSealedError } from './comment-crypto.ts';
+import {
+  COMMENT_BODY_LIMIT_BYTES,
+  COMMENT_DISPLAY_NAME_LIMIT_BYTES,
+  CommentDecryptFailedError,
+  type CommentPlaintext,
+  decryptComment,
+  encryptComment,
+  MalformedCommentError,
+} from '@relic/format';
 import type { ViewerDeps } from './viewer.ts';
+
+/**
+ * Sealing and opening, bound to one relic's comment key.
+ *
+ * A pair of closures rather than the key itself, so nothing downstream of here
+ * holds key material or has to remember which of the relic's two derived keys
+ * it is looking at.
+ */
+export interface CommentCipher {
+  seal(plaintext: CommentPlaintext): Promise<string>;
+  open(ciphertext: string): Promise<CommentPlaintext>;
+}
+
+export function commentCipher(commentKey: CryptoKey): CommentCipher {
+  return {
+    seal: (plaintext) => encryptComment(commentKey, plaintext),
+    open: (ciphertext) => decryptComment(commentKey, ciphertext),
+  };
+}
 
 /** What the server stores per comment. The body is opaque to it. */
 export interface CommentRecord {
@@ -58,10 +84,10 @@ export type CommentEntry =
 export const PUBLISHER_AUTHOR = 'publisher';
 
 /** Bodies are capped before encryption, so the cap is on the plaintext. */
-export const MAX_BODY_BYTES = 4096;
+export const MAX_BODY_BYTES = COMMENT_BODY_LIMIT_BYTES;
 
 /** A display name aliases the address. It is decoration, and it is bounded. */
-export const MAX_DISPLAY_NAME_BYTES = 64;
+export const MAX_DISPLAY_NAME_BYTES = COMMENT_DISPLAY_NAME_LIMIT_BYTES;
 
 const encoder = new TextEncoder();
 
@@ -394,7 +420,16 @@ export async function openEntry(
           : null,
     };
   } catch (error) {
-    if (!(error instanceof CommentSealedError)) throw error;
+    // `format.md` 3.13 gives a decrypt failure no cause, and a malformed
+    // envelope is the other way one row can fail to open. Both are shown as
+    // sealed. Anything else is a bug here rather than a bad row, and
+    // rethrowing keeps it from being disguised as one.
+    if (
+      !(error instanceof CommentDecryptFailedError) &&
+      !(error instanceof MalformedCommentError)
+    ) {
+      throw error;
+    }
     return {
       kind: 'sealed',
       id: record.comment_id,

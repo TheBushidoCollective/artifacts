@@ -408,15 +408,17 @@ Every other failure carries no URL and none is emitted: `source_*` and `local_*`
 
 - **No plaintext temporary file, ever.** The source is read and encrypted in a streaming pass whose only output is ciphertext.
 - **The ciphertext temporary file lives in the system temporary directory**, in a per-invocation subdirectory with restrictive permissions, and never beside the source, where it would pollute a repository and trip file watchers.
-- **It's removed on success, on failure, and on signal.** A crash that skips cleanup leaves ciphertext with no key, since the key was only ever in process memory, so the residue is inert.
-- **The key is never written to disk**, in any file, at any point, including logs and progress messages.
+- **It's removed on success, on failure, and on signal.** A crash that skips cleanup can leave ciphertext in the restrictive temporary directory. The service still never receives its key.
+- **The content key and publish token are written only to local publish state**, a 0600 file inside a 0700 config directory, so this machine can republish under the same URL. Neither secret enters logs or progress messages, and neither is sent to the service.
 - **The source file is never modified, moved, renamed, or truncated.** It's opened read-only. "Publish" means "move" in other tools, and an agent calling this on a file in someone's working tree must not be able to lose it.
 
-### 4.9 Double publish
+### 4.9 Repeat publish
 
-**Publishing the same file twice produces two relics: two IDs, two keys, two URLs, two independently chosen lifetimes.** No deduplication, and the tool doesn't notice the repeat, because recognizing it would need a local record of what was published, which is a relic list under another name and durable state the binary deliberately doesn't keep.
+**Publishing a source already recorded on this machine refuses before any HTTP.** The refusal names the existing relic and version, gives the exact `relic_republish` call, and states the cost of continuing as new: a second URL that nobody holding the first one will ever see. The source index is local machine state only. It creates no account, identity, server-side list, or dashboard.
 
-**Deduplication isn't a storage optimization here.** `format.md` 3.10 gives every relic a fresh key, so identical plaintext yields entirely different ciphertext and there's nothing for a deduplicator to match. The only construction that would change that is convergent encryption, and `format.md` 3.10 already rules it drift routing back to `frame` rather than an optimization available to `shape` or `build`, because deriving the key from the plaintext would let the operator confirm two publishers uploaded the same file and test whether any given file is on the service.
+**`force_new: true` deliberately produces two independent relics.** The new relic receives its own ID, key, URL, and lifetime, both relic entries survive, and the reverse source index points to the new choice. This is an explicit publishing decision rather than a failed detection path.
+
+This is source identity, not content deduplication. Changed content keeps the same source identity because changed content is exactly what a republish carries. Two different files with identical bytes remain different sources, every fresh relic still gets a fresh random key under `format.md` 3.10, and no convergent encryption or server-visible content fingerprint enters the design.
 
 ## 5. The disclosure obligation
 

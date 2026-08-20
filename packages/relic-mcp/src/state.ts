@@ -26,6 +26,7 @@ import {
 } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { basename, dirname, isAbsolute, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 
 export type SourceIdentityKind = 'git_remote' | 'git_common_dir' | 'realpath';
@@ -107,9 +108,14 @@ const runFile = promisify(execFile);
  */
 export function normalizeGitRemote(remote: string): string {
   const value = remote.trim().replace(/^git\+/i, '');
-
   try {
     const url = new URL(value);
+    if (url.protocol === 'file:') {
+      return fileURLToPath(url)
+        .replaceAll('\\', '/')
+        .replace(/\/+$/g, '')
+        .replace(/\.git$/i, '');
+    }
     if (url.hostname.length > 0) {
       const host =
         url.port.length > 0 ? `${url.hostname}:${url.port}` : url.hostname;
@@ -122,7 +128,7 @@ export function normalizeGitRemote(remote: string): string {
     // SCP-style and local remotes are not URL syntax.
   }
 
-  const scp = value.match(/^(?:[^@/\\s]+@)?([^:/\\s]+):(.+)$/);
+  const scp = value.match(/^(?:[^@/\s]+@)?([^:/\s]+):(.+)$/);
   if (scp?.[1] !== undefined && scp[2] !== undefined) {
     const path = scp[2].replace(/^\/+|\/+$/g, '').replace(/\.git$/i, '');
     return `${scp[1]}/${path}`.toLowerCase();

@@ -190,6 +190,18 @@ describe('source identity', () => {
     expect(normalizeGitRemote('https://github.com/org/repo')).toBe(
       'github.com/org/repo'
     );
+    expect(normalizeGitRemote('jason@sourcehut.org:Org/Repo.git')).toBe(
+      'sourcehut.org/org/repo'
+    );
+    expect(normalizeGitRemote('https://sourcehut.org/org/repo')).toBe(
+      'sourcehut.org/org/repo'
+    );
+  });
+
+  test('normalizes file URLs and absolute path remotes alike', () => {
+    expect(normalizeGitRemote('file:///tmp/example/repo.git')).toBe(
+      normalizeGitRemote('/tmp/example/repo.git')
+    );
   });
 
   test('uses the shared Git common directory when no remote exists', async () => {

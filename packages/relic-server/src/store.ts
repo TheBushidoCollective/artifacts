@@ -108,6 +108,50 @@ export interface AbuseReport {
   readonly receivedAt: number;
 }
 
+/**
+ * One comment on one relic.
+ *
+ * `ciphertext` is opaque. `format.md` 3.13 puts the comment key behind the
+ * fragment, which never reaches the server, so this field cannot be read
+ * here and must not be validated as anything but base64url. The caps on the
+ * plaintext are enforced by `@relic/format` before encryption, and there is
+ * no way to re-check them from this side.
+ *
+ * `author` is the whole of the participation record: a verified email
+ * address for a human, or the literal `publisher` for a comment authorized
+ * by the publish token. `frame.md`'s identity entry names holding this as a
+ * real cost rather than a free one, so nothing beyond it is stored.
+ */
+export interface CommentRow {
+  readonly id: string;
+  readonly relicId: string;
+  readonly author: string;
+  readonly createdAt: number;
+  readonly ciphertext: string;
+}
+
+/**
+ * A verified email session, minted by following a magic link.
+ *
+ * The link's token is single use and short lived; the session that replaces
+ * it is the thing a browser carries. Both are stored hashed, so this file
+ * cannot hand anybody a replayable credential.
+ */
+export interface SessionRow {
+  readonly tokenHash: string;
+  readonly email: string;
+  readonly createdAt: number;
+  readonly expiresAt: number;
+}
+
+/** A pending magic link, before anybody has followed it. */
+export interface AuthLinkRow {
+  readonly tokenHash: string;
+  readonly email: string;
+  readonly expiresAt: number;
+  readonly returnTo: string;
+}
+
 interface Challenge {
   readonly nonce: string;
   readonly issuedAt: number;
@@ -177,6 +221,26 @@ export interface RelicStore {
 
   putAbuseReport(report: AbuseReport): Promise<void>;
   readAbuseReports(): Promise<readonly AbuseReport[]>;
+
+  putComment(row: CommentRow): Promise<void>;
+  getComment(
+    relicId: string,
+    commentId: string
+  ): Promise<CommentRow | undefined>;
+  /** Oldest first, which is the order a thread is read in. */
+  listComments(relicId: string): Promise<readonly CommentRow[]>;
+  deleteComment(relicId: string, commentId: string): Promise<void>;
+  /**
+   * Every comment on a relic, removed together with it. A comment outliving
+   * the thing it comments on is a retention defect, not a leftover.
+   */
+  deleteCommentsForRelic(relicId: string): Promise<number>;
+
+  putAuthLink(row: AuthLinkRow): Promise<void>;
+  /** Single use: reading it consumes it, whether or not it had expired. */
+  consumeAuthLink(tokenHash: string): Promise<AuthLinkRow | undefined>;
+  putSession(row: SessionRow): Promise<void>;
+  getSession(tokenHash: string): Promise<SessionRow | undefined>;
 }
 
 export class MemoryStore implements RelicStore {
@@ -187,6 +251,9 @@ export class MemoryStore implements RelicStore {
   private readonly dedup = new Map<string, DedupEntry>();
   private readonly blocked = new Set<string>();
   private readonly reports: AbuseReport[] = [];
+  private readonly comments = new Map<string, CommentRow[]>();
+  private readonly authLinks = new Map<string, AuthLinkRow>();
+  private readonly sessions = new Map<string, SessionRow>();
 
   async getRelic(id: string): Promise<RelicRow | undefined> {
     return this.relics.get(id);
@@ -304,5 +371,63 @@ export class MemoryStore implements RelicStore {
 
   async readAbuseReports(): Promise<readonly AbuseReport[]> {
     return this.reports;
+  }
+
+  async putComment(row: CommentRow): Promise<void> {
+    const thread = this.comments.get(row.relicId) ?? [];
+    thread.push(row);
+    this.comments.set(row.relicId, thread);
+  }
+
+  async getComment(
+    relicId: string,
+    commentId: string
+  ): Promise<CommentRow | undefined> {
+    return this.comments.get(relicId)?.find((c) => c.id === commentId);
+  }
+
+  async listComments(relicId: string): Promise<readonly CommentRow[]> {
+    // Sorted rather than trusting insertion order, because a real store
+    // returns rows in whatever order it likes and the thread's contract is
+    // oldest first. Ties break on id so the order is total, not merely
+    // mostly-sorted, which is what makes the list reproducible.
+    return [...(this.comments.get(relicId) ?? [])].sort(
+      (a, b) => a.createdAt - b.createdAt || (a.id < b.id ? -1 : 1)
+    );
+  }
+
+  async deleteComment(relicId: string, commentId: string): Promise<void> {
+    const thread = this.comments.get(relicId);
+    if (thread === undefined) return;
+    const kept = thread.filter((c) => c.id !== commentId);
+    if (kept.length === 0) this.comments.delete(relicId);
+    else this.comments.set(relicId, kept);
+  }
+
+  async deleteCommentsForRelic(relicId: string): Promise<number> {
+    const removed = this.comments.get(relicId)?.length ?? 0;
+    this.comments.delete(relicId);
+    return removed;
+  }
+
+  async putAuthLink(row: AuthLinkRow): Promise<void> {
+    this.authLinks.set(row.tokenHash, row);
+  }
+
+  async consumeAuthLink(tokenHash: string): Promise<AuthLinkRow | undefined> {
+    const row = this.authLinks.get(tokenHash);
+    // Deleted whether or not it was still valid. A link that has been
+    // presented once is spent, so a replay finds nothing rather than
+    // finding an expired row it might be tempted to forgive.
+    this.authLinks.delete(tokenHash);
+    return row;
+  }
+
+  async putSession(row: SessionRow): Promise<void> {
+    this.sessions.set(row.tokenHash, row);
+  }
+
+  async getSession(tokenHash: string): Promise<SessionRow | undefined> {
+    return this.sessions.get(tokenHash);
   }
 }

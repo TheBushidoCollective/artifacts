@@ -35,7 +35,21 @@ export type ProblemCode =
   // is authorized by possession of the publish token, not by an account,
   // and a wrong or missing token is an authorization failure rather than a
   // malformed request.
-  | 'invalid_publish_token';
+  | 'invalid_publish_token'
+  // Comments. A comment body is ciphertext the server cannot read, so the
+  // only thing it can validate is that the transport encoding is what it
+  // claims to be. `format.md` 3.13 puts the caps in `@relic/format`, before
+  // encryption, so re-checking a plaintext length here is impossible by
+  // construction rather than merely redundant.
+  | 'invalid_comment'
+  | 'comment_not_found'
+  | 'comment_rate_limited'
+  // A commenter may delete their own comment and no one else's. The operator
+  // path is the abuse surface, not this one.
+  | 'comment_forbidden'
+  // Magic-link session. A dead or spent link is not a malformed request.
+  | 'invalid_session'
+  | 'auth_rate_limited';
 
 const STATUS: Readonly<Record<ProblemCode, number>> = {
   relic_not_found: 404,
@@ -54,6 +68,12 @@ const STATUS: Readonly<Record<ProblemCode, number>> = {
   invalid_challenge_nonce: 409,
   invalid_relic_version: 400,
   invalid_publish_token: 403,
+  invalid_comment: 400,
+  comment_not_found: 404,
+  comment_rate_limited: 429,
+  comment_forbidden: 403,
+  invalid_session: 401,
+  auth_rate_limited: 429,
 };
 
 /** `title` SHOULD NOT change from occurrence to occurrence, per RFC 9457. */
@@ -74,6 +94,12 @@ const TITLE: Readonly<Record<ProblemCode, string>> = {
   invalid_challenge_nonce: 'Challenge nonce is dead',
   invalid_relic_version: 'Invalid relic version',
   invalid_publish_token: 'Publish token is missing or wrong',
+  invalid_comment: 'Invalid comment',
+  comment_not_found: 'No such comment',
+  comment_rate_limited: 'Too many comments',
+  comment_forbidden: 'Not your comment',
+  invalid_session: 'Sign-in link is dead or already used',
+  auth_rate_limited: 'Too many sign-in requests',
 };
 
 export interface ProblemExtensions {
@@ -85,6 +111,7 @@ export interface ProblemExtensions {
   readonly size_basis?: 'plaintext' | 'ciphertext';
   readonly download_cap?: number;
   readonly report_url?: string;
+  readonly comment_id?: string;
 }
 
 export interface ProblemOptions extends ProblemExtensions {

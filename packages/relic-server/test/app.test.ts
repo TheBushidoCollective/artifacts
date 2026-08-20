@@ -1,12 +1,20 @@
 import { beforeEach, describe, expect, test } from 'bun:test';
 import {
+  decryptComment,
+  deriveCommentKey,
+  encryptComment,
   encryptedSize,
   encryptRelic,
   generateKey,
   generateRelicId,
   RESERVED_SEGMENTS,
 } from '@relic/format';
-import { createApp, type RelicApp, stripToRelicId } from '../src/app.ts';
+import {
+  createApp,
+  type Mailer,
+  type RelicApp,
+  stripToRelicId,
+} from '../src/app.ts';
 import { ciphertextHash, MemoryStorage } from '../src/storage.ts';
 import { MemoryStore } from '../src/store.ts';
 
@@ -1636,5 +1644,273 @@ describe('config invariants', () => {
     expect(() =>
       createApp({ config: { urlValiditySeconds: 700_000 } })
     ).toThrow(/ceiling/);
+  });
+});
+
+describe('comments', () => {
+  test('lists an empty thread without asking who you are', async () => {
+    const { id } = await publish();
+    const response = await app.fetch(req(`/api/relics/${id}/comments`));
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as {
+      relic_id: string;
+      comments: unknown[];
+    };
+    expect(body.relic_id).toBe(id);
+    expect(body.comments).toEqual([]);
+  });
+
+  test('the publisher comments with the publish token and is stored as publisher', async () => {
+    const { id, grant } = await publish();
+    const token = grant['publish_token'] as string;
+
+    const posted = await app.fetch(
+      req(`/api/relics/${id}/comments`, {
+        method: 'POST',
+        body: JSON.stringify({
+          ciphertext: 'YWJjZA',
+          publish_token: token,
+        }),
+      })
+    );
+    expect(posted.status).toBe(201);
+    const created = (await posted.json()) as { author: string };
+    expect(created.author).toBe('publisher');
+
+    const listed = await app.fetch(req(`/api/relics/${id}/comments`));
+    const body = (await listed.json()) as {
+      comments: Array<{ author: string; ciphertext: string }>;
+    };
+    expect(body.comments).toHaveLength(1);
+    expect(body.comments[0]?.author).toBe('publisher');
+    expect(body.comments[0]?.ciphertext).toBe('YWJjZA');
+  });
+
+  test('the stored ciphertext is not the plaintext, which is the zero-knowledge claim', async () => {
+    const { id, key, grant } = await publish();
+    const token = grant['publish_token'] as string;
+    const secret = 'the body the server must never see';
+
+    const commentKey = await deriveCommentKey(key);
+    const ciphertext = await encryptComment(commentKey, {
+      body: secret,
+      display_name: null,
+    });
+
+    const posted = await app.fetch(
+      req(`/api/relics/${id}/comments`, {
+        method: 'POST',
+        body: JSON.stringify({ ciphertext, publish_token: token }),
+      })
+    );
+    expect(posted.status).toBe(201);
+
+    const rows = await app.store.listComments(id);
+    expect(rows).toHaveLength(1);
+    const stored = rows[0]?.ciphertext ?? '';
+    expect(stored).toBe(ciphertext);
+    expect(stored).not.toContain(secret);
+    expect(JSON.stringify(rows)).not.toContain(secret);
+
+    // And a holder of the fragment key can still read it, which is the
+    // other half of the claim: opaque to the server, readable to anyone
+    // who already holds the relic.
+    const opened = await decryptComment(commentKey, stored);
+    expect(opened.body).toBe(secret);
+  });
+
+  test('refuses a body that is not base64url, the one check this server can make', async () => {
+    const { id, grant } = await publish();
+    const posted = await app.fetch(
+      req(`/api/relics/${id}/comments`, {
+        method: 'POST',
+        body: JSON.stringify({
+          ciphertext: 'not+valid/base64==',
+          publish_token: grant['publish_token'],
+        }),
+      })
+    );
+    expect(posted.status).toBe(400);
+    expect((await posted.json()).code).toBe('invalid_comment');
+    expect(await app.store.listComments(id)).toHaveLength(0);
+  });
+
+  test('a tombstoned relic has no thread, even to a reader who already has the link', async () => {
+    const { id } = await publish();
+    await app.fetch(
+      req(`/api/relics/${id}?reason=abuse`, {
+        method: 'DELETE',
+        headers: { authorization: 'Bearer operator-secret' },
+      })
+    );
+
+    const listed = await app.fetch(req(`/api/relics/${id}/comments`));
+    expect(listed.status).toBe(410);
+    expect((await listed.json()).code).toBe('relic_removed');
+  });
+
+  test('deleting a relic takes its comments with it', async () => {
+    const { id, grant } = await publish();
+    await app.fetch(
+      req(`/api/relics/${id}/comments`, {
+        method: 'POST',
+        body: JSON.stringify({
+          ciphertext: 'YWJjZA',
+          publish_token: grant['publish_token'],
+        }),
+      })
+    );
+    expect(await app.store.listComments(id)).toHaveLength(1);
+
+    const deleted = await app.fetch(
+      req(`/api/relics/${id}?reason=abuse`, {
+        method: 'DELETE',
+        headers: { authorization: 'Bearer operator-secret' },
+      })
+    );
+    expect(deleted.status).toBe(200);
+    expect((await deleted.json()).comments_deleted).toBe(1);
+    expect(await app.store.listComments(id)).toHaveLength(0);
+  });
+
+  test('the author can delete their own comment, and nobody else can', async () => {
+    const { id, grant } = await publish();
+    const token = grant['publish_token'] as string;
+    const posted = await app.fetch(
+      req(`/api/relics/${id}/comments`, {
+        method: 'POST',
+        body: JSON.stringify({ ciphertext: 'YWJjZA', publish_token: token }),
+      })
+    );
+    const commentId = ((await posted.json()) as { comment_id: string })
+      .comment_id;
+
+    const stranger = await app.fetch(
+      req(`/api/relics/${id}/comments/${commentId}`, {
+        method: 'DELETE',
+        body: JSON.stringify({}),
+      })
+    );
+    expect(stranger.status).toBe(403);
+    expect((await stranger.json()).code).toBe('comment_forbidden');
+    expect(await app.store.listComments(id)).toHaveLength(1);
+
+    const own = await app.fetch(
+      req(`/api/relics/${id}/comments/${commentId}`, {
+        method: 'DELETE',
+        body: JSON.stringify({ publish_token: token }),
+      })
+    );
+    expect(own.status).toBe(204);
+    expect(await app.store.listComments(id)).toHaveLength(0);
+  });
+});
+
+describe('magic-link identity', () => {
+  test('a followed link lets a reader comment, and the stored author is the address', async () => {
+    const sent: Array<{ email: string; link: string }> = [];
+    const mailer: Mailer = {
+      async send(email, link) {
+        sent.push({ email, link });
+      },
+    };
+    app = build({ mailer });
+
+    const { id } = await publish();
+    const asked = await app.fetch(
+      req('/api/auth/request', {
+        method: 'POST',
+        body: JSON.stringify({
+          email: 'reader@example.com',
+          return_to: `/${id}`,
+        }),
+      })
+    );
+    expect(asked.status).toBe(202);
+    expect(sent).toHaveLength(1);
+    expect(sent[0]?.email).toBe('reader@example.com');
+
+    const followed = await app.fetch(
+      req(new URL(sent[0]!.link).pathname + new URL(sent[0]!.link).search, {
+        redirect: 'manual',
+      })
+    );
+    expect(followed.status).toBe(303);
+    expect(followed.headers.get('location')).toBe(`/${id}`);
+    const cookie = followed.headers.get('set-cookie') ?? '';
+    expect(cookie).toContain('HttpOnly');
+    expect(cookie).toContain('Secure');
+    expect(cookie).toMatch(/relic_session=/);
+
+    const session = cookie.split(';')[0] ?? '';
+    const posted = await app.fetch(
+      req(`/api/relics/${id}/comments`, {
+        method: 'POST',
+        headers: { cookie: session },
+        body: JSON.stringify({ ciphertext: 'YWJjZA' }),
+      })
+    );
+    expect(posted.status).toBe(201);
+    expect(((await posted.json()) as { author: string }).author).toBe(
+      'reader@example.com'
+    );
+  });
+
+  test('asking for a link always answers 202, even for garbage, so it is not an address oracle', async () => {
+    const sent: Array<{ email: string; link: string }> = [];
+    const mailer: Mailer = {
+      async send(email, link) {
+        sent.push({ email, link });
+      },
+    };
+    app = build({ mailer });
+
+    const garbage = await app.fetch(
+      req('/api/auth/request', {
+        method: 'POST',
+        body: JSON.stringify({ email: 'not-an-address' }),
+      })
+    );
+    expect(garbage.status).toBe(202);
+    expect(sent).toHaveLength(0);
+
+    const missing = await app.fetch(
+      req('/api/auth/request', { method: 'POST', body: '{}' })
+    );
+    expect(missing.status).toBe(202);
+    expect(sent).toHaveLength(0);
+  });
+
+  test('a spent or missing token is invalid_session, not a new session', async () => {
+    const sent: Array<{ email: string; link: string }> = [];
+    app = build({
+      mailer: {
+        async send(email, link) {
+          sent.push({ email, link });
+        },
+      },
+    });
+
+    await app.fetch(
+      req('/api/auth/request', {
+        method: 'POST',
+        body: JSON.stringify({ email: 'reader@example.com' }),
+      })
+    );
+    const url = new URL(sent[0]!.link);
+    const path = url.pathname + url.search;
+
+    const first = await app.fetch(req(path, { redirect: 'manual' }));
+    expect(first.status).toBe(303);
+
+    const replay = await app.fetch(req(path, { redirect: 'manual' }));
+    expect(replay.status).toBe(401);
+    expect((await replay.json()).code).toBe('invalid_session');
+
+    const missing = await app.fetch(
+      req('/api/auth/callback', { redirect: 'manual' })
+    );
+    expect(missing.status).toBe(401);
+    expect((await missing.json()).code).toBe('invalid_session');
   });
 });

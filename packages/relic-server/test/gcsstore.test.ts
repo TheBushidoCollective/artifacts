@@ -371,4 +371,83 @@ describe('gcsStore', () => {
 
     expect((await store.readAbuseReports()).length).toBe(2);
   });
+
+  test('comments land one object each and list oldest first', async () => {
+    const store = storeOn(fakeGcs());
+    await store.putComment({
+      id: 'b',
+      relicId: 'relic',
+      author: 'publisher',
+      createdAt: 2000,
+      ciphertext: 'YWJjZA',
+    });
+    await store.putComment({
+      id: 'a',
+      relicId: 'relic',
+      author: 'reader@example.com',
+      createdAt: 1000,
+      ciphertext: 'ZGVjZA',
+    });
+
+    const listed = await store.listComments('relic');
+    expect(listed.map((c) => c.id)).toEqual(['a', 'b']);
+    expect(await store.getComment('relic', 'a')).toMatchObject({
+      author: 'reader@example.com',
+    });
+    expect(await store.listComments('other')).toEqual([]);
+  });
+
+  test('deleting one comment leaves the rest, and deleting the relic takes all of them', async () => {
+    const store = storeOn(fakeGcs());
+    await store.putComment({
+      id: 'one',
+      relicId: 'relic',
+      author: 'publisher',
+      createdAt: 1,
+      ciphertext: 'YWJjZA',
+    });
+    await store.putComment({
+      id: 'two',
+      relicId: 'relic',
+      author: 'publisher',
+      createdAt: 2,
+      ciphertext: 'ZGVjZA',
+    });
+
+    await store.deleteComment('relic', 'one');
+    expect((await store.listComments('relic')).map((c) => c.id)).toEqual([
+      'two',
+    ]);
+
+    expect(await store.deleteCommentsForRelic('relic')).toBe(1);
+    expect(await store.listComments('relic')).toEqual([]);
+  });
+
+  test('a magic link is spent on first consume, so a replay finds nothing', async () => {
+    const store = storeOn(fakeGcs());
+    await store.putAuthLink({
+      tokenHash: 'abc',
+      email: 'reader@example.com',
+      expiresAt: 9_000_000,
+      returnTo: '/',
+    });
+
+    const first = await store.consumeAuthLink('abc');
+    expect(first?.email).toBe('reader@example.com');
+    expect(await store.consumeAuthLink('abc')).toBeUndefined();
+  });
+
+  test('a session reads back by the hash of the secret, never the secret', async () => {
+    const store = storeOn(fakeGcs());
+    await store.putSession({
+      tokenHash: 'hashed',
+      email: 'reader@example.com',
+      createdAt: 1000,
+      expiresAt: 9_000_000,
+    });
+    expect((await store.getSession('hashed'))?.email).toBe(
+      'reader@example.com'
+    );
+    expect(await store.getSession('the-secret')).toBeUndefined();
+  });
 });

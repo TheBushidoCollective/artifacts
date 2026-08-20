@@ -1652,12 +1652,9 @@ describe('comments', () => {
     const { id } = await publish();
     const response = await app.fetch(req(`/api/relics/${id}/comments`));
     expect(response.status).toBe(200);
-    const body = (await response.json()) as {
-      relic_id: string;
-      comments: unknown[];
-    };
-    expect(body.relic_id).toBe(id);
-    expect(body.comments).toEqual([]);
+    const body = await response.json();
+    expect(Array.isArray(body)).toBe(true);
+    expect(body).toEqual([]);
   });
 
   test('the publisher comments with the publish token and is stored as publisher', async () => {
@@ -1678,12 +1675,11 @@ describe('comments', () => {
     expect(created.author).toBe('publisher');
 
     const listed = await app.fetch(req(`/api/relics/${id}/comments`));
-    const body = (await listed.json()) as {
-      comments: Array<{ author: string; ciphertext: string }>;
-    };
-    expect(body.comments).toHaveLength(1);
-    expect(body.comments[0]?.author).toBe('publisher');
-    expect(body.comments[0]?.ciphertext).toBe('YWJjZA');
+    const listedBody = await listed.json();
+    expect(Array.isArray(listedBody)).toBe(true);
+    expect(listedBody).toHaveLength(1);
+    expect(listedBody[0]?.author).toBe('publisher');
+    expect(listedBody[0]?.ciphertext).toBe('YWJjZA');
   });
 
   test('the stored ciphertext is not the plaintext, which is the zero-knowledge claim', async () => {

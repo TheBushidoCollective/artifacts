@@ -1187,15 +1187,14 @@ export function createApp(options: AppOptions = {}): RelicApp {
     }
 
     const rows = await store.listComments(relicId);
-    return json({
-      relic_id: relicId,
-      comments: rows.map((row) => ({
+    return json(
+      rows.map((row) => ({
         comment_id: row.id,
         author: row.author,
         created_at: new Date(row.createdAt).toISOString(),
         ciphertext: row.ciphertext,
-      })),
-    });
+      }))
+    );
   }
 
   /**

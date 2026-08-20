@@ -22,6 +22,7 @@ describe('the built sandbox.html', () => {
     expect(built.exitCode).toBe(0);
 
     const html = await Bun.file(`${pkgDir}dist/sandbox.html`).text();
+    const viewer = await Bun.file(`${pkgDir}dist/viewer.js`).text();
 
     // The inline script must be present, or the assertions below would
     // pass vacuously against an empty page.
@@ -34,5 +35,26 @@ describe('the built sandbox.html', () => {
     // No CDN reference and no script that the frame would have to fetch.
     expect(html).not.toContain('https://esm.sh');
     expect(html).not.toMatch(/<script\b[^>]*\bsrc\s*=/i);
+
+    // The diff implementation lands in the service-origin bundle and nowhere
+    // in the frame bundle. The comparison's two new message types are
+    // deliberately named `relic:tree` and `relic:annotate`, and neither
+    // carries a diff: one reports structure, the other carries paths.
+    const diffMarker = 'No changes. These versions have identical content.';
+    expect(viewer).toContain(diffMarker);
+    expect(html).not.toContain(diffMarker);
+    expect(html).not.toContain('relic:diff');
+
+    // Same again for the rendered comparison's own algorithm. The frame
+    // captures its structure and marks its nodes; it never compares.
+    const renderedMarker = 'These versions render identically.';
+    expect(viewer).toContain(renderedMarker);
+    expect(html).not.toContain(renderedMarker);
+
+    // The highlight path did ship into the frame, so the absence assertions
+    // above are not passing because the feature never arrived.
+    expect(html).toContain('data-relic-diff');
+    expect(html).toContain('relic:annotate');
+    expect(html).toContain('relic:tree');
   });
 });

@@ -32,6 +32,13 @@
 // module by construction.
 import * as React from 'react';
 import { createRoot } from 'react-dom/client';
+import {
+  applyMarks,
+  captureTree,
+  HIGHLIGHT_CSS,
+  isAnnotateMessage,
+  type Mark,
+} from './rendered-tree.ts';
 
 export interface RenderMessage {
   readonly type: 'relic:render';
@@ -72,28 +79,51 @@ export function isRenderJsxMessage(data: unknown): data is RenderJsxMessage {
  * the one call that actually renders untrusted markup sits in a single named
  * place rather than inline in an event listener. `writeJsx` is injected for
  * the same reason: the guard does not care how a render lands, only that it
- * lands once.
+ * lands once. `annotate` is injected for the same reason again, and carries a
+ * default so every existing call site keeps working.
  */
 export function createSandboxHandler(
   write: (html: string) => void,
-  writeJsx: (code: string) => void
+  writeJsx: (code: string) => void,
+  annotate: (marks: readonly Mark[]) => void = () => {}
 ): (data: unknown) => boolean {
   // Exactly one render, ever, across both message types. Without this,
   // anything that can post to this frame could swap the content after the
   // recipient has already decided to trust what they are looking at, and a
   // JSX render followed by an HTML render would be exactly that swap.
+  //
+  // A version comparison needs two renders of untrusted content and gets them
+  // from two frames, each keeping this guarantee. Nothing about comparison
+  // relaxes this line, and the next person who wants a second render here
+  // should build a second frame instead.
   let rendered = false;
+  // Annotation is a separate one-shot, for the same reason and no other.
+  let annotated = false;
 
   return (data: unknown): boolean => {
-    if (rendered) return false;
-    if (isRenderMessage(data)) {
-      rendered = true;
-      write(data.html);
-      return true;
+    if (!rendered) {
+      if (isRenderMessage(data)) {
+        rendered = true;
+        write(data.html);
+        return true;
+      }
+      if (isRenderJsxMessage(data)) {
+        rendered = true;
+        writeJsx(data.code);
+        return true;
+      }
+      // Before a render there is nothing to annotate, so an annotate message
+      // arriving first is refused rather than queued.
+      return false;
     }
-    if (isRenderJsxMessage(data)) {
-      rendered = true;
-      writeJsx(data.code);
+
+    // A mark carries a child-index path and a kind, and nothing else. That is
+    // what makes a second message type safe here where a second render would
+    // not be: this channel cannot carry content, so it cannot change what the
+    // document says. It only outlines what already stands there.
+    if (!annotated && isAnnotateMessage(data)) {
+      annotated = true;
+      annotate(data.marks);
       return true;
     }
     return false;
@@ -142,6 +172,39 @@ async function mountComponent(code: string): Promise<void> {
   }
 }
 
+/**
+ * Tell the parent what this frame ended up rendering.
+ *
+ * The message carries tag names, an attribute allowlist, and text, and no
+ * markup at all. `'*'` is the only target available, exactly as it is for the
+ * ready handshake: an opaque origin has no origin a parent could name. It is
+ * safe for the same reason too, since the payload is the structure of the
+ * content the parent already holds and is about to summarise, and the key was
+ * never here to leak.
+ */
+function reportTree(): void {
+  window.parent.postMessage(
+    { type: 'relic:tree', tree: captureTree(document.body) },
+    '*'
+  );
+}
+
+/**
+ * Report after the browser has actually laid the render down.
+ *
+ * The HTML path is done the moment `document.close()` returns, but a React
+ * mount commits asynchronously, so capturing immediately would snapshot an
+ * empty root. A frame is the natural beat to wait for, with a timeout for the
+ * environments that have no frames to give.
+ */
+function scheduleReport(): void {
+  if (typeof requestAnimationFrame === 'function') {
+    requestAnimationFrame(() => requestAnimationFrame(reportTree));
+    return;
+  }
+  window.setTimeout(reportTree, 0);
+}
+
 if (typeof window !== 'undefined' && typeof document !== 'undefined') {
   const handle = createSandboxHandler(
     (html) => {
@@ -151,15 +214,36 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') {
       document.open();
       document.write(html);
       document.close();
+      // `document.open()` removes every event listener registered on the
+      // document, on its nodes, and on its window, so the frame went deaf the
+      // instant it rendered. Reporting still worked, because that is a
+      // callback this closure already holds, which is exactly why the loss was
+      // invisible: the parent got a tree, computed a diff, posted marks, and
+      // nothing was listening. Re-register, or annotation can never arrive.
+      listen();
+      scheduleReport();
     },
     (code) => {
-      void mountComponent(code);
+      void mountComponent(code).then(scheduleReport, scheduleReport);
+    },
+    (marks) => {
+      // Relic's own constant stylesheet, and the only thing this path adds to
+      // the document. It goes in through `textContent`, and the frame's
+      // policy permits it because `style-src` allows inline styles.
+      const style = document.createElement('style');
+      style.textContent = HIGHLIGHT_CSS;
+      document.head.appendChild(style);
+      applyMarks(document.body, marks);
     }
   );
 
-  window.addEventListener('message', (event: MessageEvent) => {
+  const onMessage = (event: MessageEvent): void => {
     handle(event.data);
-  });
+  };
+  function listen(): void {
+    window.addEventListener('message', onMessage);
+  }
+  listen();
 
   // Tell the parent the frame is listening, so a message posted before this
   // script ran is not simply lost.

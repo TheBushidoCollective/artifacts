@@ -15,7 +15,7 @@
     },
     "packages/relic-mcp": {
       "name": "relic-mcp",
-      "version": "0.2.0",
+      "version": "0.3.0",
       "bin": {
         "relic-mcp": "./dist/relic-mcp.js",
       },
@@ -37,6 +37,7 @@
       "dependencies": {
         "@relic/format": "workspace:*",
         "@relic/server": "workspace:*",
+        "diff": "^9.0.0",
         "react": "19.2.0",
         "react-dom": "19.2.0",
         "sucrase": "^3.35.0",
@@ -77,6 +78,8 @@
     "commander": ["commander@4.1.1", "", {}, "sha512-NOKm8xhkzAjzFx8B2v5OAHT+u5pRQc2UCa2Vq9jYL/31o2wi9mxBA7LIFs3sV5VSC49z6pEhfbMULvShKj26WA=="],
 
     "csstype": ["csstype@3.2.3", "", {}, "sha512-z1HGKcYy2xA8AGQfwrn0PAy+PB7X/GSj3UVJW9qKyn43xWa+gl5nXmU4qqLMRzWVLFC8KusUX8T/0kCiOYpAIQ=="],
+
+    "diff": ["diff@9.0.0", "", {}, "sha512-svtcdpS8CgJyqAjEQIXdb3OjhFVVYjzGAPO8WGCmRbrml64SPw/jJD4GoE98aR7r25A0XcgrK3F02yw9R/vhQw=="],
 
     "fdir": ["fdir@6.5.0", "", { "peerDependencies": { "picomatch": "^3 || ^4" }, "optionalPeers": ["picomatch"] }, "sha512-tIbYtZbucOs0BRGqPJkshJUYdL+SDH7dVM8gjy+ERp3WAUjLEFJE+02kanyHtwjWOnwrKYBiwAmM0p4kLJAnXg=="],
 

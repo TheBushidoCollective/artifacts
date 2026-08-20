@@ -23,6 +23,10 @@
   --patina: #1f6b64;
   --patina-ink: #0f3b37;
   --oxide: #8c4a2f;
+  --diff-added: #dfeeea;
+  --diff-added-strong: #a7d6ca;
+  --diff-removed: #f3e5df;
+  --diff-removed-strong: #ddb6a6;
 
   --serif: Charter, "Iowan Old Style", "Source Serif Pro", Palatino,
     "Palatino Linotype", Georgia, serif;
@@ -44,6 +48,10 @@
     --patina: #4fb3a6;
     --patina-ink: #a7ded6;
     --oxide: #c98058;
+    --diff-added: #15332f;
+    --diff-added-strong: #24564e;
+    --diff-removed: #34231d;
+    --diff-removed-strong: #684331;
   }
 }
 
@@ -127,6 +135,116 @@ body {
   user-select: all;
 }
 
+/* The relic id and the version share one metadata line under the filename.
+   The id shrinks and ellipsizes; the version keeps its width, because a
+   truncated version number is worse than a truncated catalog number. */
+.identity-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  min-width: 0;
+}
+
+/* The id gives way, the version does not: this row is left packed so the
+   version sits against the catalog number it belongs with, rather than being
+   pushed to the far edge of the zone and reading as part of the actions. */
+.identity-meta .accession {
+  min-width: 0;
+  flex: 0 1 auto;
+}
+
+.version {
+  position: relative;
+  flex: none;
+}
+
+.version-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  margin: 0;
+  padding: 0.05rem 0.35rem;
+  border: 1px solid var(--rule-strong);
+  background: var(--surface);
+  color: var(--ink-soft);
+  font-family: var(--mono);
+  font-size: 0.66rem;
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+}
+
+.version-trigger {
+  cursor: pointer;
+  font: inherit;
+  font-family: var(--mono);
+  font-size: 0.66rem;
+  letter-spacing: 0.06em;
+}
+
+.version-trigger:hover {
+  border-color: var(--patina);
+  color: var(--patina-ink);
+}
+
+.version-trigger:focus-visible {
+  outline: 2px solid var(--patina);
+  outline-offset: 1px;
+}
+
+.version-trigger .icon {
+  width: 10px;
+  height: 10px;
+}
+
+/* One label, two lengths. The stylesheet chooses, so nothing measures. */
+.version-short {
+  display: none;
+}
+
+.version-list {
+  position: absolute;
+  top: calc(100% + 0.3rem);
+  left: 0;
+  z-index: 20;
+  min-width: 8rem;
+  max-height: 14rem;
+  overflow-y: auto;
+  border: 1px solid var(--rule-strong);
+  background: var(--surface);
+  box-shadow: 0 6px 18px rgb(0 0 0 / 18%);
+}
+
+.version-option {
+  padding: 0.4rem 0.7rem;
+  color: var(--ink);
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.version-option + .version-option {
+  border-top: 1px solid var(--rule);
+}
+
+.version-option:hover {
+  background: var(--ground);
+  color: var(--patina-ink);
+}
+
+/* Focus lands here only from a keyboard or a pointer inside an open list, so
+   the ring is drawn on :focus rather than :focus-visible: it is always
+   wanted, and a programmatic focus does not always match :focus-visible. */
+.version-option:focus {
+  outline: 2px solid var(--patina);
+  outline-offset: -2px;
+}
+
+.version-option[aria-selected='true'] {
+  border-left: 3px solid var(--patina);
+  font-weight: 700;
+}
+
 .actions {
   display: flex;
   align-items: stretch;
@@ -183,6 +301,16 @@ body {
   fill: currentColor;
 }
 
+/*
+ * The narrow hierarchy, re-derived because version added an element to a row
+ * that had already overflowed once.
+ *
+ * At 320px the row has 20rem. Five collapsed actions take about 11.9rem and
+ * the version chip about 3rem, which leaves nothing for a 6.7rem wordmark and
+ * a filename both. So the wordmark goes: the domain is in the address bar
+ * directly above it, while the filename, the version, and the four actions
+ * are not available anywhere else. Brand gives way before function.
+ */
 @media (max-width: 34rem) {
   /* The marker collapses with the buttons. Exempting it kept a fact at full
      width while the actions lost their labels, which pushed Report off the
@@ -193,6 +321,21 @@ body {
   }
   .action {
     padding: 0 0.75rem;
+  }
+  .mark {
+    display: none;
+  }
+  .version-long {
+    display: none;
+  }
+  .version-short {
+    display: inline;
+  }
+  .identity {
+    padding: 0.4rem 0.7rem;
+  }
+  .identity-meta {
+    gap: 0.4rem;
   }
 }
 
@@ -514,6 +657,544 @@ body {
   margin-top: 1.25rem;
   padding-top: 0.75rem;
   border-top: 1px solid var(--rule);
+}
+
+/* ---------- version history ---------- */
+
+.stage-diff {
+  padding-top: 1.25rem;
+}
+
+/*
+ * A two-column comparison is the view that most needs width, so it opts out
+ * of the reading gutter the way `.doc-image` and `.doc-jsx` already do rather
+ * than inventing a cap of its own. It carried `width: min(78rem, 100%)`,
+ * which pinned the pane at 1248px and left roughly 425px of dead page beside
+ * it at a 1568px viewport.
+ *
+ * There is nothing left to declare: a block element already fills its parent,
+ * and `.stage-diff`'s padding is the only gutter wanted here.
+ */
+.diff-shell {
+  max-width: none;
+}
+
+.diff-toolbar {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 2rem;
+  padding: 0 0 1rem;
+  border-bottom: 1px solid var(--rule-strong);
+}
+
+.diff-heading {
+  min-width: 0;
+}
+
+.diff-eyebrow {
+  margin-bottom: 0.25rem;
+  color: var(--patina-ink);
+  font-family: var(--mono);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.diff-heading h1 {
+  margin: 0;
+  font-size: clamp(1.3rem, 2.5vw, 1.9rem);
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+}
+
+/*
+ * The heading takes focus when a comparison opens, so a screen reader lands on
+ * what changed rather than at the top of the taskbar. A mouse user should not
+ * see a ring for a focus they did not ask for, and a keyboard user must.
+ */
+.diff-heading h1:focus {
+  outline: none;
+}
+
+.diff-heading h1:focus-visible {
+  outline: 2px solid var(--patina);
+  outline-offset: 4px;
+}
+
+.diff-history-note {
+  max-width: 52rem;
+  margin: 0.45rem 0 0;
+  color: var(--ink-soft);
+  font-size: 0.88rem;
+}
+
+.image-diff-control input:focus-visible,
+.compare-swipe input:focus-visible {
+  outline: 2px solid var(--patina);
+  outline-offset: 2px;
+}
+
+/* ---------- the rendered comparison ---------- */
+
+/*
+ * Two panes showing the same artifact at two versions. Swipe stacks them and
+ * wipes between them, which is what answers "did the page move". Side by side
+ * puts them in two columns, which is what answers "what does it say now".
+ */
+.compare-stage {
+  --split: 50%;
+  position: relative;
+  overflow: hidden;
+  border: 1px solid var(--rule-strong);
+  background: var(--surface);
+}
+
+.compare-stage[data-layout='swipe'] {
+  display: grid;
+}
+
+.compare-stage[data-layout='swipe'] .compare-pane {
+  grid-area: 1 / 1;
+  min-width: 0;
+}
+
+.compare-stage[data-layout='swipe'] .compare-pane-current {
+  clip-path: inset(0 calc(100% - var(--split)) 0 0);
+}
+
+.compare-stage[data-layout='split'] {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+}
+
+.compare-stage[data-layout='split'] .compare-pane {
+  min-width: 0;
+}
+
+.compare-stage[data-layout='split'] .compare-pane-before {
+  border-right: 1px solid var(--rule-strong);
+}
+
+.compare-stage[data-layout='split'] .compare-divider {
+  display: none;
+}
+
+.compare-pane {
+  overflow: auto;
+  max-height: 72vh;
+}
+
+/* Prose panes carry their own reading padding; a frame brings its own page. */
+.compare-pane .prose {
+  padding: 1.25rem 1.5rem;
+}
+
+.compare-pane .usercontent-frame {
+  display: block;
+  width: 100%;
+  height: 72vh;
+  border: 0;
+}
+
+.compare-divider {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: var(--split);
+  width: 1px;
+  background: #fff;
+  box-shadow: 0 0 0 1px rgb(0 0 0 / 35%);
+  pointer-events: none;
+}
+
+.compare-label {
+  position: absolute;
+  top: 0.6rem;
+  z-index: 2;
+  padding: 0.2rem 0.45rem;
+  background: rgb(16 19 20 / 82%);
+  color: #fff;
+  font-family: var(--mono);
+  font-size: 0.66rem;
+  pointer-events: none;
+}
+
+/*
+ * Swipe reveals the current version from the left, so its label sits left and
+ * the historical one sits right. Side by side puts the panes in DOM order,
+ * historical then current, so the labels swap with them. They are stage
+ * children rather than pane children because a label inside the current pane
+ * would be clipped away with it at the far end of the swipe.
+ */
+.compare-label-before {
+  right: 0.6rem;
+}
+
+.compare-label-current {
+  left: 0.6rem;
+}
+
+.compare-stage[data-layout='split'] .compare-label-before {
+  right: auto;
+  left: 0.6rem;
+}
+
+.compare-stage[data-layout='split'] .compare-label-current {
+  left: auto;
+  right: 0.6rem;
+}
+
+.compare-controls {
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+  margin-top: 0.75rem;
+}
+
+.compare-layout {
+  display: flex;
+  flex: none;
+  border: 1px solid var(--rule-strong);
+}
+
+.compare-layout .action {
+  padding: 0.35rem 0.7rem;
+}
+
+.compare-layout .action[aria-pressed='true'] {
+  background: var(--patina);
+  color: #fff;
+}
+
+.compare-swipe {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex: 1;
+  min-width: 0;
+  color: var(--ink-soft);
+  font-size: 0.78rem;
+}
+
+.compare-swipe span {
+  flex: none;
+}
+
+.compare-swipe input {
+  flex: 1;
+  min-width: 4rem;
+  accent-color: var(--patina);
+}
+
+.diff-rendered-result {
+  margin-top: 1rem;
+}
+
+/* What changed, in rendered terms. Attacker text arrives as text nodes. */
+.diff-change-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid var(--rule);
+  background: var(--surface);
+  font-size: 0.84rem;
+}
+
+.diff-change {
+  display: grid;
+  grid-template-columns: 5.5rem 7rem minmax(0, 1fr);
+  gap: 0.75rem;
+  padding: 0.5rem 0.75rem;
+}
+
+.diff-change + .diff-change {
+  border-top: 1px solid var(--rule);
+}
+
+.diff-change-kind {
+  font-family: var(--mono);
+  font-size: 0.68rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.diff-change-added .diff-change-kind {
+  color: var(--patina-ink);
+}
+
+.diff-change-removed .diff-change-kind {
+  color: var(--oxide);
+}
+
+.diff-change-what {
+  color: var(--ink-soft);
+}
+
+.diff-change-detail {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.diff-change-detail del {
+  background: var(--diff-removed);
+  text-decoration-thickness: 1px;
+}
+
+.diff-change-detail ins {
+  background: var(--diff-added);
+  margin-left: 0.4rem;
+  text-decoration: none;
+}
+
+.diff-result {
+  padding-top: 1rem;
+}
+
+.diff-loading {
+  margin: 2rem 0;
+  color: var(--ink-soft);
+  font-family: var(--mono);
+  font-size: 0.82rem;
+}
+
+.diff-view {
+  min-width: 0;
+}
+
+.diff-summary {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.75rem;
+  font-family: var(--mono);
+  font-size: 0.76rem;
+}
+
+.diff-summary span {
+  color: var(--ink-soft);
+  text-align: right;
+}
+
+.diff-empty {
+  display: grid;
+  gap: 0.25rem;
+  padding: 1.25rem;
+  border: 1px solid var(--rule);
+  border-top: 3px solid var(--patina);
+  background: var(--surface);
+}
+
+.diff-empty span {
+  color: var(--ink-soft);
+  font-size: 0.86rem;
+}
+
+.diff-changes {
+  overflow: hidden;
+  border: 1px solid var(--rule-strong);
+  background: var(--surface);
+  font-family: var(--mono);
+  font-size: 0.78rem;
+  line-height: 1.6;
+}
+
+.diff-part {
+  display: grid;
+  grid-template-columns: 3.2rem 3.2rem minmax(0, 1fr);
+}
+
+.diff-part + .diff-part {
+  border-top: 1px solid var(--rule);
+}
+
+.diff-part-added {
+  background: var(--diff-added);
+}
+
+.diff-part-removed {
+  background: var(--diff-removed);
+}
+
+.diff-part-unchanged {
+  color: var(--ink-soft);
+}
+
+.diff-gutter,
+.diff-body {
+  min-width: 0;
+  margin: 0;
+  padding: 0.5rem 0.65rem;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.diff-gutter {
+  text-align: right;
+  color: var(--ink-soft);
+  background: color-mix(in srgb, var(--ground) 75%, transparent);
+  border-right: 1px solid var(--rule);
+  user-select: none;
+}
+
+.diff-body {
+  overflow-x: auto;
+  color: var(--ink);
+}
+
+.diff-inline-added {
+  background: var(--diff-added-strong);
+  color: var(--ink);
+  font-weight: 700;
+}
+
+.diff-inline-removed {
+  background: var(--diff-removed-strong);
+  color: var(--ink);
+  font-weight: 700;
+}
+
+.image-diff-canvas {
+  --split: 50%;
+  position: relative;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  min-height: 16rem;
+  border: 1px solid var(--rule-strong);
+  background: var(--surface);
+}
+
+.image-diff-canvas img {
+  grid-area: 1 / 1;
+  display: block;
+  width: 100%;
+  max-height: 70vh;
+  object-fit: contain;
+}
+
+.image-diff-current {
+  clip-path: inset(0 calc(100% - var(--split)) 0 0);
+}
+
+.image-diff-divider {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: var(--split);
+  width: 1px;
+  background: #fff;
+  box-shadow: 0 0 0 1px rgb(0 0 0 / 35%);
+  pointer-events: none;
+}
+
+.image-diff-label {
+  position: absolute;
+  top: 0.75rem;
+  padding: 0.25rem 0.45rem;
+  background: rgb(16 19 20 / 82%);
+  color: #fff;
+  font-family: var(--mono);
+  font-size: 0.68rem;
+  pointer-events: none;
+}
+
+.image-diff-label-before {
+  right: 0.75rem;
+}
+
+.image-diff-label-current {
+  left: 0.75rem;
+}
+
+.image-diff-control {
+  display: grid;
+  gap: 0.45rem;
+  margin-top: 0.75rem;
+  color: var(--ink-soft);
+  font-size: 0.78rem;
+}
+
+.image-diff-control input {
+  width: 100%;
+  accent-color: var(--patina);
+}
+
+@media (max-width: 44rem) {
+  .stage-diff {
+    padding: 1rem 0.65rem 3rem;
+  }
+
+  .diff-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 0.85rem;
+  }
+
+  /* Two columns of prose at 320px is two columns of nothing, so a split
+     layout stacks and the swipe control keeps working either way. */
+  .compare-stage[data-layout='split'] {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .compare-stage[data-layout='split'] .compare-pane-before {
+    border-right: 0;
+    border-bottom: 1px solid var(--rule-strong);
+  }
+
+  /* Stacked, the two labels would both sit at the top of the stage and the
+     current one would name the historical pane. It moves to the foot, which
+     is where its pane now is. */
+  .compare-stage[data-layout='split'] .compare-label-current {
+    top: auto;
+    bottom: 0.6rem;
+  }
+
+  .compare-pane,
+  .compare-pane .usercontent-frame {
+    max-height: 60vh;
+    height: 60vh;
+  }
+
+  .compare-pane .prose {
+    padding: 0.9rem 1rem;
+  }
+
+  .compare-controls {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 0.6rem;
+  }
+
+  .diff-change {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.15rem;
+  }
+
+  .diff-summary {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 0.2rem;
+  }
+
+  .diff-summary span {
+    text-align: left;
+  }
+
+  .diff-part {
+    grid-template-columns: 2.35rem 2.35rem minmax(0, 1fr);
+  }
+
+  .diff-gutter,
+  .diff-body {
+    padding: 0.4rem;
+  }
+
+  .image-diff-canvas {
+    min-height: 10rem;
+  }
 }
 
 /* ---------- toast ---------- */

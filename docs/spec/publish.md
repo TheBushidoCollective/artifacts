@@ -14,15 +14,15 @@ The pin isn't housekeeping. Tool-result semantics are revision-dependent, so a d
 
 ## 1. The MCP tool surface
 
-### 1.1 The tool name
+### 1.1 The tool names
 
-**The tool is named `relic_publish`.** One name, stable across releases, and renaming it is a breaking change because every saved agent instruction and every project prompt references it by string.
+**The workflow tools are named `relic_publish`, `relic_lookup_source`, and `relic_republish`.** Each name is stable across releases, and renaming one is a breaking change because saved agent instructions and project prompts reference it by string.
 
 The spec allows a wide field: names run "between 1 and 128 characters in length (inclusive)", are case-sensitive, and are limited to ASCII letters, digits, underscore, hyphen, and dot ([MCP tools](https://modelcontextprotocol.io/specification/2026-07-28/server/tools)). Uniqueness is only guaranteed inside one server. The spec then names the hazard directly: clients that aggregate tools from multiple servers may hit collisions and should implement "a disambiguation strategy such as prefixing tool names with a server identifier", and the server's own `name` "is not guaranteed to be unique across servers" so it can't be leaned on for that.
 
 A bare `publish` collides with incumbent publishing MCP servers, and the consequence is a security outcome produced by a naming decision. The model asks for `publish`, the client disambiguates to whichever server it prefers, and the file lands on a service with different encryption or none. The publisher sees a URL come back and has no way to tell which service produced it. Prefixing with the product name makes that collision essentially impossible, and it's the spec's own remedy taken literally rather than a house convention: a prefix is the leading segment, so "prefixing tool names with a server identifier" puts the identifier first, which is what `relic_publish` spells. Putting the product first also groups every Relic tool together in an aggregated list, which is what a human scanning `/mcp` actually reads.
 
-`relic_republish` follows the same naming rule for the same reason: an aggregated client asked for `republish` disambiguates to whichever server it prefers, and every argument this section makes against a bare `publish` is the same argument against a bare `republish`.
+`relic_lookup_source` and `relic_republish` follow the same naming rule. A bare `lookup_source` can resolve against another server's state, and a bare `republish` can update the wrong service. The product prefix keeps the read and write on Relic's local surface.
 
 ### 1.2 The input schema
 
@@ -33,12 +33,21 @@ A bare `publish` collides with incumbent publishing MCP servers, and the consequ
 | `path` | string | yes | Filesystem path to the file to publish |
 | `filename` | string | no | Overrides the name written into the encrypted envelope header |
 | `ttl_days` | integer | no | Publisher-requested lifetime in days, 1 to 3650. Absent means the relic never expires |
+| `force_new` | boolean | no | Deliberately creates a separate relic from a source already recorded locally. Defaults to `false` |
 
 **`ttl_days` is the publisher's lifetime and passes through to the grant request.** An integer from 1 to 3650, or absent, and absent is the default: the relic never expires. The tool does not invent a value and does not clamp one. A value outside the range is the server's to refuse, with `invalid_publish_metadata` (`service.md` 1.1 case 12), because the range is publish policy rather than client validation, and the grant response's `relic_expires_at` (1.3) is what actually happened.
 
 **Inline content is not accepted, and there is no `content` member.** A path keeps the plaintext out of the model's context entirely, so only the key leaks upward. Inline content puts the plaintext in the transcript too, compounding the leak from "the key leaks" to "the key and the file leak." Accepting both without a stated preference is the worst option available, because a model already holding the bytes inlines by default and the safe path becomes the one nobody takes. A caller holding generated content in context writes it to disk first. In that case the plaintext was already in the transcript, so the rule loses nothing there and wins the common case, where an agent publishes a file it produced with a tool rather than in its own output.
 
 **A relative `path` resolves against the server process's working directory, and the result echoes the resolved absolute path**, so a publish that picked up the wrong file is diagnosable from the result instead of a support thread.
+
+**Prior-publish detection uses logical source identity, never the resolved absolute path.** Inside a Git repository with a remote, the identity is the normalized remote plus the repository-relative path. Transport, credentials, a trailing `.git`, and case do not distinguish `git@github.com:Org/Repo.git` from `https://github.com/org/repo`; both normalize to `github.com/org/repo`. With no remote, the identity is the realpath of `git rev-parse --git-common-dir` plus the repository-relative path. Git defines `--git-common-dir` as the shared repository directory, which is the part every linked worktree has in common ([Git rev-parse](https://git-scm.com/docs/git-rev-parse)). Outside Git, identity is the file's realpath. Content is never an identity input, because changed content is why republishing exists.
+
+**The local state file carries both directions.** Each relic entry keeps its existing key, publish token, and version, then adds the source identity and the human-readable facts behind it. A reverse `sources` index maps identity to relic id. A file written by an older client has neither field; it still loads and republishes by id, but it cannot participate in source lookup. Writes remain queued and atomic, preserve unknown fields and every other entry, and keep the existing 0600 file inside a 0700 directory.
+
+**A source match refuses `relic_publish` before any HTTP.** The `source_already_published` result carries the relic id, current version, source description, exact `relic_republish` call, and the cost: publishing new would create a second URL that nobody holding the first one will ever see. `force_new: true` is the explicit escape for a deliberately independent relic. It publishes normally, keeps both relic entries, and points the reverse index at the newly chosen relic.
+
+**`relic_lookup_source` exposes the same decision without attempting a write.** It takes `path`, resolves the same local identity, reads no file bytes, calls no server, and returns the matched relic id and version plus the exact `relic_republish` call. A miss returns `found: false`, null id, null version, and the resolved source description. This is local machine state, not an account, identity system, dashboard, or relic list.
 
 **The renderer class is not a tool input.** The frame locks it as client-declared, meaning declared by the local binary that holds the plaintext. Exposing it as a parameter makes the taxonomy model-attested, and the metric's second clause then has an unreliable narrator reporting its only input. The binary derives the class from the decrypted-side bytes it already holds: magic-byte sniffing first, the extension as a fallback when sniffing is inconclusive, and `binary` when both are. `format.md` 3.9 overrides all of it in one case, unconditionally: zero-byte content declares `binary` regardless of filename, extension, or sniffed type. The derived class is echoed in the result (1.3) because a publisher with no dashboard has no other way to see what was reported about them.
 
@@ -52,13 +61,14 @@ A bare `publish` collides with incumbent publishing MCP servers, and the consequ
 
 ### 1.3 The result shape
 
-Success returns `structuredContent` with eight members, all required:
+Success returns `structuredContent` with nine members, all required:
 
 - **`url`** the full URL including the fragment. Without the fragment the model can't produce a usable link, which is the product.
 - **`relic_id`** the normalized canonical ID, separately. Every operator-facing workflow takes the ID with the fragment already stripped: abuse reports, takedown requests, support tickets. Making a caller slice it out of a URL means somebody eventually slices wrong.
 - **`relic_expires_at`** RFC 3339, UTC, or `null` when the relic has no publisher-set lifetime and never expires. Taken from the grant response and never computed locally, because `service.md` section 3 makes the app server's clock authoritative for every lifetime-bearing timestamp. A CI job reads it to know whether the link outlives the pipeline that mailed it; `null` says it does.
 - **`renderer_class`** the derived class, echoed as disclosure of what was reported.
 - **`filename`** the string written into the envelope header, echoed because the caller may have overridden it.
+- **`resolved_path`** the absolute path the client actually read, echoed so a wrong working directory is diagnosable.
 - **`report_url`** the stable `/abuse` URL.
 - **`disclosure_url`** the published statement `service.md` section 5 specifies.
 - **`version`** the relic's version, `1` on a first publish. The row counts publishes (`format.md` 3.12); a republish result carries the new number. It counts relic versions, never format revisions, which live in the fragment marker on a different axis (`format.md` 2.2).
@@ -77,9 +87,9 @@ That gives `disclosure_url` and `report_url` two sources, so they get a reconcil
 
 These interact, so they're one decision.
 
-**`outputSchema` is declared, strict, with all eight members of 1.3 required. `structuredContent` appears on success only. Every failure returns `isError: true` with no `structuredContent` at all.**
+**`outputSchema` is declared, strict, with all nine success members of 1.3 required. Every tool failure returns `isError: true` and a separate error `structuredContent` object led by `code`.**
 
-The spec's requirement is conditional, and reading it precisely is what makes this shape legal rather than clever: where an output schema is provided, servers must "provide structured results that conform to this schema" ([MCP tools](https://modelcontextprotocol.io/specification/2026-07-28/server/tools)). It binds the structured results a server provides. It doesn't oblige a server to provide structured results on every call. An error result that carries no structured content provides none, conforms to nothing, and violates nothing.
+The success schema stays strict instead of making `url` nullable for errors. A client keys on `isError` before validating against that success schema. Error `structuredContent` is the actionable machine shape: `source_already_published` needs an agent to read `relic_id`, `version`, and `republish_call` without parsing prose. MCP calls these tool execution errors and says clients should provide them to models for self-correction ([MCP tools](https://modelcontextprotocol.io/specification/2026-07-28/server/tools)).
 
 The alternatives are worse in ways that matter. A permissive schema with a nullable `url` throws away validation on the success path, which is the path a caller depends on, and it invites a client to hand the model a typed object whose URL is null. A conforming object with a null URL is a lie in a typed field. Omitting `outputSchema` entirely loses typing everywhere to buy uniformity on the error path.
 
@@ -99,7 +109,7 @@ The spec names three protocol-error categories, not two, and the split has to be
 
 **Everything else sets `isError: true` on a normal result.** Every Group A refusal, every Group B failure, a path that doesn't exist, a network failure mid-upload, a rate limit, a collision. The spec's own category is tool execution errors, which "contain actionable feedback that language models can use to self-correct and retry with adjusted parameters". Leaving this unstated is how an implementer returns a protocol error for a missing file, which the model then can't self-correct from, discarding the entire point of the field-level mapping in section 2.
 
-**The body of every `isError: true` result is the RFC 9457 problem document from section 2, serialized as JSON in a text block.** One shape for both groups. A client that validates results against `outputSchema` must key on `isError` and must not read the absence of `structuredContent` as a validation failure.
+**Every `isError: true` result carries a text block led by `code: message` and `structuredContent` containing `code` plus its named extension members.** App-server refusals preserve the RFC 9457 problem extensions. Local refusals carry the client fields from section 2.2. For `source_already_published`, those fields are `relic_id`, `version`, `source_identity`, `source_description`, `cost`, and `republish_call`.
 
 ### 1.5 Progress notifications
 
@@ -113,9 +123,9 @@ One property is load-bearing and easy to get backwards: **progress defeats the i
 
 **When no progress token is supplied, the server can't keep the call warm and doesn't try.** The orphan risk returns in full, and the mitigation is section 4.7: the client generated the ID and the key before anything left the machine, so the URL exists in the tool's own hands regardless of what happens to the response.
 
-### 1.6 Two tools, and why there's still no delete tool
+### 1.6 Four tools, and why there's still no delete tool
 
-**`relic_publish` and `relic_republish` are the whole surface.** The second name arrived with the reversal recorded in the frame's non-goals: republish-to-same-URL now exists, authorized by a bearer publish token rather than identity. The naming rule of 1.1 applies unchanged, product prefix first, so an aggregated client that disambiguates `republish` lands on Relic's rather than on whichever other server answers to the bare word.
+**The surface is three workflow tools plus one inspection tool.** `relic_publish` creates a new encrypted URL. `relic_lookup_source` reads local state to recover the id for an existing source. `relic_republish` updates that id under its original key and token. `relic_describe_client` explains the client without reading a source or calling the service. Lookup stays separate because the agent needs the id before it chooses a write; hiding lookup inside either write makes the answer observable only after choosing. The naming rule of 1.1 applies to all four.
 
 **A publisher still cannot delete their own relic, and the reasoning had to be restated rather than left where it was, because the reversal broke half of it.** With no accounts, a publisher-side delete has to be authorized by something the publisher holds, and there were exactly two candidates. Authorizing on anything derivable from the URL means every recipient can delete the relic, which hands a link-holder a destructive capability the publisher never granted and reproduces the burn-after-reading failure the frame ruled out for the first release. That candidate is dead on arrival and nothing reversed it. The other was a separately stored token, and the old objection was that keeping durable per-relic state on disk is a relic list under another name with no locked surface to house it. That objection is spent: republish pays exactly that cost, the key and token persisted on the publishing machine, so the state exists and the token is in hand. What keeps self-delete out of this change is not architecture but the abuse posture: deletion is the takedown primitive, it is operator-audited end to end (section 4 of `service.md`), and a publisher-side path through the same machinery would sit beside the audit trail rather than inside it. The token makes a self-delete tool specifiable where it used to be foreclosed; if a later station adds one, that station owns the audit question, and this paragraph is what it reopens.
 
@@ -169,6 +179,7 @@ Every code names its leg in its prefix. `source_*` is the local read path with n
 | `source_unreadable` | Exists, can't be opened or read | `path` |
 | `source_is_directory` | `path` is a directory (1.2) | `path` |
 | `source_not_regular_file` | FIFO, socket, or device node (1.2) | `path` |
+| `source_already_published` | Source identity maps to a local relic and `force_new` is false | `relic_id`, `version`, `source_identity`, `source_description`, `cost`, `republish_call` |
 | `source_changed_during_read` | Size or mtime moved between the stat and the end of the read | `path`, `declared_size_bytes` |
 | `local_invalid_arguments` | Arguments satisfy `CallToolRequest` and fail this tool's `inputSchema` (1.4) | `schema_path` |
 | `local_entropy_unavailable` | The platform CSPRNG failed or is unavailable | none |

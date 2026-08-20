@@ -33,9 +33,11 @@ import {
   unsupportedVersionError,
 } from './protocol.ts';
 import {
+  lookupPublishedSource,
   type PublishDeps,
   PublishError,
   publish,
+  republishToolCall,
   ServerRefusal,
 } from './publish.ts';
 import { republish } from './republish.ts';
@@ -87,6 +89,15 @@ export const DESCRIBE_TOOL_NAME = 'relic_describe_client';
 export const REPUBLISH_TOOL_NAME = 'relic_republish';
 
 /**
+ * Source lookup is a separate read-only tool.
+ *
+ * An agent needs the id before it chooses publish or republish, and a lookup
+ * hidden inside either write tool would only be observable after choosing the
+ * wrong one. This call reads local state and never contacts the service.
+ */
+export const LOOKUP_TOOL_NAME = 'relic_lookup_source';
+
+/**
  * The ceiling on a publisher-supplied lifetime, matching the grant
  * contract's `maxTtlDays`. Refusing here keeps a typo like 36500 from
  * encrypting the file and round-tripping a grant only to be turned down
@@ -98,9 +109,12 @@ export const TOOL_DEFINITION = {
   name: TOOL_NAME,
   title: 'Publish a relic',
   description:
-    'Encrypt a file on this machine and publish it as a relic, returning a ' +
-    'shareable URL. The encryption key is generated locally and never sent ' +
-    'to the service. Takes a filesystem path, never inline content.',
+    'Encrypt a file on this machine and publish it as a new relic, returning ' +
+    'a shareable URL. Publishing an update this way costs a second URL that ' +
+    'nobody holding the first one will ever see; use relic_republish instead ' +
+    'so the existing URL keeps working. The encryption key is generated ' +
+    'locally and never sent to the service. Takes a filesystem path, never ' +
+    'inline content.',
   inputSchema: {
     type: 'object',
     properties: {
@@ -122,6 +136,14 @@ export const TOOL_DEFINITION = {
           'Optional. Gives the relic a lifetime in days. Omit it and the ' +
           'relic is kept until it is deleted. Shorter is better for ' +
           'sensitive content.',
+      },
+      force_new: {
+        type: 'boolean',
+        default: false,
+        description:
+          'Optional. Publish a deliberately separate relic even when this ' +
+          'machine already published the same source. Defaults to false. Use ' +
+          'only when you want two independent URLs for one file.',
       },
     },
     required: ['path'],
@@ -228,6 +250,64 @@ export const REPUBLISH_TOOL_DEFINITION = {
   },
 } as const;
 
+export const LOOKUP_TOOL_DEFINITION = {
+  name: LOOKUP_TOOL_NAME,
+  title: 'Look up a published source',
+  description:
+    'Look up whether this machine already published a file and return the ' +
+    'relic id needed by relic_republish. Reads local publish state only and ' +
+    'never calls the service.',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      path: {
+        type: 'string',
+        description: 'Filesystem path to the source to look up.',
+      },
+    },
+    required: ['path'],
+    additionalProperties: false,
+  },
+  outputSchema: {
+    type: 'object',
+    properties: {
+      found: { type: 'boolean' },
+      relic_id: { type: ['string', 'null'] },
+      version: { type: ['integer', 'null'], minimum: 1 },
+      resolved_path: { type: 'string' },
+      source_identity: { type: 'string' },
+      source_description: { type: 'string' },
+      republish_call: {
+        type: ['object', 'null'],
+        properties: {
+          name: { type: 'string', const: REPUBLISH_TOOL_NAME },
+          arguments: {
+            type: 'object',
+            properties: {
+              relic_id: { type: 'string' },
+              path: { type: 'string' },
+            },
+            required: ['relic_id', 'path'],
+            additionalProperties: false,
+          },
+        },
+        required: ['name', 'arguments'],
+        additionalProperties: false,
+      },
+    },
+    required: [
+      'found',
+      'relic_id',
+      'version',
+      'resolved_path',
+      'source_identity',
+      'source_description',
+      'republish_call',
+    ],
+    additionalProperties: false,
+  },
+} as const;
+
 export const DESCRIBE_TOOL_DEFINITION = {
   name: DESCRIBE_TOOL_NAME,
   title: 'Describe the Relic client',
@@ -269,9 +349,9 @@ export const CAPABILITIES = { tools: {} } as const;
  * The plugin ships a skill with the same facts, but a skill only reaches
  * Claude Code, and only when somebody installs the plugin rather than wiring
  * this server directly. Every other client saw tool descriptions and nothing
- * else, which left four things an agent cannot read off a schema.
+ * else, which left five things an agent cannot read off a schema.
  *
- * Item four is the reason this exists at all rather than living only in the
+ * Item five is the reason this exists at all rather than living only in the
  * publish result. The result is returned after the file is written, which is
  * too late for an agent that already linked a stylesheet from a CDN. This
  * lands before generation, which is the only moment the advice can be taken.
@@ -279,20 +359,24 @@ export const CAPABILITIES = { tools: {} } as const;
  * It costs context on every session, so it stays short and it stays true.
  * Anything that needs a paragraph belongs in the skill or the disclosure.
  */
-export const INSTRUCTIONS = `Relic turns a file on this machine into an \
-encrypted link. Encryption happens locally, only ciphertext is uploaded, and \
-the key lives in the URL fragment, which browsers never send to a server.
+export const INSTRUCTIONS = `Relic encrypts a file on this machine and uploads \
+only ciphertext. The key lives in the URL fragment, which browsers never send \
+to a server.
 
-Four things that change how you should act:
+Five things that change how you should act:
 
 1. The link is the credential. Anyone holding it, fragment included, can read \
 the file. Do not paste it into a tracker, a log, or a public channel.
 2. Publishing puts the key in this transcript. That is structural rather than \
 a defect, and worth saying plainly when you hand the link over.
-3. A relic can be republished only from the machine that published it, which \
+3. If a source was published before, use relic_republish so its URL keeps \
+working. Publishing it as new costs a second URL that nobody holding the first \
+one will ever see. relic_publish refuses by default, relic_lookup_source \
+recovers the id, and force_new is only for a deliberate second link.
+4. A relic can be republished only from the machine that published it, which \
 is where its key and publish token are stored. Anywhere else it refuses, and \
 no retry changes that.
-4. Rendered HTML and JSX run in an isolated frame with no network access. \
+5. Rendered HTML and JSX run in an isolated frame with no network access. \
 Inline the styles, scripts, fonts, and images a page needs, because a CDN \
 reference renders as nothing. Decide that before you write the file.`;
 
@@ -362,6 +446,7 @@ export async function handleMessage(
         result: {
           tools: [
             TOOL_DEFINITION,
+            LOOKUP_TOOL_DEFINITION,
             REPUBLISH_TOOL_DEFINITION,
             DESCRIBE_TOOL_DEFINITION,
           ],
@@ -418,13 +503,18 @@ async function callTool(
           plaintext_transmitted_to_service: false,
           ciphertext_destination: 'object storage, via a signed URL',
           local_publish_state:
-            'relic id, key, and publish token per relic, written 0600 under ' +
-            'the user config directory; never printed, never sent',
+            'relic id, source identity, key, and publish token per relic, ' +
+            'written 0600 under the user config directory; key and token ' +
+            'are never printed or sent',
           service_origin: deps.serviceOrigin,
         },
         isError: false,
       },
     };
+  }
+
+  if (params['name'] === LOOKUP_TOOL_NAME) {
+    return callLookup(id, params, deps);
   }
 
   if (params['name'] === REPUBLISH_TOOL_NAME) {
@@ -462,9 +552,23 @@ async function callTool(
     );
   }
 
+  const forceNew = args['force_new'];
+  if (forceNew !== undefined && typeof forceNew !== 'boolean') {
+    return errorResponse(
+      id,
+      ERROR_CODES.invalidParams,
+      '`force_new` must be a boolean or omitted'
+    );
+  }
+
   try {
     const result = await publish(
-      { path, filename, ttl_days: ttlDays.days },
+      {
+        path,
+        filename,
+        ttl_days: ttlDays.days,
+        force_new: forceNew === true,
+      },
       deps
     );
     return {
@@ -499,6 +603,63 @@ async function callTool(
           },
         ],
         structuredContent: result,
+        isError: false,
+      },
+    };
+  } catch (error) {
+    return { jsonrpc: '2.0', id, result: toolError(error) };
+  }
+}
+
+async function callLookup(
+  id: string | number | null,
+  params: Record<string, unknown>,
+  deps: PublishDeps
+): Promise<JsonRpcResponse> {
+  const args = (params['arguments'] ?? {}) as Record<string, unknown>;
+  const path = args['path'];
+  if (typeof path !== 'string' || path.length === 0) {
+    return errorResponse(
+      id,
+      ERROR_CODES.invalidParams,
+      '`path` is required and must be a string'
+    );
+  }
+
+  try {
+    const lookup = await lookupPublishedSource(path, deps);
+    const match = lookup.match;
+    const republishCall =
+      match === undefined
+        ? null
+        : republishToolCall(match.relic_id, lookup.resolved_path);
+    const structuredContent = {
+      found: match !== undefined,
+      relic_id: match?.relic_id ?? null,
+      version: match?.version ?? null,
+      resolved_path: lookup.resolved_path,
+      source_identity: lookup.source.identity,
+      source_description: lookup.source.description,
+      republish_call: republishCall,
+    };
+    return {
+      jsonrpc: '2.0',
+      id,
+      result: {
+        content: [
+          {
+            type: 'text',
+            text:
+              match === undefined
+                ? `No prior relic is recorded for ${lookup.source.description}.`
+                : `Found ${lookup.source.description} as version ` +
+                  `${match.version} of relic ${match.relic_id}.\n` +
+                  `Call relic_republish(${JSON.stringify(
+                    republishCall?.arguments
+                  )}).`,
+          },
+        ],
+        structuredContent,
         isError: false,
       },
     };
@@ -691,13 +852,14 @@ What the service operator can see: that a relic exists, roughly how big it is,
 what coarse class it was declared as, the publishing IP, and when it was
 fetched. Never the contents, and never the key.
 
-What this keeps on disk: for each relic you publish, its id, its key, and a
-publish token, in a 0600 file under your user config directory. That record
-is what lets a relic be republished later, and it is why republishing works
+What this keeps on disk: for each relic you publish, its id, source identity,
+key, and publish token, in a 0600 file under your user config directory. The
+source index lets a fresh session find the id for relic_republish. The key and
+token let that republish keep the same URL, and they are why republishing works
 only on the machine that published. The token's SHA-256 is the only copy the
-service ever holds, and neither secret is ever printed or logged. Deleting
-the file changes nothing for existing links; it only ends this machine's
-ability to update those relics.
+service ever holds, and neither secret is ever printed or logged. Deleting the
+file changes nothing for existing links; it only ends this machine's ability
+to update those relics.
 
 What this does NOT protect against: the key is returned to your agent in the
 URL, so it enters the model's context and your session transcript. That is

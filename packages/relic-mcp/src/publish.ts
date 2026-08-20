@@ -21,7 +21,12 @@ import {
   type RendererClass,
   relicUrl,
 } from '@relic/format';
-import { savePublishState } from './state.ts';
+import {
+  loadPublishedSource,
+  resolveSourceIdentity,
+  type SourceIdentity,
+  savePublishState,
+} from './state.ts';
 
 /**
  * Codes for the legs the app server is not in.
@@ -37,6 +42,7 @@ export type ClientCode =
   | 'source_is_directory'
   | 'source_not_regular_file'
   | 'source_unreadable'
+  | 'source_already_published'
   | 'local_size_precheck_failed'
   | 'upload_failed'
   | 'service_unreachable'
@@ -96,6 +102,11 @@ export interface PublishInput {
    * to survive the wire.
    */
   readonly ttl_days?: number | undefined;
+  /**
+   * Bypass prior-publish refusal only when a second independent URL is
+   * intentional. False and undefined both preserve the existing URL.
+   */
+  readonly force_new?: boolean | undefined;
 }
 
 export interface PublishResult {
@@ -121,8 +132,86 @@ export interface PublishDeps {
   readonly files: FileReader;
   readonly fetch: typeof globalThis.fetch;
   readonly clientName: string;
+  /** Test seam for a filesystem that does not exist outside memory. */
+  readonly identifySource?: (path: string) => Promise<SourceIdentity>;
   /** Retries on a colliding ID, which format.md 1.4 obliges the client to do. */
   readonly maxCollisionRetries?: number;
+}
+
+export interface RepublishToolCall {
+  readonly name: 'relic_republish';
+  readonly arguments: {
+    readonly relic_id: string;
+    readonly path: string;
+  };
+}
+
+export interface PriorPublish {
+  readonly relic_id: string;
+  readonly version: number;
+  readonly source: SourceIdentity;
+}
+
+export interface PublishedSourceLookup {
+  readonly resolved_path: string;
+  readonly source: SourceIdentity;
+  readonly match?: PriorPublish | undefined;
+}
+
+/** The complete call an agent can make without retaining an earlier session. */
+export function republishToolCall(
+  relicId: string,
+  path: string
+): RepublishToolCall {
+  return {
+    name: 'relic_republish',
+    arguments: { relic_id: relicId, path },
+  };
+}
+
+async function lookupResolvedSource(
+  resolvedPath: string,
+  deps: PublishDeps
+): Promise<PublishedSourceLookup> {
+  let source: SourceIdentity;
+  try {
+    source = await (deps.identifySource ?? resolveSourceIdentity)(resolvedPath);
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    throw new PublishError(
+      code === 'ENOENT' ? 'source_not_found' : 'source_unreadable',
+      `could not resolve source identity for ${resolvedPath}: ` +
+        (error as Error).message,
+      { path: resolvedPath }
+    );
+  }
+
+  try {
+    const published = await loadPublishedSource(source);
+    return {
+      resolved_path: resolvedPath,
+      source,
+      ...(published === undefined
+        ? {}
+        : {
+            match: {
+              relic_id: published.relic_id,
+              version: published.state.version,
+              source: published.source,
+            },
+          }),
+    };
+  } catch (error) {
+    throw new PublishError('local_state_unreadable', (error as Error).message);
+  }
+}
+
+/** Look up a path in local state without reading its bytes or calling a server. */
+export async function lookupPublishedSource(
+  path: string,
+  deps: PublishDeps
+): Promise<PublishedSourceLookup> {
+  return lookupResolvedSource(deps.files.resolve(path), deps);
 }
 
 export async function publish(
@@ -130,6 +219,30 @@ export async function publish(
   deps: PublishDeps
 ): Promise<PublishResult> {
   const source = await readSource(input.path, deps.files);
+  const sourceLookup = await lookupResolvedSource(source.resolvedPath, deps);
+  if (sourceLookup.match !== undefined && input.force_new !== true) {
+    const match = sourceLookup.match;
+    const republishCall = republishToolCall(
+      match.relic_id,
+      source.resolvedPath
+    );
+    const cost = 'a second URL that nobody holding the first one will ever see';
+    throw new PublishError(
+      'source_already_published',
+      `${match.source.description} is already version ${match.version} of ` +
+        `relic ${match.relic_id}. Publishing it as new would cost ${cost}. ` +
+        `Call relic_republish(${JSON.stringify(republishCall.arguments)}) ` +
+        'instead. Set force_new to true only when you intend a separate relic.',
+      {
+        relic_id: match.relic_id,
+        version: match.version,
+        source_identity: match.source.identity,
+        source_description: match.source.description,
+        cost,
+        republish_call: republishCall,
+      }
+    );
+  }
 
   // 1. Challenge. This returns the cap before a grant is requested, so the
   //    precheck below uses a number that came from the server moments ago
@@ -243,6 +356,7 @@ export async function publish(
         key: encodeKey(key),
         publish_token: publishToken,
         version: 1,
+        source: sourceLookup.source,
       });
     } catch (error) {
       // The relic itself is live and the URL works, so both are handed over

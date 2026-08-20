@@ -223,11 +223,13 @@ describe('source identity', () => {
   });
 
   test('uses realpath outside Git so a symlink cannot hide a prior publish', async () => {
-    const source = join(scratch, 'outside', 'report.md');
-    const alias = join(scratch, 'outside', 'report-alias.md');
-    await mkdir(join(scratch, 'outside'), { recursive: true });
+    const realDirectory = join(scratch, 'outside', 'real');
+    const aliasDirectory = join(scratch, 'outside', 'alias');
+    const source = join(realDirectory, 'report.md');
+    const alias = join(aliasDirectory, 'report.md');
+    await mkdir(realDirectory, { recursive: true });
     await writeFile(source, '# first\n');
-    await symlink(source, alias);
+    await symlink(realDirectory, aliasDirectory);
     const first = await publish({ path: source }, deps);
 
     const refused = await callTool(TOOL_NAME, { path: alias });

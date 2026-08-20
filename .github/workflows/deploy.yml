@@ -14,6 +14,10 @@ on:
         description: 'Engage the egress kill switch (refuses every mint and publish)'
         type: boolean
         default: false
+      unlock_lock_id:
+        description: 'Stale Terraform lock ID to force-unlock before this deploy continues'
+        type: string
+        default: ''
 
 # One deploy at a time, and never cancel one in flight: a half-applied
 # Terraform run is worse than a queued one.
@@ -35,7 +39,7 @@ jobs:
   deploy:
     needs: verify
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 45
     environment: production
 
     steps:
@@ -77,6 +81,12 @@ jobs:
         working-directory: deploy/terraform
         run: terraform init -input=false
 
+      - name: Force-unlock a leftover lock
+        if: ${{ inputs.unlock_lock_id != '' }}
+        working-directory: deploy/terraform
+        run: terraform force-unlock -force "${{ inputs.unlock_lock_id }}"
+
+
       - name: Terraform format check
         working-directory: deploy/terraform
         run: terraform fmt -check -recursive
@@ -95,6 +105,16 @@ jobs:
       - name: Terraform apply
         working-directory: deploy/terraform
         run: terraform apply -input=false -auto-approve tfplan
+
+      - name: Drop the lock if this run is cancelled mid-apply
+        if: cancelled()
+        working-directory: deploy/terraform
+        run: |
+          # A cancelled runner cannot run terraform's own unlock: the process
+          # that held the lock is already dead. The lock is a GCS object.
+          # Deleting it is what force-unlock does, and leaving it is what
+          # turned a 20-minute timeout into every later deploy failing.
+          gsutil rm -f gs://thebushido-co-tfstate/relic/default.tflock || true
 
       - name: Report the deployed origins and DNS delegation
         id: urls

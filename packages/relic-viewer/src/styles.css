@@ -301,9 +301,28 @@ body {
   fill: currentColor;
 }
 
+/* The comment count. A number rather than a dot, because "there is a thread"
+   is worth less than "there are two comments in it". */
+.action-count {
+  min-width: 1.1rem;
+  padding: 0 0.25rem;
+  border: 1px solid var(--rule-strong);
+  color: var(--ink-soft);
+  font-family: var(--mono);
+  font-size: 0.68rem;
+  line-height: 1.4;
+  text-align: center;
+}
+
+.action:hover .action-count {
+  border-color: var(--patina);
+  color: var(--patina-ink);
+}
+
 /*
- * The narrow hierarchy, re-derived because version added an element to a row
- * that had already overflowed once.
+ * The narrow hierarchy, re-derived twice: once because version added an
+ * element to a row that had already overflowed, and again because Comments
+ * added the eleventh.
  *
  * At 320px the row has 20rem. Five collapsed actions take about 11.9rem and
  * the version chip about 3rem, which leaves nothing for a 6.7rem wordmark and
@@ -318,6 +337,11 @@ body {
      goes. */
   .action span {
     display: none;
+  }
+  /* Except the count, which is the whole point of the control and is two
+     characters wide. A bare speech bubble says a thread might exist. */
+  .action span.action-count {
+    display: inline-block;
   }
   .action {
     padding: 0 0.75rem;
@@ -336,6 +360,27 @@ body {
   }
   .identity-meta {
     gap: 0.4rem;
+  }
+}
+
+/*
+ * The 320px floor, where the sixth action stops fitting.
+ *
+ * Six collapsed actions are about 14.6rem, and with the count badge nearer
+ * 15.2rem. Add the identity zone's 1.4rem of padding, its 0.4rem gap, and a
+ * 3rem version chip and the row wants 20rem before the filename gets a
+ * pixel. The filename is on the floor's must-survive list and Comments is
+ * deliberately not, so Comments is what leaves.
+ *
+ * It is the right one to lose because losing it costs nothing: the thread is
+ * in the document flow at the end of the reading surface, so a reader without
+ * the control reaches the same thread by scrolling, which is where a comment
+ * thread lives on a phone anyway. Every other candidate on the row leads
+ * somewhere that is only reachable through it.
+ */
+@media (max-width: 24rem) {
+  .action-comments {
+    display: none;
   }
 }
 
@@ -1194,6 +1239,289 @@ body {
 
   .image-diff-canvas {
     min-height: 10rem;
+  }
+}
+
+/* ---------- the comment thread ---------- */
+
+/*
+ * The thread is a marginal annotation on a catalogued object, so it is set
+ * like one: ruled off from the content above it, narrower than the reading
+ * measure is wide, addresses in monospace because they are identifiers rather
+ * than names.
+ *
+ * It is in the document flow at every width rather than in a panel. A panel
+ * would need somewhere to go at 320px and there is nowhere, and comments
+ * belong after what they are about.
+ */
+.thread {
+  max-width: 46rem;
+  margin: 0 auto;
+  padding: 2.5rem 1.25rem 5rem;
+  border-top: 1px solid var(--rule-strong);
+}
+
+/* A frame fills its own viewport, so the thread under one needs air above it
+   rather than the reading gutter's margin collapsing against the border. */
+.stage-sandboxed-html + .thread,
+.stage-sandboxed-jsx + .thread {
+  margin-top: 1.5rem;
+}
+
+.thread-title {
+  margin: 0 0 1rem;
+  font-family: var(--sans);
+  font-size: 1.1rem;
+  font-weight: 600;
+}
+
+.thread-title:focus {
+  outline: none;
+}
+
+.thread-title:focus-visible {
+  outline: 2px solid var(--patina);
+  outline-offset: 4px;
+}
+
+.thread-note {
+  margin: 0 0 0.75rem;
+  color: var(--ink-soft);
+  font-size: 0.86rem;
+  line-height: 1.55;
+}
+
+.thread-policy {
+  display: inline-block;
+  margin-bottom: 1rem;
+  color: var(--patina-ink);
+  font-size: 0.8rem;
+  text-underline-offset: 2px;
+}
+
+.thread-refusal {
+  padding: 1rem 1.1rem;
+  background: var(--surface);
+  border: 1px solid var(--rule-strong);
+  border-top: 2px solid var(--oxide);
+}
+
+.thread-refusal-title {
+  margin: 0 0 0.5rem;
+  font-family: var(--sans);
+  font-weight: 600;
+}
+
+.thread-refusal .accession {
+  margin-top: 0.75rem;
+}
+
+.thread-list {
+  margin: 0 0 2rem;
+  padding: 0;
+  list-style: none;
+}
+
+.comment {
+  padding: 1rem 0;
+  border-top: 1px solid var(--rule);
+}
+
+.comment-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.5rem;
+  margin-bottom: 0.4rem;
+}
+
+/* The alias reads as a name. */
+.comment-name {
+  font-family: var(--sans);
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+/* The address reads as the record, which is what it is. */
+.comment-author {
+  font-family: var(--mono);
+  font-size: 0.74rem;
+  color: var(--ink-soft);
+  overflow-wrap: anywhere;
+}
+
+.comment-badge {
+  padding: 0.05rem 0.4rem;
+  border: 1px solid var(--patina);
+  color: var(--patina-ink);
+  font-family: var(--mono);
+  font-size: 0.62rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.comment-time {
+  margin-left: auto;
+  color: var(--ink-soft);
+  font-family: var(--mono);
+  font-size: 0.68rem;
+  white-space: nowrap;
+}
+
+.comment-body {
+  margin: 0;
+  font-family: var(--serif);
+  font-size: 1rem;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* An unopened comment is shown, not hidden, and it must not read as prose
+   somebody wrote. */
+.comment-sealed {
+  padding-left: 0.75rem;
+  border-left: 2px solid var(--oxide);
+  color: var(--ink-soft);
+  font-family: var(--sans);
+  font-size: 0.84rem;
+  font-style: italic;
+}
+
+/* ---------- the composer ---------- */
+
+.compose {
+  display: grid;
+  gap: 0.75rem;
+  padding: 1.25rem;
+  background: var(--surface);
+  border: 1px solid var(--rule-strong);
+  border-top: 2px solid var(--patina);
+}
+
+.compose-title {
+  margin: 0;
+  font-family: var(--sans);
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+.compose-identity {
+  margin: 0;
+  font-size: 0.86rem;
+}
+
+.compose-identity strong {
+  font-family: var(--mono);
+  font-size: 0.8rem;
+  overflow-wrap: anywhere;
+}
+
+/* The disclosure. Not fine print: a reader learns what commenting publishes
+   before they type, so it is set at reading size and above the fields. */
+.compose-note {
+  margin: 0;
+  padding: 0.6rem 0.75rem;
+  background: var(--ground);
+  border-left: 2px solid var(--oxide);
+  font-size: 0.84rem;
+  line-height: 1.5;
+}
+
+.compose-fine {
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: 0.78rem;
+  line-height: 1.5;
+}
+
+.compose-warning {
+  margin: 0.5rem 0 0;
+  padding: 0.6rem 0.75rem;
+  background: var(--diff-removed);
+  border-left: 2px solid var(--oxide);
+  font-size: 0.84rem;
+  line-height: 1.5;
+}
+
+.compose-field {
+  display: grid;
+  gap: 0.3rem;
+}
+
+.compose-field > span {
+  font-family: var(--sans);
+  font-size: 0.76rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.compose-input,
+.compose-textarea {
+  width: 100%;
+  padding: 0.5rem 0.6rem;
+  background: var(--ground);
+  border: 1px solid var(--rule-strong);
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.9rem;
+}
+
+.compose-textarea {
+  font-family: var(--serif);
+  line-height: 1.55;
+  resize: vertical;
+}
+
+.compose-input:focus-visible,
+.compose-textarea:focus-visible {
+  outline: 2px solid var(--patina);
+  outline-offset: 1px;
+}
+
+.compose-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.compose-count {
+  color: var(--ink-soft);
+  font-family: var(--mono);
+  font-size: 0.7rem;
+}
+
+.compose-count.over {
+  color: var(--oxide);
+  font-weight: 700;
+}
+
+.compose .action.primary {
+  align-self: center;
+}
+
+.thread-outcome {
+  margin-top: 0.75rem;
+}
+
+.thread-outcome .thread-note {
+  margin: 0;
+}
+
+@media (max-width: 34rem) {
+  .thread {
+    padding: 2rem 0.9rem 4rem;
+  }
+  .compose {
+    padding: 1rem;
+  }
+  /* Two identifiers and a timestamp do not share a line at this width, and a
+     timestamp pushed to the right edge of a 320px row reads as a column that
+     is not there. */
+  .comment-time {
+    margin-left: 0;
   }
 }
 

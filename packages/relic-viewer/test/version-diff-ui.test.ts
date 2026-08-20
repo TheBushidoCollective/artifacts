@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
-import { MAX_DIFF_BYTES, MAX_RENDERED_DIFF_BYTES } from '../src/diff.ts';
+import { MAX_DIFF_BYTES } from '../src/diff.ts';
 import {
   buildBar,
   buildCurrentStage,
@@ -242,7 +242,7 @@ describe('version comparison affordance', () => {
     ).toBe(true);
   });
 
-  test('oversized code history states the code ceiling and keeps rendering current', () => {
+  test('oversized code history states the ceiling and keeps rendering current', () => {
     const current = view('code', 3, new Uint8Array(MAX_DIFF_BYTES + 1));
     const bar = buildBar(current, 'aaaaaaaaaaaaaaaaaaaaaaaaaa', {
       onCompare: () => {},
@@ -253,19 +253,17 @@ describe('version comparison affordance', () => {
     ) as unknown as ElementStub;
 
     expect(textOf(bar)).not.toContain('Compare versions');
-    expect(textOf(stage)).toContain('4 MiB');
+    expect(textOf(stage)).toContain('16 MiB');
     expect(
       descendants(stage).some((element) => element.className === 'code')
     ).toBe(true);
   });
 
-  test('oversized rendered history refuses at 1 MiB and still renders current', () => {
-    // A rendered comparison holds two live DOM trees on top of the plaintext,
-    // so the ceiling is lower than the code one and the copy says so.
+  test('oversized rendered history states the same ceiling and still renders current', () => {
     const current = view(
       'sandboxed-html',
       3,
-      new Uint8Array(MAX_RENDERED_DIFF_BYTES + 1)
+      new Uint8Array(MAX_DIFF_BYTES + 1)
     );
     const bar = buildBar(current, 'aaaaaaaaaaaaaaaaaaaaaaaaaa', {
       onCompare: () => {},
@@ -276,9 +274,7 @@ describe('version comparison affordance', () => {
     ) as unknown as ElementStub;
 
     expect(textOf(bar)).not.toContain('Compare versions');
-    expect(textOf(stage)).toContain('1 MiB');
-    expect(textOf(stage)).not.toContain('4 MiB');
-    // The version the reader came for is still on the page.
+    expect(textOf(stage)).toContain('16 MiB');
     expect(
       descendants(stage).some((element) =>
         element.className.split(' ').includes('doc-html')

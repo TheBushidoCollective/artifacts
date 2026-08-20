@@ -6,7 +6,6 @@ import {
   diffCeilingFor,
   diffModeForRoutes,
   MAX_DIFF_BYTES,
-  MAX_RENDERED_DIFF_BYTES,
   versionHistoryCopy,
 } from '../src/diff.ts';
 import type { ReadyView } from '../src/viewer.ts';
@@ -164,36 +163,29 @@ describe('comparison availability', () => {
     expect(result.kind).toBe('unavailable');
     if (result.kind !== 'unavailable') return;
     expect(result.code).toBe('comparison_too_large');
-    expect(result.detail).toContain('4 MiB');
+    expect(result.detail).toContain('16 MiB');
     expect(current.route).toBe('code');
     expect(current.content).toHaveLength(MAX_DIFF_BYTES + 1);
   });
 
-  test('holds a rendered class to the lower per-class ceiling', () => {
-    // A rendered comparison also allocates two live DOM trees and two
-    // captured trees, so the same byte budget buys a smaller file.
-    expect(diffCeilingFor('code').bytes).toBe(MAX_DIFF_BYTES);
+  test('every comparable mode shares the same ceiling', () => {
+    const ceiling = diffCeilingFor('code');
+    expect(ceiling.bytes).toBe(MAX_DIFF_BYTES);
+    expect(ceiling.label).toBe('16 MiB');
     for (const mode of ['markdown', 'rendered', 'image'] as const) {
-      expect(diffCeilingFor(mode).bytes).toBe(MAX_RENDERED_DIFF_BYTES);
-      expect(diffCeilingFor(mode).label).toBe('1 MiB');
+      expect(diffCeilingFor(mode)).toEqual(ceiling);
     }
-    expect(MAX_RENDERED_DIFF_BYTES).toBeLessThan(MAX_DIFF_BYTES);
   });
 
-  test('refuses a rendered payload the code ceiling would have allowed', () => {
-    const current = ready(
-      'markdown',
-      new Uint8Array(MAX_RENDERED_DIFF_BYTES + 1)
-    );
+  test('refuses a markdown payload over the ceiling and leaves the current view', () => {
+    const current = ready('markdown', new Uint8Array(MAX_DIFF_BYTES + 1));
     const result = comparisonAvailability(current);
 
     expect(result.kind).toBe('unavailable');
     if (result.kind !== 'unavailable') return;
     expect(result.code).toBe('comparison_too_large');
-    expect(result.detail).toContain('1 MiB');
-    // Still open, still markdown: a refused comparison never disturbs the
-    // version the reader came for.
+    expect(result.detail).toContain('16 MiB');
     expect(current.route).toBe('markdown');
-    expect(current.content).toHaveLength(MAX_RENDERED_DIFF_BYTES + 1);
+    expect(current.content).toHaveLength(MAX_DIFF_BYTES + 1);
   });
 });

@@ -4,7 +4,7 @@
 
 Everything here is a precondition, not a feature. `harden` inherits it most directly, but no station is exempt. Nothing here reopens the frame: the problem, the user, the wedge, the success metric, and the telemetry decision are settled there and only referenced here.
 
-One discipline runs through the whole document, section 3 especially. Where a condition is stated as checkable, it names the exact server-side event or record that produces its number, and where a quantity is only partly observable, it says which half is not, in the same breath. Relic's architecture forbids most of the obvious observation points: the server holds only ciphertext, there are no accounts, and the viewing origin runs no scripts. A half-true measurement claim survives review in a way a fabricated one doesn't, so it's the easiest defect to ship here.
+One discipline runs through the whole document, section 3 especially. Where a condition is stated as checkable, it names the exact server-side event or record that produces its number, and where a quantity is only partly observable, it says which half is not, in the same breath. Relic's architecture forbids most of the obvious observation points: the server holds only ciphertext, no identity attaches to publishing or opening, and the viewing origin runs no scripts. A half-true measurement claim survives review in a way a fabricated one doesn't, so it's the easiest defect to ship here.
 
 ## 1. The abuse-operations commitment, which is the go/no-go
 

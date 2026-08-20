@@ -72,7 +72,7 @@ One consequence of versioning for this clause, stated so nobody reads the old de
 
 ### The confound in the first clause, which is permanent
 
-Separating a recipient's open from the publisher's own is not fully solvable under the locked non-goals. Accounts would solve it. Accounts are a non-goal. So this gets documented, never engineered away.
+Separating a recipient's open from the publisher's own is not fully solvable under the locked non-goals. An identified opener would solve it. Identity exists in the product now, but it attaches to commenting and never to opening, so an open still arrives anonymous and the confound survives the reversal. So this gets documented, never engineered away.
 
 **Two filters, both partial.** The baseline filter drops opens whose requesting IP matches the relic's publishing IP, both of which the server already sees. The second drops opens minted within 120 seconds of publish: a pure time delta between the publish timestamp and the mint timestamp, computed server-side, needing nothing from the viewing origin. Treat 120 seconds as a provisional value set by judgment. A later station moves it once there's real data.
 
@@ -80,7 +80,7 @@ Separating a recipient's open from the publisher's own is not fully solvable und
 
 **What the time window fails to catch.** It shaves the dominant false positive, the immediate self-check from a second device, and leaves residue both ways. It misses a publisher who checks twice, and the publisher who sends the link and then opens it on a phone five minutes later, which is precisely the mobile-PWA behavior the product encourages. At the other end, when a publisher never self-checks, the window eats a genuinely fast first recipient open. Tuning the number trades one direction for the other. It doesn't remove either.
 
-**The trust condition.** There are no accounts, so the condition is stated in what the server can see: relic volume and distinct publishing IPs. Below roughly 100 relics per week, or while a single publishing IP accounts for most of them, the first clause isn't informative and doesn't get reported as a result. That covers the whole dogfooding period, when the collective is the dominant publisher, self-checks dominate the sample, and the clause would otherwise read green in the world where Relic has zero recipients. The 100 is provisional too, a placeholder until the real distribution is visible. Report it as instrumentation health, never as evidence.
+**The trust condition.** An open carries no identity, so the condition is stated in what the server can see: relic volume and distinct publishing IPs. Below roughly 100 relics per week, or while a single publishing IP accounts for most of them, the first clause isn't informative and doesn't get reported as a result. That covers the whole dogfooding period, when the collective is the dominant publisher, self-checks dominate the sample, and the clause would otherwise read green in the world where Relic has zero recipients. The 100 is provisional too, a placeholder until the real distribution is visible. Report it as instrumentation health, never as evidence.
 
 **The first clause can't be made fully trustworthy under this architecture.** It's a directional indicator with a known inflation bias, and it gets read as one.
 

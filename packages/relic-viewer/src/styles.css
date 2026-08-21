@@ -67,6 +67,8 @@ body {
 }
 
 body {
+  display: flex;
+  flex-direction: column;
   background: var(--ground);
   color: var(--ink);
   font-family: var(--sans);
@@ -74,6 +76,43 @@ body {
   line-height: 1.55;
   -webkit-text-size-adjust: 100%;
   overflow-x: hidden;
+}
+
+.stage-wrap {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+}
+
+.comment-pins {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.comment-pin {
+  position: absolute;
+  width: 1.35rem;
+  height: 1.35rem;
+  padding: 0;
+  border: 2px solid var(--surface);
+  border-radius: 999px;
+  background: var(--patina);
+  color: var(--surface);
+  font-family: var(--sans);
+  font-size: 0.7rem;
+  font-weight: 600;
+  line-height: 1;
+  transform: translate(-50%, -50%);
+  pointer-events: auto;
+  cursor: pointer;
+}
+
+.relic-text-mark {
+  background: color-mix(in srgb, var(--patina) 22%, transparent);
+  border-bottom: 2px solid var(--patina);
+  color: inherit;
 }
 
 /* ---------- the accession band ---------- */
@@ -1245,15 +1284,24 @@ body {
 /* ---------- the comment thread ---------- */
 
 /*
- * The thread is a marginal annotation on a catalogued object, so it is set
- * like one: ruled off from the content above it, narrower than the reading
- * measure is wide, addresses in monospace because they are identifiers rather
- * than names.
- *
- * It is in the document flow at every width rather than in a panel. A panel
- * would need somewhere to go at 320px and there is nowhere, and comments
- * belong after what they are about.
+ * The thread overlays the relic. Darkrun paints marks on the artifact stage
+ * and keeps the conversation in a panel; Haiku keeps a tray on the content.
+ * Relic does both on the viewing origin because the render frame cannot
+ * fetch. Freeform comments live in the tray; marks live on the content.
  */
+.thread-overlay {
+  flex: 0 0 auto;
+  max-width: none;
+  max-height: 42vh;
+  margin: 0;
+  padding: 1rem 1.25rem 1.25rem;
+  overflow: auto;
+  background: var(--surface);
+  border-top: 1px solid var(--rule-strong);
+  box-shadow: 0 -8px 24px color-mix(in srgb, var(--ink) 8%, transparent);
+  z-index: 4;
+}
+
 .thread {
   max-width: 46rem;
   margin: 0 auto;
@@ -1261,11 +1309,9 @@ body {
   border-top: 1px solid var(--rule-strong);
 }
 
-/* A frame fills its own viewport, so the thread under one needs air above it
-   rather than the reading gutter's margin collapsing against the border. */
-.stage-sandboxed-html + .thread,
-.stage-sandboxed-jsx + .thread {
-  margin-top: 1.5rem;
+.thread-overlay.thread {
+  max-width: none;
+  padding: 1rem 1.25rem 1.25rem;
 }
 
 .thread-title {

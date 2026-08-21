@@ -421,6 +421,7 @@ describe('the thread', () => {
       createdAt: '2026-08-20T09:15:00.000Z',
       body: 'hello',
       displayName: 'A\u202Eda',
+      anchor: null,
     }) as unknown as ElementStub;
     expect(withClass(row, 'comment-name')[0]?.textContent).toBe('Ada');
   });
@@ -433,6 +434,7 @@ describe('the thread', () => {
       createdAt: '2026-08-20T09:15:00.000Z',
       body: 'republished with the fix',
       displayName: null,
+      anchor: null,
     }) as unknown as ElementStub;
     expect(textOf(row)).toContain('Published this relic');
   });
@@ -578,6 +580,7 @@ describe('posting a comment', () => {
     expect(await cipher.open(stored.ciphertext)).toEqual({
       body: 'round trips',
       display_name: 'Ada',
+      anchor: null,
     });
   });
 });

@@ -22,6 +22,7 @@
 import {
   COMMENT_BODY_LIMIT_BYTES,
   COMMENT_DISPLAY_NAME_LIMIT_BYTES,
+  type CommentAnchor,
   CommentDecryptFailedError,
   type CommentPlaintext,
   decryptComment,
@@ -78,6 +79,7 @@ export type CommentEntry =
       readonly createdAt: string;
       readonly body: string;
       readonly displayName: string | null;
+      readonly anchor: CommentAnchor | null;
     }
   | {
       readonly kind: 'sealed';
@@ -489,6 +491,7 @@ export async function openEntry(
         plaintext.display_name !== null && plaintext.display_name.length > 0
           ? plaintext.display_name
           : null,
+      anchor: plaintext.anchor ?? null,
     };
   } catch (error) {
     // `format.md` 3.13 gives a decrypt failure no cause, and a malformed
@@ -638,4 +641,50 @@ export function commentTime(iso: string): string {
 export function threadCountLabel(count: number): string {
   if (count === 0) return 'No comments';
   return count === 1 ? '1 comment' : `${count} comments`;
+}
+
+/**
+ * Wrap the first exact occurrence of `quote` in `root` with a mark.
+ *
+ * Exact rather than fuzzy: a shifted paragraph is shown as detached in the
+ * tray instead of highlighting the wrong sentence. Returns whether it found
+ * the quote.
+ */
+export function wrapTextQuote(
+  root: ParentNode,
+  quote: string,
+  id: string
+): boolean {
+  if (quote.length === 0) return false;
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  let node = walker.nextNode();
+  while (node !== null) {
+    const text = node as Text;
+    const index = text.data.indexOf(quote);
+    if (index !== -1) {
+      const end = index + quote.length;
+      const target =
+        index === 0 && end === text.data.length ? text : text.splitText(index);
+      if (target.data.length > quote.length) target.splitText(quote.length);
+      const mark = document.createElement('mark');
+      mark.className = 'relic-text-mark';
+      mark.dataset.commentId = id;
+      target.parentNode?.insertBefore(mark, target);
+      mark.appendChild(target);
+      return true;
+    }
+    node = walker.nextNode();
+  }
+  return false;
+}
+
+/** Remove marks this page painted, leaving the document text in place. */
+export function unwrapTextQuotes(root: ParentNode): void {
+  for (const mark of [...root.querySelectorAll('mark.relic-text-mark')]) {
+    const parent = mark.parentNode;
+    if (parent === null) continue;
+    while (mark.firstChild !== null) parent.insertBefore(mark.firstChild, mark);
+    parent.removeChild(mark);
+    parent.normalize();
+  }
 }

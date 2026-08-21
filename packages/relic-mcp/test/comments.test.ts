@@ -174,6 +174,7 @@ describe('writing a comment as the publisher', () => {
     expect(await decryptComment(commentKey, ciphertext)).toEqual({
       body: 'The second chart is using last quarter numbers.',
       display_name: 'Relic Agent',
+      anchor: null,
     });
   });
 

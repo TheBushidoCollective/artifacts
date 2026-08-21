@@ -20,6 +20,7 @@ import {
 } from '../src/comments.ts';
 import {
   buildBar,
+  buildStageWrap,
   commentRow,
   localStorageKeyVault,
   THREAD_EMPTY_NOTE,
@@ -690,6 +691,22 @@ describe('the disclosure, at the point of commenting', () => {
   test('a relic with no thread has no control for one', () => {
     const bar = buildBar(view(), RELIC_ID, {}) as unknown as ElementStub;
     expect(withClass(bar, 'action-comments')).toHaveLength(0);
+  });
+
+  test('the thread is inside the stage instead of below it', () => {
+    const overlay = document.createElement('section') as unknown as ElementStub;
+    overlay.className = 'thread thread-overlay';
+
+    const stage = buildStageWrap(
+      view(),
+      'https://relik-usercontent.example',
+      overlay as unknown as HTMLElement
+    ) as unknown as ElementStub;
+
+    expect(stage.className).toBe('stage-wrap');
+    expect(stage.children).toHaveLength(2);
+    expect(stage.children[0]?.className).toContain('stage');
+    expect(stage.children[1]).toBe(overlay);
   });
 
   test('the version control keeps its slot beside the new one', () => {

@@ -487,9 +487,9 @@ export function buildBar(
 
   // Comments is the eleventh element on the row and the sixth action, and it
   // is the first addition whose absence costs nothing, which is why it is the
-  // one that leaves at the floor. The thread is in the document flow rather
-  // than behind this control, so a reader who loses the button reaches the
-  // same thread by scrolling. `viewer.md` 6.5 carries the arithmetic.
+  // one that leaves at the floor. The thread overlays the relic, and a handle
+  // on the stage remains after the button leaves, so a reader who loses the
+  // control still reaches the same thread. `viewer.md` 6.5 carries the arithmetic.
   //
   // A button rather than a link to a document fragment. A `#thread` href
   // would write a fragment into the address bar of the one page in this
@@ -1651,8 +1651,8 @@ export const THREAD_LOADING_NOTE =
 
 interface ThreadHandle {
   readonly element: HTMLElement;
-  /** Opens the overlay on the relic rather than scrolling past it. */
-  readonly reveal: () => void;
+  /** Toggles the overlay on the relic rather than scrolling past it. */
+  readonly toggle: () => void;
   /** The stage the marks are painted on. */
   readonly attach: (host: HTMLElement) => void;
 }
@@ -1679,15 +1679,19 @@ function buildThread(
 ): ThreadHandle {
   const section = document.createElement('section');
   section.className = 'thread thread-overlay';
+  section.id = 'comment-thread';
   section.setAttribute('aria-labelledby', 'thread-title');
 
   const title = document.createElement('h2');
   title.className = 'thread-title';
   title.id = 'thread-title';
-  // Focusable without being in the tab order, so the taskbar action can land
-  // a screen reader on the thread instead of scrolling silently past it.
-  title.tabIndex = -1;
-  title.textContent = 'Comments';
+  const toggle = document.createElement('button');
+  toggle.className = 'thread-toggle';
+  toggle.type = 'button';
+  toggle.textContent = 'Comments';
+  toggle.setAttribute('aria-controls', section.id);
+  toggle.setAttribute('aria-expanded', 'false');
+  title.appendChild(toggle);
 
   const status = document.createElement('div');
   status.className = 'thread-status';
@@ -1719,6 +1723,15 @@ function buildThread(
   let host: HTMLElement | undefined;
   let pendingAnchor: CommentAnchor | null = null;
   let lastEntries: readonly CommentEntry[] = [];
+  const setOpen = (open: boolean): void => {
+    section.classList.toggle('is-open', open);
+    toggle.setAttribute('aria-expanded', String(open));
+    if (open) toggle.focus({ preventScroll: true });
+  };
+  const toggleOpen = (): void => {
+    setOpen(!section.classList.contains('is-open'));
+  };
+  toggle.addEventListener('click', toggleOpen);
 
   const paintMarks = (entries: readonly CommentEntry[]): void => {
     lastEntries = entries;
@@ -1744,7 +1757,7 @@ function buildThread(
       pin.title = entry.body;
       pin.addEventListener('click', (event) => {
         event.preventDefault();
-        section.classList.add('is-open');
+        setOpen(true);
         const row = list.querySelector(`[data-comment-id="${entry.id}"]`);
         if (row instanceof HTMLElement) {
           row.scrollIntoView({ block: 'nearest' });
@@ -2042,10 +2055,7 @@ function buildThread(
 
   return {
     element: section,
-    reveal: () => {
-      section.classList.add('is-open');
-      title.focus({ preventScroll: true });
-    },
+    toggle: toggleOpen,
     attach: (next) => {
       host = next;
       paintMarks(lastEntries);
@@ -2055,10 +2065,11 @@ function buildThread(
         const selection = window.getSelection();
         if (selection === null || selection.isCollapsed) return;
         if (host === undefined || !host.contains(selection.anchorNode)) return;
+        if (section.contains(selection.anchorNode)) return;
         const quote = selection.toString().trim();
         if (quote.length === 0) return;
         pendingAnchor = { kind: 'text', quote };
-        section.classList.add('is-open');
+        setOpen(true);
       });
       host.addEventListener('click', (event) => {
         if (!(event.target instanceof Element)) return;
@@ -2069,10 +2080,23 @@ function buildThread(
         const y = (event.clientY - rect.top) / rect.height;
         if (x < 0 || x > 1 || y < 0 || y > 1) return;
         pendingAnchor = { kind: 'pin', x, y };
-        section.classList.add('is-open');
+        setOpen(true);
       });
     },
   };
+}
+
+/** Keeps the rendered relic and its service-origin overlay in one stage. */
+export function buildStageWrap(
+  view: ReadyView,
+  usercontentOrigin: string,
+  overlay?: HTMLElement
+): HTMLElement {
+  const wrap = document.createElement('div');
+  wrap.className = 'stage-wrap';
+  wrap.appendChild(buildCurrentStage(view, usercontentOrigin));
+  if (overlay !== undefined) wrap.appendChild(overlay);
+  return wrap;
 }
 
 function renderReady(
@@ -2093,7 +2117,7 @@ function renderReady(
       ...(thread === undefined
         ? {}
         : {
-            onComments: thread.reveal,
+            onComments: thread.toggle,
             ...(commentCount === undefined ? {} : { commentCount }),
           }),
     });
@@ -2101,14 +2125,8 @@ function renderReady(
 
   const showCurrent = (): void => {
     bar = barFor();
-    const wrap = document.createElement('div');
-    wrap.className = 'stage-wrap';
-    wrap.appendChild(buildCurrentStage(view, usercontentOrigin));
-    document.body.replaceChildren(
-      bar,
-      wrap,
-      ...(thread === undefined ? [] : [thread.element])
-    );
+    const wrap = buildStageWrap(view, usercontentOrigin, thread?.element);
+    document.body.replaceChildren(bar, wrap);
     thread?.attach(wrap);
   };
   const showComparison = (selectedVersion?: number): void => {

@@ -25,6 +25,7 @@ import {
   localStorageKeyVault,
   THREAD_EMPTY_NOTE,
   threadRefusal,
+  updateThreadToggle,
 } from '../src/main.ts';
 import type { ReadyView, ViewerDeps } from '../src/viewer.ts';
 
@@ -707,6 +708,19 @@ describe('the disclosure, at the point of commenting', () => {
     expect(stage.children).toHaveLength(2);
     expect(stage.children[0]?.className).toContain('stage');
     expect(stage.children[1]).toBe(overlay);
+  });
+
+  test('a count refresh preserves the tray toggle', () => {
+    const title = document.createElement('h2') as unknown as ElementStub;
+    const toggle = document.createElement('button') as unknown as ElementStub;
+    toggle.className = 'thread-toggle';
+    title.appendChild(toggle);
+
+    updateThreadToggle(toggle as unknown as HTMLElement, 0);
+
+    expect(title.children[0]).toBe(toggle);
+    expect(toggle.className).toBe('thread-toggle');
+    expect(toggle.textContent).toBe('No comments');
   });
 
   test('the version control keeps its slot beside the new one', () => {

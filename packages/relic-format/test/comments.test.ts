@@ -107,6 +107,7 @@ describe('the comment key', () => {
     expect(await decryptComment(second, sealed)).toEqual({
       body: 'still readable',
       display_name: null,
+      anchor: null,
     });
   });
 
@@ -136,6 +137,7 @@ describe('the envelope', () => {
     const plaintext = {
       body: 'The second chart is wrong. \u00e9\u00e8\u0161 \u4f60\u597d \ud83d\ude80\ud83d\udd25',
       display_name: 'Jos\u00e9 \ud83d\udc4b',
+      anchor: null,
     };
 
     const sealed = await encryptComment(key, plaintext);
@@ -279,14 +281,65 @@ describe('strict parsing', () => {
     const key = await deriveCommentKey(generateKey());
     const sealed = await sealRaw(
       key,
-      JSON.stringify({ body: 'hi', display_name: null, anchor: 'para-3' })
+      JSON.stringify({ body: 'hi', display_name: null, extra: true })
     );
 
-    // An anchored comment is a real future feature. It must arrive as a
-    // deliberate change, not as a field an old parser dropped on the floor.
     await expect(decryptComment(key, sealed)).rejects.toBeInstanceOf(
       MalformedCommentError
     );
+  });
+
+  test('round trips a text mark and a pin, and omits a null mark from the envelope', async () => {
+    const key = await deriveCommentKey(generateKey());
+    const text = {
+      body: 'this paragraph',
+      display_name: null,
+      anchor: { kind: 'text' as const, quote: 'the claim in the heading' },
+    };
+    const pin = {
+      body: 'this region',
+      display_name: null,
+      anchor: { kind: 'pin' as const, x: 0.25, y: 0.8 },
+    };
+    expect(await decryptComment(key, await encryptComment(key, text))).toEqual(
+      text
+    );
+    expect(await decryptComment(key, await encryptComment(key, pin))).toEqual(
+      pin
+    );
+
+    const freeform = await encryptComment(key, {
+      body: 'about the relic',
+      display_name: null,
+    });
+    const opened = await decryptComment(key, freeform);
+    expect(opened.anchor).toBeNull();
+  });
+
+  test('refuses a pin outside the unit square and a string posing as an anchor', async () => {
+    const key = await deriveCommentKey(generateKey());
+    await expect(
+      decryptComment(
+        key,
+        await sealRaw(
+          key,
+          JSON.stringify({
+            body: 'hi',
+            display_name: null,
+            anchor: { kind: 'pin', x: 1.2, y: 0.5 },
+          })
+        )
+      )
+    ).rejects.toBeInstanceOf(MalformedCommentError);
+    await expect(
+      decryptComment(
+        key,
+        await sealRaw(
+          key,
+          JSON.stringify({ body: 'hi', display_name: null, anchor: 'para-3' })
+        )
+      )
+    ).rejects.toBeInstanceOf(MalformedCommentError);
   });
 
   test('refuses a display name that is neither a string nor null', async () => {

@@ -64,16 +64,36 @@ export const COMMENT_BODY_LIMIT_BYTES = 4096;
 export const COMMENT_DISPLAY_NAME_LIMIT_BYTES = 64;
 
 /**
+ * Where a comment sits on the relic, encrypted with the body so the
+ * operator cannot read the mark either.
+ *
+ * `text` is a quote to re-find in the document. `pin` is a point on the
+ * stage in unit coordinates, 0 at the top-left and 1 at the bottom-right.
+ * Missing on a comment that is just a remark about the relic as a whole.
+ */
+export type CommentAnchor =
+  | { readonly kind: 'text'; readonly quote: string }
+  | { readonly kind: 'pin'; readonly x: number; readonly y: number };
+
+/** Longest quote stored on a text mark. A selection is not a document. */
+export const COMMENT_ANCHOR_QUOTE_LIMIT_BYTES = 512;
+
+/**
  * What a comment carries.
  *
  * `display_name` aliases the commenter's identity for presentation and never
  * replaces it: the identity is the verified address the service holds, and
  * this is untrusted display text living inside the ciphertext where the
  * service cannot read it.
+ *
+ * `anchor` is omitted from the sealed JSON when it is null, so a freeform
+ * comment stays readable to a parser that has not learned marks yet.
  */
 export interface CommentPlaintext {
   readonly body: string;
   readonly display_name: string | null;
+  /** Absent or null is a freeform comment, not a mark. */
+  readonly anchor?: CommentAnchor | null;
 }
 
 /**
@@ -134,11 +154,22 @@ export async function encryptComment(
       );
     }
   }
+  if (plaintext.anchor != null && plaintext.anchor.kind === 'text') {
+    const quoteBytes = new TextEncoder().encode(plaintext.anchor.quote).length;
+    if (quoteBytes > COMMENT_ANCHOR_QUOTE_LIMIT_BYTES) {
+      throw new CommentTooLargeError(
+        'anchor',
+        quoteBytes,
+        COMMENT_ANCHOR_QUOTE_LIMIT_BYTES
+      );
+    }
+  }
 
   const encoded = new TextEncoder().encode(
     JSON.stringify({
       body: plaintext.body,
       display_name: plaintext.display_name,
+      ...(plaintext.anchor == null ? {} : { anchor: plaintext.anchor }),
     })
   );
   const nonce = crypto.getRandomValues(new Uint8Array(COMMENT_NONCE_BYTES));
@@ -210,7 +241,7 @@ export async function decryptComment(
 
   const fields = parsed as Record<string, unknown>;
   const unknown = Object.keys(fields).filter(
-    (key) => key !== 'body' && key !== 'display_name'
+    (key) => key !== 'body' && key !== 'display_name' && key !== 'anchor'
   );
   if (unknown.length > 0) {
     throw new MalformedCommentError(
@@ -230,7 +261,61 @@ export async function decryptComment(
     );
   }
 
-  return { body, display_name: displayName };
+  return {
+    body,
+    display_name: displayName,
+    anchor: parseAnchor(fields['anchor']),
+  };
+}
+
+function parseAnchor(value: unknown): CommentAnchor | null {
+  if (value === undefined) return null;
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    throw new MalformedCommentError('comment anchor is not an object');
+  }
+  const anchor = value as Record<string, unknown>;
+  const kind = anchor['kind'];
+  if (kind === 'text') {
+    const quote = anchor['quote'];
+    if (typeof quote !== 'string' || quote.length === 0) {
+      throw new MalformedCommentError('text anchor quote is missing');
+    }
+    const extra = Object.keys(anchor).filter(
+      (key) => key !== 'kind' && key !== 'quote'
+    );
+    if (extra.length > 0) {
+      throw new MalformedCommentError(
+        `text anchor carries unknown field(s): ${extra.join(', ')}`
+      );
+    }
+    return { kind: 'text', quote };
+  }
+  if (kind === 'pin') {
+    const x = anchor['x'];
+    const y = anchor['y'];
+    if (
+      typeof x !== 'number' ||
+      typeof y !== 'number' ||
+      !Number.isFinite(x) ||
+      !Number.isFinite(y) ||
+      x < 0 ||
+      x > 1 ||
+      y < 0 ||
+      y > 1
+    ) {
+      throw new MalformedCommentError('pin anchor is out of unit range');
+    }
+    const extra = Object.keys(anchor).filter(
+      (key) => key !== 'kind' && key !== 'x' && key !== 'y'
+    );
+    if (extra.length > 0) {
+      throw new MalformedCommentError(
+        `pin anchor carries unknown field(s): ${extra.join(', ')}`
+      );
+    }
+    return { kind: 'pin', x, y };
+  }
+  throw new MalformedCommentError('comment anchor kind is not text or pin');
 }
 
 /** Unpadded base64url (RFC 4648 section 5), the same encoding the key uses. */

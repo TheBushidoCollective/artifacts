@@ -14,7 +14,11 @@
  *    key.
  */
 
-import { deriveCommentKey, parseFragment } from '@relic/format';
+import {
+  type CommentAnchor,
+  deriveCommentKey,
+  parseFragment,
+} from '@relic/format';
 import {
   type CommentCipher,
   type CommentEntry,
@@ -35,7 +39,9 @@ import {
   requestMagicLink,
   type SessionState,
   threadCountLabel,
+  unwrapTextQuotes,
   utf8Bytes,
+  wrapTextQuote,
 } from './comments.ts';
 import {
   bytesEqual,
@@ -1534,6 +1540,7 @@ export function commentRow(entry: CommentEntry): HTMLElement {
   const row = document.createElement('li');
   row.className =
     entry.kind === 'open' ? 'comment' : 'comment comment-undecryptable';
+  if (entry.id !== null) row.dataset.commentId = entry.id;
 
   const head = document.createElement('div');
   head.className = 'comment-head';
@@ -1644,8 +1651,10 @@ export const THREAD_LOADING_NOTE =
 
 interface ThreadHandle {
   readonly element: HTMLElement;
-  /** Takes the reader to the thread, for the taskbar action. */
+  /** Opens the overlay on the relic rather than scrolling past it. */
   readonly reveal: () => void;
+  /** The stage the marks are painted on. */
+  readonly attach: (host: HTMLElement) => void;
 }
 
 /** Compares two session states without comparing objects. */
@@ -1669,7 +1678,7 @@ function buildThread(
   onCount: (count: number) => void
 ): ThreadHandle {
   const section = document.createElement('section');
-  section.className = 'thread';
+  section.className = 'thread thread-overlay';
   section.setAttribute('aria-labelledby', 'thread-title');
 
   const title = document.createElement('h2');
@@ -1707,6 +1716,44 @@ function buildThread(
 
   let cipher: CommentCipher | undefined;
   let session: SessionState = { kind: 'unknown' };
+  let host: HTMLElement | undefined;
+  let pendingAnchor: CommentAnchor | null = null;
+  let lastEntries: readonly CommentEntry[] = [];
+
+  const paintMarks = (entries: readonly CommentEntry[]): void => {
+    lastEntries = entries;
+    if (host === undefined) return;
+    unwrapTextQuotes(host);
+    host.querySelector('.comment-pins')?.remove();
+    const pins = document.createElement('div');
+    pins.className = 'comment-pins';
+    let number = 0;
+    for (const entry of entries) {
+      if (entry.kind !== 'open' || entry.anchor === null) continue;
+      number += 1;
+      if (entry.anchor.kind === 'text') {
+        wrapTextQuote(host, entry.anchor.quote, entry.id);
+        continue;
+      }
+      const pin = document.createElement('button');
+      pin.type = 'button';
+      pin.className = 'comment-pin';
+      pin.textContent = String(number);
+      pin.style.left = `${entry.anchor.x * 100}%`;
+      pin.style.top = `${entry.anchor.y * 100}%`;
+      pin.title = entry.body;
+      pin.addEventListener('click', (event) => {
+        event.preventDefault();
+        section.classList.add('is-open');
+        const row = list.querySelector(`[data-comment-id="${entry.id}"]`);
+        if (row instanceof HTMLElement) {
+          row.scrollIntoView({ block: 'nearest' });
+        }
+      });
+      pins.appendChild(pin);
+    }
+    host.appendChild(pins);
+  };
 
   const policyLink = (): HTMLElement => {
     const link = document.createElement('a');
@@ -1739,6 +1786,7 @@ function buildThread(
         : [])
     );
     onCount(state.entries.length);
+    paintMarks(state.entries);
   };
 
   /** The address form, for a reader this browser has not verified. */
@@ -1884,7 +1932,9 @@ function buildThread(
       const draft = {
         body: body.value,
         display_name: name.value.trim().length > 0 ? name.value.trim() : null,
+        anchor: pendingAnchor,
       };
+      pendingAnchor = null;
       post.disabled = true;
       outcome.replaceChildren(line('thread-note', 'Encrypting and posting.'));
       void postComment(relicId, draft, deps, sealer).then(async (result) => {
@@ -1993,8 +2043,34 @@ function buildThread(
   return {
     element: section,
     reveal: () => {
-      section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      section.classList.add('is-open');
       title.focus({ preventScroll: true });
+    },
+    attach: (next) => {
+      host = next;
+      paintMarks(lastEntries);
+      if (host.dataset.commentBind === '1') return;
+      host.dataset.commentBind = '1';
+      host.addEventListener('mouseup', () => {
+        const selection = window.getSelection();
+        if (selection === null || selection.isCollapsed) return;
+        if (host === undefined || !host.contains(selection.anchorNode)) return;
+        const quote = selection.toString().trim();
+        if (quote.length === 0) return;
+        pendingAnchor = { kind: 'text', quote };
+        section.classList.add('is-open');
+      });
+      host.addEventListener('click', (event) => {
+        if (!(event.target instanceof Element)) return;
+        if (event.target.closest('.comment-pin, .doc, .thread')) return;
+        const rect = host?.getBoundingClientRect();
+        if (rect === undefined || rect.width === 0 || rect.height === 0) return;
+        const x = (event.clientX - rect.left) / rect.width;
+        const y = (event.clientY - rect.top) / rect.height;
+        if (x < 0 || x > 1 || y < 0 || y > 1) return;
+        pendingAnchor = { kind: 'pin', x, y };
+        section.classList.add('is-open');
+      });
     },
   };
 }
@@ -2013,9 +2089,6 @@ function renderReady(
   function barFor(): HTMLElement {
     return buildBar(view, relicId, {
       onCompare: () => showComparison(),
-      // Picking a version from the taskbar while the current version is
-      // open opens the comparison on that version directly, so the reader
-      // does not have to press Compare and then choose again.
       onSelectVersion: showComparison,
       ...(thread === undefined
         ? {}
@@ -2028,14 +2101,15 @@ function renderReady(
 
   const showCurrent = (): void => {
     bar = barFor();
-    // The thread node is reused rather than rebuilt. It holds fetched
-    // comments and possibly a half-typed one, and returning from a
-    // comparison should not cost either.
+    const wrap = document.createElement('div');
+    wrap.className = 'stage-wrap';
+    wrap.appendChild(buildCurrentStage(view, usercontentOrigin));
     document.body.replaceChildren(
       bar,
-      buildCurrentStage(view, usercontentOrigin),
+      wrap,
       ...(thread === undefined ? [] : [thread.element])
     );
+    thread?.attach(wrap);
   };
   const showComparison = (selectedVersion?: number): void => {
     renderComparison(

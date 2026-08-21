@@ -1661,6 +1661,10 @@ interface ThreadHandle {
 function sessionSignature(state: SessionState): string {
   return state.kind === 'verified' ? `verified:${state.email}` : state.kind;
 }
+/** Updates the tray handle without replacing the interactive control. */
+export function updateThreadToggle(toggle: HTMLElement, count: number): void {
+  toggle.textContent = threadCountLabel(count);
+}
 
 /**
  * The thread, in the service-origin chrome.
@@ -1792,7 +1796,7 @@ function buildThread(
       return;
     }
     list.replaceChildren(...state.entries.map(commentRow));
-    title.textContent = threadCountLabel(state.entries.length);
+    updateThreadToggle(toggle, state.entries.length);
     status.replaceChildren(
       ...(state.entries.length === 0
         ? [line('thread-note', THREAD_EMPTY_NOTE)]

@@ -37,4 +37,18 @@ locals {
     "${local.store_prefix}/challenge/",
     "${local.store_prefix}/dedup/",
   ]
+
+  # The Resend API key's secret, provisioned outside terraform.
+  #
+  # Terraform created it for one deploy and the deploy failed:
+  # `secretmanager.secrets.create` is denied to the CI identity, and the fix
+  # for that is granting the deploy service account Secret Manager admin
+  # across the project. That is a real privilege increase on a pipeline that
+  # currently cannot read or write a single secret, bought to save one gcloud
+  # command that runs once. Not worth it.
+  #
+  # So the secret, its version, and the accessor grant are all created by a
+  # human, and terraform only names it. The mount is still gated on
+  # `mail_from`, so a name that does not resolve yet cannot reach a revision.
+  mail_secret_id = "relic-resend-api-key"
 }

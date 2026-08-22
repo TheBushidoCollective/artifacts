@@ -669,9 +669,17 @@ body {
   max-width: none;
 }
 
+/*
+ * No height here. Every frame this class reaches sits inside either a
+ * sandboxed stage or a comparison pane, and both set their own: the only
+ * routes that build a frame are `sandboxed-html` and `sandboxed-jsx`, plus the
+ * two panes a rendered comparison builds. A height on this rule would be a
+ * third answer nothing ever reads, and it used to be
+ * `calc(100vh - var(--bar-height) - 4rem)`, the same guess at the chrome that
+ * grew a second scrollbar on the stage.
+ */
 .usercontent-frame {
   width: 100%;
-  height: calc(100vh - var(--bar-height) - 4rem);
   border: 1px solid var(--rule);
   background: #fff;
 }
@@ -689,6 +697,9 @@ body {
  */
 .stage-sandboxed-html,
 .stage-sandboxed-jsx {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
   padding: 0;
 }
 
@@ -697,7 +708,25 @@ body {
   /* Block, or the iframe sits on the text baseline and leaves a strip of page
      background under it that reads as one more stray margin. */
   display: block;
-  height: calc(100vh - var(--bar-height));
+
+  /*
+   * Fills the row rather than guessing at it.
+   *
+   * This was `calc(100vh - var(--bar-height))`, and the reserve has to equal
+   * the real taskbar to the pixel. It does not: `.bar` carries a MIN height,
+   * and the identity zone stacks a filename over an accession number, so the
+   * band lands a few pixels taller at most widths. The frame was therefore
+   * slightly taller than the row that holds it, `.stage-wrap` grew a scrollbar
+   * for that overflow, and the iframe kept its own. Two scrollbars side by
+   * side, which is what opening the sidebar made impossible to miss.
+   *
+   * The row already has a definite height from the flex column above it, so
+   * nothing here needs to know what the chrome measures. `min-height: 0` is
+   * load-bearing: a flex item's automatic minimum is its content, and an
+   * iframe's intrinsic height would otherwise push it back past the row.
+   */
+  flex: 1 1 auto;
+  min-height: 0;
   border: 0;
 }
 

@@ -1877,6 +1877,32 @@ describe('magic-link identity', () => {
     expect(sent).toHaveLength(0);
   });
 
+  test('a provider refusal is still 202, so error codes cannot become the oracle', async () => {
+    // Mail can fail for reasons that have nothing to do with the address: an
+    // unverified domain, a suspended key, a quota. If those turned into a 500
+    // while an undeliverable address kept its 202, the oracle the status code
+    // was flattened to prevent would be rebuilt out of failure modes.
+    const attempts: string[] = [];
+    app = build({
+      mailer: {
+        async send(email) {
+          attempts.push(email);
+          throw new Error('resend refused with 403 validation_error');
+        },
+      },
+    });
+
+    const asked = await app.fetch(
+      req('/api/auth/request', {
+        method: 'POST',
+        body: JSON.stringify({ email: 'reader@example.com' }),
+      })
+    );
+
+    expect(asked.status).toBe(202);
+    expect(attempts).toEqual(['reader@example.com']);
+  });
+
   test('a spent or missing token is invalid_session, not a new session', async () => {
     const sent: Array<{ email: string; link: string }> = [];
     app = build({

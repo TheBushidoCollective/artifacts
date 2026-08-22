@@ -69,3 +69,19 @@ variable "operator_tokens" {
   sensitive   = true
   default     = ""
 }
+
+variable "mail_from" {
+  description = <<-EOT
+    Envelope sender for outbound mail: the Resend-verified address on the
+    service domain.
+
+    Empty means mail is off, and that is also what gates the API key mount.
+    Cloud Run fails a revision that mounts a secret with no version, so this
+    stays empty until a human has added the version to the secret terraform
+    created. One knob rather than two: a from address with no key and a key
+    with no from address are both broken, and the mailer refuses to start on
+    either half alone.
+  EOT
+  type        = string
+  default     = ""
+}

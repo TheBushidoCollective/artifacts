@@ -9,6 +9,7 @@ import {
   privateKeySigner,
 } from './gcs.ts';
 import { gcsStore } from './gcsstore.ts';
+import { mailerFromEnv } from './mail.ts';
 import { MemoryStorage, type ObjectStorage } from './storage.ts';
 import { MemoryStore, type RelicStore } from './store.ts';
 
@@ -120,6 +121,8 @@ function parseOperatorTokens(raw: string | undefined): Map<string, string> {
   return tokens;
 }
 
+const mailer = mailerFromEnv(process.env);
+
 const app = createApp({
   config: {
     serviceOrigin:
@@ -135,6 +138,9 @@ const app = createApp({
       new URL('../../relic-viewer/dist/', import.meta.url).pathname
   ),
   operatorTokens: parseOperatorTokens(process.env['RELIC_OPERATOR_TOKENS']),
+  // Omitted rather than passed as undefined when mail is unconfigured, so
+  // `createApp` falls back to the null mailer through its own default.
+  ...(mailer === undefined ? {} : { mailer }),
 });
 
 const port = Number(process.env['PORT'] ?? 8080);

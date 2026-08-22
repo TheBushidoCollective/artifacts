@@ -101,6 +101,10 @@ jobs:
           TF_VAR_image: ${{ steps.image.outputs.digest }}
           TF_VAR_kill_switch_engaged: ${{ inputs.kill_switch || false }}
           TF_VAR_operator_tokens: ${{ secrets.RELIC_OPERATOR_TOKENS }}
+          # Empty until the Resend key has a secret version. Empty is also
+          # what keeps the key unmounted, so setting this is the one action
+          # that turns mail on.
+          TF_VAR_mail_from: ${{ vars.RELIC_MAIL_FROM }}
 
       - name: Terraform apply
         working-directory: deploy/terraform

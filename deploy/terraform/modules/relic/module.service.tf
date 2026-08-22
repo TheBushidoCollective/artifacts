@@ -29,7 +29,17 @@ module "service" {
 
     RELIC_KILL_SWITCH     = tostring(var.kill_switch_engaged)
     RELIC_OPERATOR_TOKENS = var.operator_tokens
+
+    RELIC_MAIL_FROM = var.mail_from
   })
+
+  # Gated on the from address rather than a second flag. Cloud Run fails a
+  # revision that mounts a secret with no version, and the version arrives by
+  # hand after terraform has made the container and the access. One knob keeps
+  # the two halves from disagreeing.
+  secret_env = var.mail_from != "" ? {
+    RELIC_RESEND_API_KEY = google_secret_manager_secret.mail.secret_id
+  } : {}
 }
 
 # Both origins run the same image. The isolation is the origin boundary, not a

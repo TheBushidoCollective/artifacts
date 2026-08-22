@@ -38,6 +38,8 @@ export interface ResendMailerOptions {
   readonly from: string;
   /** Injected so a test asserts the request without a network. */
   readonly fetch?: typeof globalThis.fetch;
+  /** Injected so a test reads the warning instead of the console. */
+  readonly log?: (message: string) => void;
 }
 
 /**
@@ -87,6 +89,48 @@ function escapeHtml(value: string): string {
 }
 
 /**
+ * The quota Resend reports on every accepted send.
+ *
+ * This exists because of a failure found live: a probe send returned 200 with
+ * an id and `x-resend-daily-quota: 0`. On the free tier the daily allowance is
+ * a hard stop that PAUSES sending rather than refusing it, so at zero a
+ * sign-in link is accepted, never delivered, and nothing in the response says
+ * so. A 200 is a 200. These headers are the only warning there is.
+ */
+export const QUOTA_WARN_AT = 10;
+
+/** What the headers said, and whether it is worth saying out loud. */
+export function quotaWarning(
+  headers: Pick<Headers, 'get'>
+): string | undefined {
+  const read = (name: string): number | undefined => {
+    const raw = headers.get(name);
+    if (raw === null) return undefined;
+    const value = Number.parseInt(raw, 10);
+    return Number.isFinite(value) ? value : undefined;
+  };
+
+  const daily = read('x-resend-daily-quota');
+  const monthly = read('x-resend-monthly-quota');
+  const left = [
+    ...(daily !== undefined && daily <= QUOTA_WARN_AT
+      ? [`daily ${daily}`]
+      : []),
+    ...(monthly !== undefined && monthly <= QUOTA_WARN_AT
+      ? [`monthly ${monthly}`]
+      : []),
+  ];
+  if (left.length === 0) return undefined;
+
+  return daily === 0 || monthly === 0
+    ? `relic: Resend quota is spent (${left.join(', ')} remaining). Sends ` +
+        'are accepted and paused, so sign-in links will not arrive until it ' +
+        'resets.'
+    : `relic: Resend quota is nearly spent (${left.join(', ')} remaining). ` +
+        'At zero, sends are accepted and paused rather than refused.';
+}
+
+/**
  * A mailer that actually sends.
  *
  * Resend answering 200 means Resend accepted the message, not that it arrived.
@@ -115,7 +159,13 @@ export function resendMailer(options: ResendMailerOptions): Mailer {
         }),
       });
 
-      if (response.ok) return;
+      if (response.ok) {
+        // An accepted send is not a delivered one, and this is the only place
+        // the difference is visible before a reader reports it.
+        const warning = quotaWarning(response.headers);
+        if (warning !== undefined) (options.log ?? console.error)(warning);
+        return;
+      }
 
       // The body is the only place the reason lives. A status alone cannot
       // tell an unverified domain from a suspended key, and those are

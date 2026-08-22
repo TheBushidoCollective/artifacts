@@ -25,6 +25,8 @@ import {
   clampThreadWidth,
   commentRow,
   localStorageKeyVault,
+  pinFraction,
+  pinOffsets,
   THREAD_EMPTY_NOTE,
   threadRefusal,
   updateThreadToggle,
@@ -745,6 +747,52 @@ describe('the disclosure, at the point of commenting', () => {
     // Narrower than the floor: the floor wins, and the media query takes the
     // row over at this width anyway.
     expect(clampThreadWidth(4000, 320)).toBe(272);
+  });
+
+  test('a mark lands on the content, not on the screen', () => {
+    // The regression this defends, in both directions it has shipped in: a
+    // fraction measured against the visible box moves with the scroll, so the
+    // same word gives a different anchor depending on how far the reader had
+    // scrolled when they clicked.
+    const content = { scrollWidth: 1000, scrollHeight: 3000 };
+    const unscrolled = pinFraction(
+      { left: 0, top: 0, scrollLeft: 0, scrollTop: 0, ...content },
+      300,
+      1500
+    );
+    // The same point on the page, reached after scrolling 1200px down: the
+    // click now lands 1200px higher in the viewport.
+    const scrolled = pinFraction(
+      { left: 0, top: 0, scrollLeft: 0, scrollTop: 1200, ...content },
+      300,
+      300
+    );
+
+    expect(unscrolled).toEqual({ x: 0.3, y: 0.5 });
+    expect(scrolled).toEqual(unscrolled);
+    // And it paints back onto the same content pixel it was taken from.
+    expect(pinOffsets(unscrolled as { x: number; y: number }, content)).toEqual(
+      { left: 300, top: 1500 }
+    );
+  });
+
+  test('a mark outside the relic is not a mark', () => {
+    const box = {
+      left: 40,
+      top: 60,
+      scrollLeft: 0,
+      scrollTop: 0,
+      scrollWidth: 800,
+      scrollHeight: 600,
+    };
+    // Above and left of the stage, which is the taskbar and the gutter.
+    expect(pinFraction(box, 10, 10)).toBeUndefined();
+    // Past the far edge.
+    expect(pinFraction(box, 4000, 100)).toBeUndefined();
+    // A stage that has not laid out yet divides by nothing.
+    expect(
+      pinFraction({ ...box, scrollWidth: 0, scrollHeight: 0 }, 100, 100)
+    ).toBeUndefined();
   });
 
   /**

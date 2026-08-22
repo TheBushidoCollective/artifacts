@@ -1726,6 +1726,54 @@ function writeThreadWidth(width: number): void {
   }
 }
 
+/** The scrolled stage, as the numbers a mark needs from it. */
+export interface StageBox {
+  readonly left: number;
+  readonly top: number;
+  readonly scrollLeft: number;
+  readonly scrollTop: number;
+  readonly scrollWidth: number;
+  readonly scrollHeight: number;
+}
+
+/**
+ * Where a click landed, as a fraction of the whole rendered relic.
+ *
+ * Of the whole relic, not of the visible box. A mark belongs to the line it
+ * was put on, and the reader scrolls. Measuring against the visible box pins a
+ * comment to a screen position instead, which is how a mark ends up beside
+ * unrelated text one scroll later, and how a mark placed halfway down a long
+ * relic lands near the top of it.
+ */
+export function pinFraction(
+  box: StageBox,
+  clientX: number,
+  clientY: number
+): { readonly x: number; readonly y: number } | undefined {
+  if (box.scrollWidth <= 0 || box.scrollHeight <= 0) return undefined;
+  const x = (clientX - box.left + box.scrollLeft) / box.scrollWidth;
+  const y = (clientY - box.top + box.scrollTop) / box.scrollHeight;
+  if (x < 0 || x > 1 || y < 0 || y > 1) return undefined;
+  return { x, y };
+}
+
+/**
+ * Where a stored fraction sits, in the scrolled content's own pixels.
+ *
+ * Pixels rather than percentages: a percentage inside a scroll container
+ * resolves against the visible box, so a pin two screens down would paint
+ * itself onto the first screen.
+ */
+export function pinOffsets(
+  anchor: { readonly x: number; readonly y: number },
+  content: { readonly scrollWidth: number; readonly scrollHeight: number }
+): { readonly left: number; readonly top: number } {
+  return {
+    left: anchor.x * content.scrollWidth,
+    top: anchor.y * content.scrollHeight,
+  };
+}
+
 /**
  * The thread, in the service-origin chrome.
  *
@@ -1881,8 +1929,9 @@ function buildThread(
       pin.type = 'button';
       pin.className = 'comment-pin';
       pin.textContent = String(number);
-      pin.style.left = `${entry.anchor.x * 100}%`;
-      pin.style.top = `${entry.anchor.y * 100}%`;
+      const offsets = pinOffsets(entry.anchor, host);
+      pin.style.left = `${offsets.left}px`;
+      pin.style.top = `${offsets.top}px`;
       pin.title = entry.body;
       pin.addEventListener('click', (event) => {
         event.preventDefault();
@@ -2204,12 +2253,22 @@ function buildThread(
       host.addEventListener('click', (event) => {
         if (!(event.target instanceof Element)) return;
         if (event.target.closest('.comment-pin, .doc, .thread')) return;
-        const rect = host?.getBoundingClientRect();
-        if (rect === undefined || rect.width === 0 || rect.height === 0) return;
-        const x = (event.clientX - rect.left) / rect.width;
-        const y = (event.clientY - rect.top) / rect.height;
-        if (x < 0 || x > 1 || y < 0 || y > 1) return;
-        pendingAnchor = { kind: 'pin', x, y };
+        if (host === undefined) return;
+        const rect = host.getBoundingClientRect();
+        const fraction = pinFraction(
+          {
+            left: rect.left,
+            top: rect.top,
+            scrollLeft: host.scrollLeft,
+            scrollTop: host.scrollTop,
+            scrollWidth: host.scrollWidth,
+            scrollHeight: host.scrollHeight,
+          },
+          event.clientX,
+          event.clientY
+        );
+        if (fraction === undefined) return;
+        pendingAnchor = { kind: 'pin', ...fraction };
         setOpen(true);
       });
     },

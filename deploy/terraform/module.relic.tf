@@ -14,6 +14,7 @@ module "relic" {
   soft_delete_retention_days = var.soft_delete_retention_days
   kill_switch_engaged        = var.kill_switch_engaged
   operator_tokens            = var.operator_tokens
+  mail_from                  = var.mail_from
 
   depends_on = [google_project_service.relic]
 }

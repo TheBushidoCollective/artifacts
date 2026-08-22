@@ -13,6 +13,8 @@ resource "google_project_service" "relic" {
     # V4 signing goes through signBlob with the ambient identity, so there is
     # no downloaded key anywhere in the deployment.
     "iamcredentials.googleapis.com",
+    # The Resend API key is mounted from Secret Manager.
+    "secretmanager.googleapis.com",
   ])
 
   project = var.project_id

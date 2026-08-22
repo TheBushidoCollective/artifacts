@@ -88,3 +88,15 @@ variable "operator_tokens" {
   sensitive   = true
   default     = ""
 }
+
+variable "mail_from" {
+  description = <<-EOT
+    Envelope sender for outbound mail: the Resend-verified address on the
+    service domain.
+
+    Empty means mail is off, and that is also what gates the API key mount.
+    Set it only once the secret holds a version.
+  EOT
+  type        = string
+  default     = ""
+}

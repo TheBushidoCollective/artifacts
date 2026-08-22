@@ -1395,10 +1395,22 @@ export function createApp(options: AppOptions = {}): RelicApp {
       // avoidable: mail cannot be sent to a hash. `frame.md` names this as
       // one of identity's prices rather than pretending a stored hash undoes
       // it.
-      await mailer.send(
-        email,
-        `${config.serviceOrigin}/api/auth/callback?token=${token}`
-      );
+      //
+      // A refusal from the provider must not become the response. The 202
+      // above is the whole reason this endpoint is not an address oracle, and
+      // a 500 for a deliverable address and a 202 for an undeliverable one
+      // would rebuild the oracle out of error codes. So the failure goes to
+      // the log, where the operator can see it and the caller cannot.
+      try {
+        await mailer.send(
+          email,
+          `${config.serviceOrigin}/api/auth/callback?token=${token}`
+        );
+      } catch (error) {
+        console.error(
+          `relic: sign-in mail failed: ${(error as Error).message}`
+        );
+      }
     }
 
     return new Response(null, { status: 202 });

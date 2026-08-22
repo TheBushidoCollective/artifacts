@@ -283,6 +283,67 @@ describe('reserved segments beat ids at the router', () => {
   });
 });
 
+describe('the landing page', () => {
+  test('/ is a real page, not the shell with a bogus relic id', async () => {
+    const response = await app.fetch(req('/'));
+    expect(response.status).toBe(200);
+    expect(response.headers.get('content-type')).toContain('text/html');
+    const body = await response.text();
+    // The regression this page exists to fix: `/` used to serve the viewer
+    // shell fed the literal string "Relic" as an id, so the homepage rendered
+    // as a relic that does not exist. The manifest's start_url is `/`, so the
+    // installed app landed there too.
+    expect(body).not.toContain('id="relic-root"');
+    expect(body).not.toContain('/assets/viewer.js');
+  });
+
+  test('/install serves the same body as /, so the two paths cannot drift', async () => {
+    const root = await app.fetch(req('/')).then((r) => r.text());
+    const install = await app.fetch(req('/install')).then((r) => r.text());
+    expect(install).toBe(root);
+  });
+
+  test('carries no script at all, so the CSP can deny scripts outright', async () => {
+    const body = await app.fetch(req('/')).then((r) => r.text());
+    expect(body).not.toContain('<script');
+  });
+
+  test('sends exactly the contract headers', async () => {
+    const response = await app.fetch(req('/'));
+    expect(response.headers.get('content-security-policy')).toBe(
+      "default-src 'none'; style-src 'unsafe-inline'; img-src 'self'; manifest-src 'self'; base-uri 'none'; form-action 'none'"
+    );
+    expect(response.headers.get('x-robots-tag')).toBe('noindex');
+    expect(response.headers.get('referrer-policy')).toBe('no-referrer');
+  });
+
+  test('carries the three install forms, each naming the configured origin', async () => {
+    // build() leaves serviceOrigin at its default, which is the origin the
+    // forms must interpolate; relik.link must not appear by accident.
+    const body = await app.fetch(req('/')).then((r) => r.text());
+    expect(body).toContain('claude mcp add');
+    expect(body).toContain('mcpServers');
+    expect(body).toContain('RELIC_SERVICE_ORIGIN');
+    expect(body).toContain('https://relic.example');
+  });
+
+  test('links the policy, the abuse form, and the installable manifest', async () => {
+    const body = await app.fetch(req('/')).then((r) => r.text());
+    expect(body).toContain('href="/policy"');
+    expect(body).toContain('href="/abuse"');
+    expect(body).toContain('href="/manifest.webmanifest"');
+  });
+
+  test('a single segment that is not reserved still serves the viewer shell', async () => {
+    // Guards the router change that gave `/` to the landing page: an id-shaped
+    // path must keep reaching the shell.
+    const body = await app
+      .fetch(req('/aaaaaaaaaaaaaaaaaaaaaaaaaa'))
+      .then((r) => r.text());
+    expect(body).toContain('id="relic-root"');
+  });
+});
+
 describe('the grant', () => {
   test('returns the cap before a grant is requested', async () => {
     const body = (await app

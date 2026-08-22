@@ -103,7 +103,10 @@ export function createApp(options: AppOptions = {}): RelicApp {
     const ip = clientIp(request);
     const now = clock();
 
-    if (segments.length === 0) return shell(config, 'Relic');
+    // The homepage is a landing page, not the viewer. It used to be the shell
+    // fed the literal string "Relic" as an id, so the first thing a visitor
+    // saw was a relic that does not exist.
+    if (segments.length === 0) return landingPage(config);
 
     // Reserved segments win at the router, before anything is read as an ID.
     if (head !== undefined && RESERVED.has(head)) {
@@ -145,7 +148,9 @@ export function createApp(options: AppOptions = {}): RelicApp {
       });
     }
 
-    if (head === 'install') return installPage(config);
+    // The same page as the homepage, because a shared /install link should
+    // keep working and two copies of install copy would drift.
+    if (head === 'install') return landingPage(config);
 
     if (head === 'abuse') {
       if (request.method === 'GET') return abuseForm(config);
@@ -1676,22 +1681,28 @@ function shell(config: RelicConfig, title: string): Response {
 }
 
 /**
- * How to add the MCP server.
+ * The homepage, and the only screen here aimed at a publisher.
+ *
+ * It replaces two defects at once. `/` used to serve the viewer shell with a
+ * placeholder relic id, so the homepage rendered as a relic that does not
+ * exist, and the manifest's `start_url` is `/`, so installing the app landed
+ * on that same broken screen.
  *
  * The origin is interpolated from config rather than written into the copy,
  * because `relic-mcp` has no default origin on purpose: a wrong one turns
  * "you did not configure me" into a DNS error on the first publish.
  *
- * Self-contained CSS. The page carries no script, so the CSP denies scripts
- * outright instead of allowing a source it does not use.
+ * Self-contained CSS and no script at all, so the CSP denies scripts outright
+ * instead of allowing a source the page does not use.
  */
-function installPage(config: RelicConfig): Response {
+export function landingPage(config: RelicConfig): Response {
   const origin = escapeHtml(new URL(config.serviceOrigin).origin);
   const body = `<!doctype html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="theme-color" content="#1f6b64">
-<title>Add the Relik MCP server</title>
+<title>Relic: publish a file as an encrypted link</title>
+<link rel="manifest" href="/manifest.webmanifest">
 <link rel="icon" href="/assets/icon.svg" type="image/svg+xml">
 <style>
   :root {
@@ -1798,12 +1809,30 @@ function installPage(config: RelicConfig): Response {
 </style>
 <header class="bar">
   <div class="mark">relik.link</div>
-  <div class="bar-note">Publish a file as an encrypted link</div>
+  <div class="bar-note">Install, then tell your agent to publish</div>
 </header>
 <main>
-  <h1>Add the Relik MCP server</h1>
-  <p class="lede">Then tell your agent: <em>publish ./report.md as a relic</em>.
-  It returns one link you can hand to anybody.</p>
+  <h1>Publish a file as an encrypted link</h1>
+  <p class="lede">Relic turns a file on your machine into one URL you can hand
+  to a person. The file is encrypted before it is uploaded, and the key lives
+  in the link rather than on our servers.</p>
+
+  <h2>How it goes</h2>
+  <p>Install the MCP server below, then tell your agent:
+  <em>publish ./report.md as a relic</em>. It hands back a link. Send the link.
+  Whoever opens it sees the file rendered in their browser, decrypted there.</p>
+  <p>Markdown, code, images and plain text render inline. HTML and JSX render
+  in a sandboxed frame on a separate origin, so a published page cannot reach
+  the key or this service. Anything else offers a download.</p>
+
+  <h2>The link is the credential</h2>
+  <div class="note">
+    <p>Everything after the <code>#</code> is the decryption key. Anyone
+    holding the whole link can read the file, and there are no per-recipient
+    permissions to revoke. Treat it like a password, and know that a chat
+    client or ticket system that truncates the fragment hands over a link that
+    cannot decrypt anything.</p>
+  </div>
 
   <h2>Claude Code</h2>
   <p>One command. <code>npx</code> fetches the server on first use and caches it.</p>
@@ -1848,6 +1877,13 @@ claude plugin install relic@relic</code></pre>
     The half that is structural is that we never receive the key.</p>
   </div>
 
+  <h2>What the recipient needs</h2>
+  <p>A browser, and the whole link including the part after the
+  <code>#</code>. No account, no install, nothing to sign up for. They can copy
+  the link, download the file, compare it against earlier versions if the
+  publisher republished, and leave a comment whose text is encrypted the same
+  way the file is.</p>
+
   <h2>Links stay until deleted</h2>
   <p>A relic is kept until it is deleted. The publisher can ask for a
   lifetime when creating it; without one, the link does not age out.</p>
@@ -1869,6 +1905,10 @@ claude plugin install relic@relic</code></pre>
         "default-src 'none'",
         "style-src 'unsafe-inline'",
         "img-src 'self'",
+        // The page links the manifest so a browser can offer to install it,
+        // and a manifest fetch falls back to default-src when manifest-src is
+        // absent, which silently refused it on the shell for weeks.
+        "manifest-src 'self'",
         "base-uri 'none'",
         "form-action 'none'",
       ].join('; '),

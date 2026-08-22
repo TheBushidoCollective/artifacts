@@ -38,7 +38,7 @@ module "service" {
   # hand after terraform has made the container and the access. One knob keeps
   # the two halves from disagreeing.
   secret_env = var.mail_from != "" ? {
-    RELIC_RESEND_API_KEY = google_secret_manager_secret.mail.secret_id
+    RELIC_RESEND_API_KEY = local.mail_secret_id
   } : {}
 }
 

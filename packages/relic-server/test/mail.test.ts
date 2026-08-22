@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import {
   MailRefusedError,
   mailerFromEnv,
+  quotaWarning,
   resendMailer,
   signInMail,
 } from '../src/mail.ts';
@@ -26,6 +27,75 @@ function recorder(response: Response): {
 function accepted(): Response {
   return new Response(JSON.stringify({ id: 'e1' }), { status: 200 });
 }
+
+describe('the quota Resend reports on an accepted send', () => {
+  // Found live: a probe returned 200 with an id and a daily quota of 0. The
+  // free tier pauses sending at the wall instead of refusing, so this is the
+  // difference between a link that is late and a link that never comes.
+  const headers = (values: Record<string, string>): Pick<Headers, 'get'> => ({
+    get: (name: string) => values[name.toLowerCase()] ?? null,
+  });
+
+  test('a spent daily quota says the link will not arrive', () => {
+    const said = quotaWarning(headers({ 'x-resend-daily-quota': '0' }));
+    expect(said).toContain('spent');
+    expect(said).toContain('will not arrive');
+  });
+
+  test('a nearly spent quota warns before the wall, not at it', () => {
+    const said = quotaWarning(headers({ 'x-resend-daily-quota': '3' }));
+    expect(said).toContain('nearly spent');
+    expect(said).toContain('daily 3');
+  });
+
+  test('headroom says nothing at all', () => {
+    expect(
+      quotaWarning(
+        headers({
+          'x-resend-daily-quota': '90',
+          'x-resend-monthly-quota': '2900',
+        })
+      )
+    ).toBeUndefined();
+  });
+
+  test('a monthly wall counts even with daily headroom', () => {
+    const said = quotaWarning(
+      headers({ 'x-resend-daily-quota': '90', 'x-resend-monthly-quota': '0' })
+    );
+    expect(said).toContain('spent');
+    expect(said).toContain('monthly 0');
+    expect(said).not.toContain('daily');
+  });
+
+  test('absent or unparseable headers are not a warning', () => {
+    expect(quotaWarning(headers({}))).toBeUndefined();
+    expect(
+      quotaWarning(headers({ 'x-resend-daily-quota': 'unknown' }))
+    ).toBeUndefined();
+  });
+
+  test('an accepted send at the wall logs, and still succeeds', async () => {
+    const said: string[] = [];
+    const wire = recorder(
+      new Response(JSON.stringify({ id: 'e1' }), {
+        status: 200,
+        headers: { 'x-resend-daily-quota': '0' },
+      })
+    );
+    await resendMailer({
+      apiKey: 're_test_key',
+      from: 'no-reply@relik.link',
+      fetch: wire.fetch,
+      log: (message) => said.push(message),
+    }).send('ada@example.com', LINK);
+
+    // Not an error: Resend took it. The reader still gets nothing, and that
+    // is what the line has to say.
+    expect(said).toHaveLength(1);
+    expect(said[0]).toContain('quota is spent');
+  });
+});
 
 describe('the sign-in mail', () => {
   test('the link is the message, in both parts', () => {

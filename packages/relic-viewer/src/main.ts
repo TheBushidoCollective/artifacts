@@ -1651,7 +1651,11 @@ export const THREAD_LOADING_NOTE =
 
 interface ThreadHandle {
   readonly element: HTMLElement;
-  /** Toggles the overlay on the relic rather than scrolling past it. */
+  /** The edge tab that opens the sidebar, for a row that has room for it. */
+  readonly tab: HTMLElement;
+  /** The divider between the relic and the sidebar. */
+  readonly resizer: HTMLElement;
+  /** Opens or closes the sidebar beside the relic. */
   readonly toggle: () => void;
   /** The stage the marks are painted on. */
   readonly attach: (host: HTMLElement) => void;
@@ -1661,9 +1665,113 @@ interface ThreadHandle {
 function sessionSignature(state: SessionState): string {
   return state.kind === 'verified' ? `verified:${state.email}` : state.kind;
 }
-/** Updates the tray handle without replacing the interactive control. */
+/** Updates the sidebar header without replacing the interactive control. */
 export function updateThreadToggle(toggle: HTMLElement, count: number): void {
   toggle.textContent = threadCountLabel(count);
+}
+
+/** The narrowest sidebar a comment is worth reading in, in CSS pixels. */
+const THREAD_MIN_WIDTH = 272;
+
+/** What a reader gets before they have ever dragged the divider. */
+const THREAD_DEFAULT_WIDTH = 352;
+
+/** The widest sidebar, so a wide window still spends most of itself on the relic. */
+const THREAD_MAX_WIDTH = 640;
+
+const THREAD_WIDTH_KEY = 'relic:comment-width';
+
+/**
+ * Clamps a dragged width to what the viewport can actually spare.
+ *
+ * The ceiling is a share of the viewport rather than a constant, so dragging
+ * the divider in a narrow window cannot push the relic out of the row.
+ */
+export function clampThreadWidth(width: number, viewport: number): number {
+  const max = Math.max(
+    THREAD_MIN_WIDTH,
+    Math.min(THREAD_MAX_WIDTH, viewport * 0.6)
+  );
+  return Math.min(Math.max(width, THREAD_MIN_WIDTH), max);
+}
+
+/** Storage, or nothing: touching it throws outright in some contexts. */
+function widthStore(): Storage | undefined {
+  try {
+    return globalThis.localStorage ?? undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/** The width this reader last dragged the divider to, if it was kept. */
+function readThreadWidth(): number | undefined {
+  try {
+    const raw = widthStore()?.getItem(THREAD_WIDTH_KEY);
+    if (raw === null || raw === undefined) return undefined;
+    const width = Number.parseInt(raw, 10);
+    return Number.isFinite(width) ? width : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/** Keeps a dragged width, so the next relic opens the way this one was left. */
+function writeThreadWidth(width: number): void {
+  try {
+    widthStore()?.setItem(THREAD_WIDTH_KEY, String(Math.round(width)));
+  } catch {
+    // Quota, or storage disabled mid-session. A remembered width is a
+    // convenience, and failing to keep one is not worth an error page.
+  }
+}
+
+/** The scrolled stage, as the numbers a mark needs from it. */
+export interface StageBox {
+  readonly left: number;
+  readonly top: number;
+  readonly scrollLeft: number;
+  readonly scrollTop: number;
+  readonly scrollWidth: number;
+  readonly scrollHeight: number;
+}
+
+/**
+ * Where a click landed, as a fraction of the whole rendered relic.
+ *
+ * Of the whole relic, not of the visible box. A mark belongs to the line it
+ * was put on, and the reader scrolls. Measuring against the visible box pins a
+ * comment to a screen position instead, which is how a mark ends up beside
+ * unrelated text one scroll later, and how a mark placed halfway down a long
+ * relic lands near the top of it.
+ */
+export function pinFraction(
+  box: StageBox,
+  clientX: number,
+  clientY: number
+): { readonly x: number; readonly y: number } | undefined {
+  if (box.scrollWidth <= 0 || box.scrollHeight <= 0) return undefined;
+  const x = (clientX - box.left + box.scrollLeft) / box.scrollWidth;
+  const y = (clientY - box.top + box.scrollTop) / box.scrollHeight;
+  if (x < 0 || x > 1 || y < 0 || y > 1) return undefined;
+  return { x, y };
+}
+
+/**
+ * Where a stored fraction sits, in the scrolled content's own pixels.
+ *
+ * Pixels rather than percentages: a percentage inside a scroll container
+ * resolves against the visible box, so a pin two screens down would paint
+ * itself onto the first screen.
+ */
+export function pinOffsets(
+  anchor: { readonly x: number; readonly y: number },
+  content: { readonly scrollWidth: number; readonly scrollHeight: number }
+): { readonly left: number; readonly top: number } {
+  return {
+    left: anchor.x * content.scrollWidth,
+    top: anchor.y * content.scrollHeight,
+  };
 }
 
 /**
@@ -1681,8 +1789,8 @@ function buildThread(
   deps: ViewerDeps,
   onCount: (count: number) => void
 ): ThreadHandle {
-  const section = document.createElement('section');
-  section.className = 'thread thread-overlay';
+  const section = document.createElement('aside');
+  section.className = 'thread';
   section.id = 'comment-thread';
   section.setAttribute('aria-labelledby', 'thread-title');
 
@@ -1696,6 +1804,25 @@ function buildThread(
   toggle.setAttribute('aria-controls', section.id);
   toggle.setAttribute('aria-expanded', 'false');
   title.appendChild(toggle);
+
+  // The divider lives in the row rather than in the sidebar, because the
+  // sidebar scrolls and a divider that scrolled away with the conversation
+  // would be a control that disappears while it is being used.
+  const resizer = document.createElement('div');
+  resizer.className = 'thread-resizer';
+  resizer.setAttribute('role', 'separator');
+  resizer.setAttribute('aria-orientation', 'vertical');
+  resizer.setAttribute('aria-label', 'Resize the comments');
+  resizer.tabIndex = 0;
+
+  // The one entry that survives every width. The taskbar control leaves the
+  // row at the 320px floor, and a reader on a phone still has to get in.
+  const tab = document.createElement('button');
+  tab.className = 'thread-tab';
+  tab.type = 'button';
+  tab.textContent = 'Comments';
+  tab.setAttribute('aria-controls', section.id);
+  tab.setAttribute('aria-expanded', 'false');
 
   const status = document.createElement('div');
   status.className = 'thread-status';
@@ -1727,15 +1854,61 @@ function buildThread(
   let host: HTMLElement | undefined;
   let pendingAnchor: CommentAnchor | null = null;
   let lastEntries: readonly CommentEntry[] = [];
+  /** Puts the width where the sidebar and the divider both read it. */
+  const applyWidth = (width: number): number => {
+    const clamped = Math.round(clampThreadWidth(width, window.innerWidth));
+    document.documentElement.style.setProperty(
+      '--thread-width',
+      `${clamped}px`
+    );
+    return clamped;
+  };
+  applyWidth(readThreadWidth() ?? THREAD_DEFAULT_WIDTH);
+
   const setOpen = (open: boolean): void => {
     section.classList.toggle('is-open', open);
     toggle.setAttribute('aria-expanded', String(open));
+    tab.setAttribute('aria-expanded', String(open));
     if (open) toggle.focus({ preventScroll: true });
   };
   const toggleOpen = (): void => {
     setOpen(!section.classList.contains('is-open'));
   };
   toggle.addEventListener('click', toggleOpen);
+  tab.addEventListener('click', toggleOpen);
+
+  // Pointer capture, so a drag that outruns the divider keeps arriving here
+  // instead of being swallowed by whatever it crossed.
+  resizer.addEventListener('pointerdown', (event) => {
+    const row = resizer.parentElement;
+    if (row === null) return;
+    event.preventDefault();
+    const right = row.getBoundingClientRect().right;
+    resizer.setPointerCapture(event.pointerId);
+    let width = section.getBoundingClientRect().width;
+    const move = (moved: PointerEvent): void => {
+      width = applyWidth(right - moved.clientX);
+    };
+    const done = (): void => {
+      resizer.removeEventListener('pointermove', move);
+      resizer.removeEventListener('pointerup', done);
+      resizer.removeEventListener('pointercancel', done);
+      writeThreadWidth(width);
+    };
+    resizer.addEventListener('pointermove', move);
+    resizer.addEventListener('pointerup', done);
+    resizer.addEventListener('pointercancel', done);
+  });
+
+  // A divider that only answers a pointer is a divider a keyboard cannot
+  // reach, and this one is in the tab order.
+  resizer.addEventListener('keydown', (event) => {
+    const step =
+      event.key === 'ArrowLeft' ? 24 : event.key === 'ArrowRight' ? -24 : 0;
+    if (step === 0) return;
+    event.preventDefault();
+    writeThreadWidth(applyWidth(section.getBoundingClientRect().width + step));
+  });
 
   const paintMarks = (entries: readonly CommentEntry[]): void => {
     lastEntries = entries;
@@ -1756,8 +1929,9 @@ function buildThread(
       pin.type = 'button';
       pin.className = 'comment-pin';
       pin.textContent = String(number);
-      pin.style.left = `${entry.anchor.x * 100}%`;
-      pin.style.top = `${entry.anchor.y * 100}%`;
+      const offsets = pinOffsets(entry.anchor, host);
+      pin.style.left = `${offsets.left}px`;
+      pin.style.top = `${offsets.top}px`;
       pin.title = entry.body;
       pin.addEventListener('click', (event) => {
         event.preventDefault();
@@ -2059,6 +2233,8 @@ function buildThread(
 
   return {
     element: section,
+    tab,
+    resizer,
     toggle: toggleOpen,
     attach: (next) => {
       host = next;
@@ -2069,7 +2245,6 @@ function buildThread(
         const selection = window.getSelection();
         if (selection === null || selection.isCollapsed) return;
         if (host === undefined || !host.contains(selection.anchorNode)) return;
-        if (section.contains(selection.anchorNode)) return;
         const quote = selection.toString().trim();
         if (quote.length === 0) return;
         pendingAnchor = { kind: 'text', quote };
@@ -2078,29 +2253,64 @@ function buildThread(
       host.addEventListener('click', (event) => {
         if (!(event.target instanceof Element)) return;
         if (event.target.closest('.comment-pin, .doc, .thread')) return;
-        const rect = host?.getBoundingClientRect();
-        if (rect === undefined || rect.width === 0 || rect.height === 0) return;
-        const x = (event.clientX - rect.left) / rect.width;
-        const y = (event.clientY - rect.top) / rect.height;
-        if (x < 0 || x > 1 || y < 0 || y > 1) return;
-        pendingAnchor = { kind: 'pin', x, y };
+        if (host === undefined) return;
+        const rect = host.getBoundingClientRect();
+        const fraction = pinFraction(
+          {
+            left: rect.left,
+            top: rect.top,
+            scrollLeft: host.scrollLeft,
+            scrollTop: host.scrollTop,
+            scrollWidth: host.scrollWidth,
+            scrollHeight: host.scrollHeight,
+          },
+          event.clientX,
+          event.clientY
+        );
+        if (fraction === undefined) return;
+        pendingAnchor = { kind: 'pin', ...fraction };
         setOpen(true);
       });
     },
   };
 }
 
-/** Keeps the rendered relic and its service-origin overlay in one stage. */
+/** The rendered relic, which is also the surface the marks are painted on. */
 export function buildStageWrap(
   view: ReadyView,
-  usercontentOrigin: string,
-  overlay?: HTMLElement
+  usercontentOrigin: string
 ): HTMLElement {
   const wrap = document.createElement('div');
   wrap.className = 'stage-wrap';
   wrap.appendChild(buildCurrentStage(view, usercontentOrigin));
-  if (overlay !== undefined) wrap.appendChild(overlay);
   return wrap;
+}
+
+/**
+ * The relic beside its conversation.
+ *
+ * Reading and commenting happen together, so the sidebar takes width from the
+ * row rather than covering the relic or sitting under it. The relic reflows
+ * narrower, which is the whole point: a comment is written next to the line it
+ * is about, while that line is still on the screen.
+ *
+ * Order matters. The divider and the edge tab follow the sidebar so the
+ * stylesheet can hide each of them from the sidebar's own state with a
+ * sibling selector, rather than asking the row to carry a second copy of it.
+ */
+export function buildRelicRow(
+  stage: HTMLElement,
+  sidebar?: HTMLElement,
+  resizer?: HTMLElement,
+  tab?: HTMLElement
+): HTMLElement {
+  const row = document.createElement('div');
+  row.className = 'relic-row';
+  row.appendChild(stage);
+  if (sidebar !== undefined) row.appendChild(sidebar);
+  if (resizer !== undefined) row.appendChild(resizer);
+  if (tab !== undefined) row.appendChild(tab);
+  return row;
 }
 
 function renderReady(
@@ -2129,9 +2339,12 @@ function renderReady(
 
   const showCurrent = (): void => {
     bar = barFor();
-    const wrap = buildStageWrap(view, usercontentOrigin, thread?.element);
-    document.body.replaceChildren(bar, wrap);
-    thread?.attach(wrap);
+    const stage = buildStageWrap(view, usercontentOrigin);
+    document.body.replaceChildren(
+      bar,
+      buildRelicRow(stage, thread?.element, thread?.resizer, thread?.tab)
+    );
+    thread?.attach(stage);
   };
   const showComparison = (selectedVersion?: number): void => {
     renderComparison(

@@ -78,15 +78,18 @@ body {
   overflow-x: hidden;
 }
 
+.relic-row {
+  position: relative;
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
 .stage-wrap {
   position: relative;
   flex: 1 1 auto;
+  min-width: 0;
   min-height: 0;
-  overflow: hidden;
-}
-
-.stage-wrap > .stage {
-  height: 100%;
   overflow: auto;
 }
 
@@ -1285,48 +1288,84 @@ body {
   }
 }
 
-/* ---------- the comment thread ---------- */
+/* ---------- the comment sidebar ---------- */
 
 /*
- * The thread overlays the relic. Darkrun paints marks on the artifact stage
- * and keeps the conversation in a panel; Haiku keeps a tray on the content.
- * Relic does both on the viewing origin because the render frame cannot
- * fetch. Freeform comments live in the tray; marks live on the content.
+ * The conversation sits beside the relic, not under it and not over it.
+ *
+ * Reading and commenting are one pass: a comment gets written next to the
+ * line it is about, while that line is still on the screen. So the sidebar
+ * takes width from the row and the relic reflows narrower. Darkrun keeps its
+ * thread in a side panel beside the marks it paints on the artifact, and this
+ * is that, on the viewing origin, because the render frame cannot fetch.
  */
-.thread-overlay {
-  z-index: 4;
-}
-
 .thread {
-  max-width: 46rem;
-  margin: 0 auto;
-  padding: 2.5rem 1.25rem 5rem;
-  border-top: 1px solid var(--rule-strong);
-}
-
-.thread-overlay.thread {
-  position: absolute;
-  right: 0;
-  bottom: 0;
-  left: 0;
-  width: 100%;
-  max-width: none;
-  max-height: min(42vh, 28rem);
+  display: none;
+  flex: 0 0 auto;
+  width: var(--thread-width, 22rem);
+  max-width: 100%;
   margin: 0;
-  padding: 0 1.25rem 1.25rem;
-  overflow: auto;
-  visibility: hidden;
-  pointer-events: none;
+  padding: 0 1.25rem 1.5rem;
+  overflow-y: auto;
   background: var(--surface);
-  border-top: 1px solid var(--rule-strong);
-  box-shadow: 0 -8px 24px color-mix(in srgb, var(--ink) 8%, transparent);
-  transform: translateY(100%);
+  border-left: 1px solid var(--rule-strong);
 }
 
-.thread-overlay.is-open {
-  visibility: visible;
-  pointer-events: auto;
-  transform: translateY(0);
+.thread.is-open {
+  display: block;
+}
+
+/* Seven pixels of grab centred on the one pixel of rule, so the divider is
+   reachable without putting a visible slab between the two columns. */
+.thread-resizer {
+  position: absolute;
+  top: 0;
+  right: var(--thread-width, 22rem);
+  bottom: 0;
+  z-index: 5;
+  width: 7px;
+  margin-right: -3px;
+  cursor: col-resize;
+  touch-action: none;
+}
+
+.thread-resizer:focus-visible {
+  outline: 2px solid var(--patina);
+}
+
+.thread:not(.is-open) ~ .thread-resizer {
+  display: none;
+}
+
+/* The entry that survives every width, including the floor where the taskbar
+   control leaves the row. */
+.thread-tab {
+  position: absolute;
+  top: 50%;
+  right: 0;
+  z-index: 5;
+  padding: 0.85rem 0.4rem;
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 0.76rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  writing-mode: vertical-rl;
+  background: var(--surface);
+  border: 1px solid var(--rule-strong);
+  border-right: 0;
+  cursor: pointer;
+  transform: translateY(-50%);
+}
+
+.thread-tab:focus-visible {
+  outline: 2px solid var(--patina);
+  outline-offset: 2px;
+}
+
+.thread.is-open ~ .thread-tab {
+  display: none;
 }
 
 .thread-title {
@@ -1355,17 +1394,15 @@ body {
   cursor: pointer;
 }
 
+/* Pointing right, because the header control only ever closes: the sidebar is
+   not on the page to be opened from. */
 .thread-toggle::after {
   width: 0.55rem;
   height: 0.55rem;
   content: "";
   border-top: 1px solid currentColor;
-  border-left: 1px solid currentColor;
+  border-right: 1px solid currentColor;
   transform: rotate(45deg);
-}
-
-.thread-overlay.is-open .thread-toggle::after {
-  transform: rotate(225deg);
 }
 
 .thread-toggle:focus-visible {
@@ -1373,11 +1410,22 @@ body {
   outline-offset: -4px;
 }
 
-@media (max-width: 24rem) {
-  .thread-overlay.thread:not(.is-open) {
-    visibility: visible;
-    pointer-events: auto;
-    transform: translateY(calc(100% - 2.75rem));
+/*
+ * Below this width, side by side is twenty characters of relic beside twenty
+ * characters of conversation, which is neither reading nor commenting. The
+ * sidebar takes the row and the relic collapses rather than shrinking to an
+ * unusable sliver. Its frame stays loaded, so closing brings the relic back
+ * without a refetch.
+ */
+@media (max-width: 44rem) {
+  .thread.is-open {
+    width: 100%;
+  }
+
+  /* Nothing left to divide, and a divider floating over the conversation at
+     the old width would be a control that no longer does anything. */
+  .thread.is-open ~ .thread-resizer {
+    display: none;
   }
 }
 
@@ -1644,11 +1692,6 @@ body {
 @media (prefers-reduced-motion: no-preference) {
   .toast {
     animation: rise 180ms ease-out;
-  }
-
-  .thread-overlay.thread,
-  .thread-toggle::after {
-    transition: transform 160ms ease-out;
   }
   @keyframes rise {
     from {

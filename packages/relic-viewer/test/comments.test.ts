@@ -20,9 +20,13 @@ import {
 } from '../src/comments.ts';
 import {
   buildBar,
+  buildRelicRow,
   buildStageWrap,
+  clampThreadWidth,
   commentRow,
   localStorageKeyVault,
+  pinFraction,
+  pinOffsets,
   THREAD_EMPTY_NOTE,
   threadRefusal,
   updateThreadToggle,
@@ -694,23 +698,159 @@ describe('the disclosure, at the point of commenting', () => {
     expect(withClass(bar, 'action-comments')).toHaveLength(0);
   });
 
-  test('the thread is inside the stage instead of below it', () => {
-    const overlay = document.createElement('section') as unknown as ElementStub;
-    overlay.className = 'thread thread-overlay';
+  test('the relic and the conversation are siblings in one row', () => {
+    // The regression this defends: a thread that is a child of the stage, or
+    // a body sibling after it, is a thread that covers the relic or sits
+    // under it. Beside it is the whole point.
+    const sidebar = document.createElement('aside') as unknown as ElementStub;
+    sidebar.className = 'thread';
+    const resizer = document.createElement('div') as unknown as ElementStub;
+    resizer.className = 'thread-resizer';
+    const tab = document.createElement('button') as unknown as ElementStub;
+    tab.className = 'thread-tab';
 
     const stage = buildStageWrap(
       view(),
-      'https://relik-usercontent.example',
-      overlay as unknown as HTMLElement
+      'https://relik-usercontent.example'
+    ) as unknown as ElementStub;
+    const row = buildRelicRow(
+      stage as unknown as HTMLElement,
+      sidebar as unknown as HTMLElement,
+      resizer as unknown as HTMLElement,
+      tab as unknown as HTMLElement
     ) as unknown as ElementStub;
 
     expect(stage.className).toBe('stage-wrap');
-    expect(stage.children).toHaveLength(2);
-    expect(stage.children[0]?.className).toContain('stage');
-    expect(stage.children[1]).toBe(overlay);
+    expect(withClass(stage, 'thread')).toHaveLength(0);
+    expect(row.className).toBe('relic-row');
+    expect(row.children).toEqual([stage, sidebar, resizer, tab]);
   });
 
-  test('a count refresh preserves the tray toggle', () => {
+  test('a row without a thread is the relic alone', () => {
+    const stage = buildStageWrap(
+      view(),
+      'https://relik-usercontent.example'
+    ) as unknown as ElementStub;
+    const row = buildRelicRow(
+      stage as unknown as HTMLElement
+    ) as unknown as ElementStub;
+    expect(row.children).toEqual([stage]);
+  });
+
+  test('a dragged width cannot spend the row on the conversation', () => {
+    // The divider is the reader's, and the relic is not theirs to lose.
+    expect(clampThreadWidth(352, 1440)).toBe(352);
+    expect(clampThreadWidth(10, 1440)).toBe(272);
+    expect(clampThreadWidth(4000, 1440)).toBe(640);
+    // 60% of an 800px window, so the relic keeps the larger share.
+    expect(clampThreadWidth(4000, 800)).toBe(480);
+    // Narrower than the floor: the floor wins, and the media query takes the
+    // row over at this width anyway.
+    expect(clampThreadWidth(4000, 320)).toBe(272);
+  });
+
+  test('a mark lands on the content, not on the screen', () => {
+    // The regression this defends, in both directions it has shipped in: a
+    // fraction measured against the visible box moves with the scroll, so the
+    // same word gives a different anchor depending on how far the reader had
+    // scrolled when they clicked.
+    const content = { scrollWidth: 1000, scrollHeight: 3000 };
+    const unscrolled = pinFraction(
+      { left: 0, top: 0, scrollLeft: 0, scrollTop: 0, ...content },
+      300,
+      1500
+    );
+    // The same point on the page, reached after scrolling 1200px down: the
+    // click now lands 1200px higher in the viewport.
+    const scrolled = pinFraction(
+      { left: 0, top: 0, scrollLeft: 0, scrollTop: 1200, ...content },
+      300,
+      300
+    );
+
+    expect(unscrolled).toEqual({ x: 0.3, y: 0.5 });
+    expect(scrolled).toEqual(unscrolled);
+    // And it paints back onto the same content pixel it was taken from.
+    expect(pinOffsets(unscrolled as { x: number; y: number }, content)).toEqual(
+      { left: 300, top: 1500 }
+    );
+  });
+
+  test('a mark outside the relic is not a mark', () => {
+    const box = {
+      left: 40,
+      top: 60,
+      scrollLeft: 0,
+      scrollTop: 0,
+      scrollWidth: 800,
+      scrollHeight: 600,
+    };
+    // Above and left of the stage, which is the taskbar and the gutter.
+    expect(pinFraction(box, 10, 10)).toBeUndefined();
+    // Past the far edge.
+    expect(pinFraction(box, 4000, 100)).toBeUndefined();
+    // A stage that has not laid out yet divides by nothing.
+    expect(
+      pinFraction({ ...box, scrollWidth: 0, scrollHeight: 0 }, 100, 100)
+    ).toBeUndefined();
+  });
+
+  /**
+   * Whether the stylesheet still lays the conversation out beside the relic.
+   *
+   * The rendered result belongs in a browser and is checked there. What is
+   * checkable here is the mechanism, and the mechanism is what regressed
+   * twice: a thread taken out of flow covers the relic, and a thread pinned to
+   * the bottom sits under it. Both are the same defect wearing different
+   * properties, and both are visible in the rule that sizes the sidebar.
+   */
+  function sidebarLayoutFaults(css: string): readonly string[] {
+    const faults: string[] = [];
+    const row = /\.relic-row\s*\{([^}]*)\}/.exec(css)?.[1] ?? '';
+    const sidebar = /(?<!-)\.thread\s*\{([^}]*)\}/.exec(css)?.[1] ?? '';
+    const open = /\.thread\.is-open\s*\{([^}]*)\}/.exec(css)?.[1] ?? '';
+
+    if (!/display:\s*flex/.test(row)) faults.push('the row is not a flex row');
+    if (/position:\s*(absolute|fixed)/.test(sidebar)) {
+      faults.push('the sidebar is out of flow, so it covers the relic');
+    }
+    if (/\bbottom:/.test(sidebar)) {
+      faults.push('the sidebar is pinned to the bottom of the relic');
+    }
+    if (!/width:\s*var\(--thread-width/.test(sidebar)) {
+      faults.push('the sidebar takes no width from the row');
+    }
+    if (!/display:\s*block/.test(open)) {
+      faults.push('the open sidebar never enters the row');
+    }
+    return faults;
+  }
+
+  test('the stylesheet puts the conversation beside the relic', async () => {
+    const css = await Bun.file(
+      new URL('../src/styles.css', import.meta.url)
+    ).text();
+    expect(sidebarLayoutFaults(css)).toEqual([]);
+  });
+
+  test('that check fails on the layout it exists to catch', () => {
+    // The bottom tray that shipped, and was rejected, in the shape it shipped
+    // in. A check that cannot name this is not a check.
+    const tray = `
+      .relic-row { display: block; }
+      .thread { position: absolute; right: 0; bottom: 0; left: 0; }
+      .thread.is-open { visibility: visible; }
+    `;
+    expect(sidebarLayoutFaults(tray)).toEqual([
+      'the row is not a flex row',
+      'the sidebar is out of flow, so it covers the relic',
+      'the sidebar is pinned to the bottom of the relic',
+      'the sidebar takes no width from the row',
+      'the open sidebar never enters the row',
+    ]);
+  });
+
+  test('a count refresh preserves the sidebar toggle', () => {
     const title = document.createElement('h2') as unknown as ElementStub;
     const toggle = document.createElement('button') as unknown as ElementStub;
     toggle.className = 'thread-toggle';
